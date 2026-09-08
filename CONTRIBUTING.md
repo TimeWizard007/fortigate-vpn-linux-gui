@@ -7,9 +7,9 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.1.x is the project foundation: packaging, GUI shell, documentation, and CI.
-VPN connectivity, SAML/SSO, sudo, polkit, and network changes are **out of
-scope** until they are designed and implemented deliberately.
+v0.2.x adds persistent connection profiles. VPN connectivity, SAML/SSO, sudo,
+polkit, and network changes are **out of scope** until they are designed and
+implemented deliberately.
 
 Please do not send pull requests that:
 

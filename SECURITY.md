@@ -2,11 +2,12 @@
 
 ## Supported versions
 
-This project is in early development (v0.1.x). There is no stable release and no
-VPN connectivity yet. Security reports are still welcome.
+This project is in early development (v0.2.x). There is no stable VPN client
+release yet. Security reports are still welcome.
 
 | Version | Supported |
 | ------- | --------- |
+| 0.2.x   | Yes       |
 | 0.1.x   | Yes       |
 
 ## Reporting a vulnerability
@@ -49,9 +50,9 @@ These rules apply now and to future VPN, SAML, and helper work:
    be opted into `trusted-cert` (or equivalent) without an explicit, visible
    choice and a clear warning. Insecure defaults are not acceptable.
 
-## Current scope (v0.1.x)
+## Current scope (v0.2.x)
 
-v0.1.x does not execute openfortivpn, perform SAML authentication, invoke sudo,
-or modify the network. The GUI is a non-functional shell for layout and
-navigation. That keeps the present attack surface small; the principles above
-still constrain how features will be added.
+v0.2.x does not execute openfortivpn, perform SAML authentication, invoke sudo,
+or modify the network. Connection profiles are stored as local JSON without
+passwords, SAML tokens, cookies, or other secrets. The principles above still
+constrain how VPN and SAML features will be added.

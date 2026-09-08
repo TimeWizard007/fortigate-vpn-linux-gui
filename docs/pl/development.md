@@ -21,11 +21,33 @@ sudo apt install python3.12-venv libxcb-cursor0
   tej biblioteki do tworzenia okien. Bez niej wtyczka platformy Qt xcb nie
   wczyta się.
 
-W wersji v0.1.x **nie** potrzebujesz `openfortivpn`.
+W wersji v0.2.x **nie** potrzebujesz `openfortivpn`.
 
 Aplikacja **nie** instaluje pakietów systemowych automatycznie. Nigdy nie
 uruchamia `sudo`, `pkexec` ani `apt`. Te polecenia są podane do ręcznego
 wykonania.
+
+## Przechowywanie profili
+
+Profile połączeń to JSON UTF-8 per-użytkownik:
+
+```text
+${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
+```
+
+Gdy `XDG_CONFIG_HOME` nie jest ustawione, plik to
+`~/.config/fortigate-vpn-linux-gui/profiles.json`.
+
+Katalog powstaje dopiero przy zapisie. Zapis jest atomowy (plik tymczasowy +
+replace). Uszkodzony JSON jest traktowany jako pusta lista i nie powoduje
+awarii GUI.
+
+Pola: `id`, `name`, `gateway`, `port`, `description`, `username_hint`,
+`use_sso`. Hasła, tokeny SAML, ciasteczka i inne sekrety nigdy nie są
+zapisywane.
+
+Pytest ustawia tymczasowe `XDG_CONFIG_HOME`, więc testy nie ruszają prawdziwego
+`~/.config`.
 
 ## Sprawdzenie zależności przy starcie
 

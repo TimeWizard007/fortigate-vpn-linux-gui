@@ -33,7 +33,7 @@ _SAFE_EXECUTABLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 class RequirementStage(Enum):
     """When a dependency becomes relevant.
 
-    Only ``GUI_STARTUP`` is enforced in v0.1.x. Other stages exist so later
+    Only ``GUI_STARTUP`` is enforced in v0.2.x. Other stages exist so later
     VPN, SAML, and helper checks can be added without changing the checker.
     """
 
@@ -337,7 +337,7 @@ class DependencyChecker:
 
 
 def check_gui_startup(checker: DependencyChecker | None = None) -> PreflightReport:
-    """Run the v0.1.x GUI startup preflight (currently ``libxcb-cursor.so.0``)."""
+    """Run the GUI startup preflight (currently ``libxcb-cursor.so.0``)."""
     return (checker or DependencyChecker()).check()
 
 

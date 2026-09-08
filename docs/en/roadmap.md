@@ -2,17 +2,22 @@
 
 Dates are not committed. Order may change as design work proceeds.
 
-## v0.1.x — foundation (current)
+## v0.1.x — foundation
 
 - Python package and `python -m fortigate_vpn_gui` entry point
 - Placeholder PySide6 GUI (no VPN operations)
-- Documented stubs for backend, profiles, system integration, and diagnostics
-- English and Polish documentation
-- pytest, Ruff, and GitHub Actions CI
+- Startup runtime dependency check
+- English and Polish documentation, pytest, Ruff, and GitHub Actions CI
+
+## v0.2.x — profiles (current)
+
+- Persistent FortiGate connection profiles
+- XDG JSON storage without secrets
+- Profiles page Add / Edit / Delete
+- Connection page selector integration
 
 ## Later (planned, not implemented)
 
-- Connection profile persistence without plaintext passwords
 - Privileged helper design and polkit policy
 - openfortivpn-backed connect / disconnect / status
 - SAML/SSO through the system browser and Microsoft Entra ID

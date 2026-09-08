@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-08
+
+### Added
+
+- Persistent FortiGate connection profiles (name, gateway, port, description, username hint, SSO flag).
+- XDG-compatible local JSON storage (`$XDG_CONFIG_HOME` or `~/.config/fortigate-vpn-linux-gui/profiles.json`).
+- Profile Add / Edit / Delete GUI with validation and delete confirmation.
+- Connection page integration with saved profiles (gateway, port, and SSO status).
+- Read-only profile configuration path on the Settings and Diagnostics pages.
+- Tests for profile validation, storage, XDG paths, and GUI add/edit/delete behaviour.
+
+### Security
+
+- Profile storage contains no passwords, SAML tokens, cookies, or secrets.
+
 ## [0.1.0] - 2026-09-08
 
 ### Added
@@ -21,5 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases/tag/v0.1.0

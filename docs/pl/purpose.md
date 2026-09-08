@@ -13,11 +13,10 @@ dystrybucji. Ten projekt ma dostarczyć przejrzysty, nowoczesny interfejs, któr
 - pozostaje niezależny od Fortinet
 
 Aplikacja będzie w przyszłości używać [openfortivpn](https://github.com/adrienverge/openfortivpn)
-jako zaplecza VPN. Ta integracja **nie** wchodzi w zakres v0.1.x.
+jako zaplecza VPN. Ta integracja **nie** wchodzi w zakres v0.2.x.
 
-Wersja v0.1.x dostarcza strukturę repozytorium, pakietowanie, powłokę GUI bez
-łączenia z VPN, dokumentację po angielsku i polsku, testy oraz CI. To punkt
-wyjścia dla poważnej aplikacji open source, a nie działający klient VPN.
+Wersja v0.2.x dodaje trwałe profile połączeń per-użytkownik na fundamencie GUI.
+Nadal nie jest to działający klient VPN.
 
 Ten projekt **nie** jest powiązany, wspierany ani sponsorowany przez Fortinet.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich

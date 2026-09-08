@@ -17,7 +17,11 @@ from PySide6.QtWidgets import (
 
 from fortigate_vpn_gui import APP_NAME, __version__
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
+from fortigate_vpn_gui.gui.diagnostics_page import DiagnosticsPage
 from fortigate_vpn_gui.gui.placeholder_page import PlaceholderPage
+from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
+from fortigate_vpn_gui.gui.settings_page import SettingsPage
+from fortigate_vpn_gui.profiles.manager import ProfileManager
 
 _NAV_ITEMS: tuple[str, ...] = (
     "Connection",
@@ -31,48 +35,35 @@ _NAV_ITEMS: tuple[str, ...] = (
 class MainWindow(QMainWindow):
     """Primary window: sidebar navigation plus stacked pages."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        profile_manager: ProfileManager | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(840, 560)
         self.resize(960, 640)
 
-        self._connection_page = ConnectionPage()
+        self._profile_manager = profile_manager or ProfileManager()
+        self._connection_page = ConnectionPage(self._profile_manager)
+        self._profiles_page = ProfilesPage(self._profile_manager)
+
         self._stack = QStackedWidget()
         self._stack.addWidget(self._connection_page)
-        self._stack.addWidget(
-            PlaceholderPage(
-                "Profiles",
-                "Connection profiles will be managed here in a later release.\n\n"
-                "Nothing is stored or loaded yet. Profile persistence is not "
-                "implemented in v0.1.x.",
-            )
-        )
-        self._stack.addWidget(
-            PlaceholderPage(
-                "Diagnostics",
-                "Diagnostic collection will live here in a later release.\n\n"
-                "No system probes, packet captures, or VPN health checks are "
-                "performed in v0.1.x.",
-            )
-        )
+        self._stack.addWidget(self._profiles_page)
+        self._stack.addWidget(DiagnosticsPage(self._profile_manager))
         self._stack.addWidget(
             PlaceholderPage(
                 "Logs",
                 "Application logs will appear here in a later release.\n\n"
                 "When logging is added, credentials, SAML tokens, cookies, and "
                 "other authentication material must be redacted. Nothing is "
-                "written to disk in v0.1.x.",
+                "written to disk by this page.",
             )
         )
-        self._stack.addWidget(
-            PlaceholderPage(
-                "Settings",
-                "Application settings will appear here in a later release.\n\n"
-                "No configuration is persisted in v0.1.x. Certificate "
-                "verification will never be silently disabled.",
-            )
-        )
+        self._stack.addWidget(SettingsPage(self._profile_manager))
 
         self._nav = QListWidget()
         self._nav.setObjectName("navList")
@@ -103,6 +94,18 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Disconnected")
         self._apply_style()
+
+    @property
+    def profile_manager(self) -> ProfileManager:
+        return self._profile_manager
+
+    @property
+    def connection_page(self) -> ConnectionPage:
+        return self._connection_page
+
+    @property
+    def profiles_page(self) -> ProfilesPage:
+        return self._profiles_page
 
     def connection_status(self) -> str:
         """Return the connection status shown in the Connection page."""

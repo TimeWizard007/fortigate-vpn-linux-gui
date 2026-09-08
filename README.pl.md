@@ -9,24 +9,50 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.1.0** (wyłącznie fundament projektu).
+Aktualna wersja to **0.2.0**. Trwałe profile połączeń są zaimplementowane.
+Łączność VPN i SAML/SSO **nie**.
 
 | Funkcja | Status |
 | ------- | ------ |
-| Okno aplikacji i nawigacja | Zaimplementowane (interfejs zastępczy) |
+| Okno aplikacji i nawigacja | Zaimplementowane |
+| Trwałe profile połączeń | Zaimplementowane |
 | Połączenie / rozłączenie VPN | **Niezaimplementowane** |
 | SAML / SSO (Microsoft Entra ID) | **Niezaimplementowane** |
 | Integracja z openfortivpn | **Niezaimplementowana** |
 | Pomocnik uprzywilejowany / polkit | **Niezaimplementowany** |
 
-Przycisk **Connect with SSO** jest zastępczy. Nie otwiera przeglądarki, nie
-uwierzytelnia i nie zmienia konfiguracji sieci.
+Przycisk **Connect with SSO** pozostaje zastępczy. Nie otwiera przeglądarki, nie
+uwierzytelnia i nie zmienia konfiguracji sieci. Jest włączony tylko wtedy, gdy
+istnieje profil.
+
+## Profile połączeń
+
+Profile są przechowywane per-użytkownik jako JSON UTF-8:
+
+```text
+${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
+```
+
+Typowa ścieżka na Ubuntu: `~/.config/fortigate-vpn-linux-gui/profiles.json`.
+
+Każdy profil ma stały identyfikator, nazwę, bramę, port (domyślnie 443),
+opcjonalny opis, opcjonalną podpowiedź nazwy użytkownika oraz flagę Use SSO
+(domyślnie włączona).
+
+**Plik profili nie przechowuje haseł, tokenów SAML, ciasteczek, sekretów
+klienta ani danych MFA.** Aplikacja nigdy nie zapisuje tych pól.
+
+Dodawanie, edycja i usuwanie są na stronie Profiles. Selektor na stronie
+Connection odświeża się od razu. Strony Settings i Diagnostics pokazują ścieżkę
+pliku konfiguracyjnego tylko do odczytu.
+
+`openfortivpn` **nie** jest wymagany w wersji v0.2.x.
 
 ## Zamierzona architektura (planowana)
 
 Uwierzytelnianie SAML ma korzystać z systemowej przeglądarki użytkownika oraz
-Microsoft Entra ID. Poniższy stos jest celem projektowym; **żadna warstwa
-poniżej GUI jeszcze nie istnieje**:
+Microsoft Entra ID. Poniższy stos jest celem projektowym. Profile już są w
+warstwie aplikacji; warstwy VPN, pomocnika i openfortivpn jeszcze nie istnieją:
 
 ```text
 GUI
@@ -73,7 +99,7 @@ czy bibliotekę da się załadować; jeśli jej brakuje, pokazuje okno z komend�
 do skopiowania i kończy działanie. Nigdy nie uruchamia `sudo`, `pkexec` ani
 `apt`.
 
-`openfortivpn` **nie** jest wymagany w wersji v0.1.x.
+`openfortivpn` **nie** jest wymagany w wersji v0.2.x.
 
 ## Środowisko deweloperskie
 
