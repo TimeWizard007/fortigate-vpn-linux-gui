@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Connection page: profile selector, status, and placeholder SSO button."""
+"""Connection page: profile selector and Connect/Disconnect controls."""
 
 from __future__ import annotations
 
@@ -17,15 +17,33 @@ from PySide6.QtWidgets import (
 
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
+from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
+from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
+from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
+from fortigate_vpn_gui.vpn.models import (
+    BUSY_STATES,
+    ConnectionState,
+    VpnErrorCode,
+    state_label,
+)
 
 
 class ConnectionPage(QWidget):
-    """Connection controls that do not start a VPN session."""
+    """Connection controls backed by ``VpnBackend``."""
 
-    def __init__(self, manager: ProfileManager, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        manager: ProfileManager,
+        vpn: VpnBackend,
+        parent: QWidget | None = None,
+        *,
+        locator=locate_openfortivpn,
+    ) -> None:
         super().__init__(parent)
         self._manager = manager
+        self._vpn = vpn
         self._manager.add_change_listener(self.refresh_profiles)
+        self._openfortivpn_path = locator()
 
         title = QLabel("Connection")
         title.setObjectName("pageTitle")
@@ -61,41 +79,52 @@ class ConnectionPage(QWidget):
         form_frame = QFrame()
         form_frame.setLayout(form)
 
-        self._connect_button = QPushButton("Connect with SSO")
-        self._connect_button.setObjectName("connectButton")
-        self._connect_button.setDefault(True)
-        self._connect_button.clicked.connect(self._on_connect_clicked)
+        self._action_button = QPushButton("Connect")
+        self._action_button.setObjectName("connectButton")
+        self._action_button.setDefault(True)
+        self._action_button.clicked.connect(self._on_action_clicked)
 
         self._empty_hint = QLabel(
             "No profiles configured. Open the Profiles page and add a "
-            "connection profile to enable Connect with SSO."
+            "connection profile to enable Connect."
         )
         self._empty_hint.setWordWrap(True)
         self._empty_hint.setObjectName("noProfilesHint")
 
-        notice = QLabel(
-            "SSO authentication and VPN connectivity are planned and are not "
-            "implemented yet.\n\n"
-            "The intended flow uses the system browser and Microsoft Entra ID. "
-            "This button does not open a browser, contact any server, or "
-            "change network configuration."
+        install = ubuntu_install_command(("openfortivpn",))
+        self._missing_hint = QLabel(
+            "VPN connectivity is unavailable because openfortivpn is not "
+            "installed.\n\n"
+            f"Recommended Ubuntu command:\n{install}\n\n"
+            "The application does not install packages automatically. The GUI "
+            "can still manage profiles."
         )
-        notice.setWordWrap(True)
-        notice.setObjectName("placeholderNotice")
+        self._missing_hint.setWordWrap(True)
+        self._missing_hint.setObjectName("missingOpenfortivpnHint")
+
+        self._notice = QLabel(
+            "SAML/SSO profiles do not start a VPN in v0.3.0. Use a profile with "
+            "Use SSO disabled to exercise the openfortivpn process lifecycle. "
+            "Passwords are not stored; authentication may fail, which is expected. "
+            "A privileged helper is not implemented yet."
+        )
+        self._notice.setWordWrap(True)
+        self._notice.setObjectName("placeholderNotice")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 24, 16)
         layout.setSpacing(16)
         layout.addWidget(title)
         layout.addWidget(form_frame)
-        layout.addWidget(self._connect_button)
+        layout.addWidget(self._action_button)
         layout.addWidget(self._empty_hint)
-        layout.addWidget(notice)
+        layout.addWidget(self._missing_hint)
+        layout.addWidget(self._notice)
         layout.addStretch(1)
         self.refresh_profiles()
+        self.apply_snapshot(self._vpn.snapshot())
 
     def status_text(self) -> str:
-        """Return the displayed connection status."""
         return self._status_label.text()
 
     def gateway_text(self) -> str:
@@ -108,10 +137,16 @@ class ConnectionPage(QWidget):
         return self._sso_label.text()
 
     def connect_enabled(self) -> bool:
-        return self._connect_button.isEnabled()
+        return self._action_button.isEnabled()
+
+    def action_text(self) -> str:
+        return self._action_button.text()
 
     def empty_hint_visible(self) -> bool:
         return not self._empty_hint.isHidden()
+
+    def missing_openfortivpn_visible(self) -> bool:
+        return not self._missing_hint.isHidden()
 
     def selected_profile(self) -> ConnectionProfile | None:
         profile_id = self._profile_combo.currentData()
@@ -120,23 +155,17 @@ class ConnectionPage(QWidget):
         return self._manager.get(str(profile_id))
 
     def refresh_profiles(self) -> None:
-        """Reload the selector from the profile manager without restarting."""
         previous = self._profile_combo.currentData()
         self._profile_combo.blockSignals(True)
         self._profile_combo.clear()
         profiles = self._manager.list_profiles()
         if not profiles:
             self._profile_combo.addItem("No profiles configured")
-            self._profile_combo.setEnabled(False)
-            self._connect_button.setEnabled(False)
-            self._empty_hint.show()
             self._show_profile(None)
             self._profile_combo.blockSignals(False)
+            self.apply_snapshot(self._vpn.snapshot())
             return
 
-        self._profile_combo.setEnabled(True)
-        self._connect_button.setEnabled(True)
-        self._empty_hint.hide()
         selected_index = 0
         for index, profile in enumerate(profiles):
             self._profile_combo.addItem(profile.name, profile.id)
@@ -145,12 +174,52 @@ class ConnectionPage(QWidget):
         self._profile_combo.setCurrentIndex(selected_index)
         self._profile_combo.blockSignals(False)
         self._show_profile(profiles[selected_index])
+        self.apply_snapshot(self._vpn.snapshot())
+
+    def apply_snapshot(self, snapshot) -> None:
+        """Update status and buttons from a backend snapshot."""
+        self._status_label.setText(state_label(snapshot.state))
+        busy = snapshot.state in BUSY_STATES
+        has_profile = self.selected_profile() is not None
+        missing = self._openfortivpn_path is None
+        self._missing_hint.setVisible(missing)
+        self._empty_hint.setVisible(not has_profile)
+        self._profile_combo.setEnabled(has_profile and not busy)
+        self._sync_button(snapshot.state, has_profile)
+
+    def show_user_error(self, event: VpnEvent) -> None:
+        message = event.error_message or "The VPN operation could not continue."
+        QMessageBox.warning(self, _error_title(event.error_code), message)
+
+    def _sync_button(self, state: ConnectionState, has_profile: bool) -> None:
+        profile = self.selected_profile()
+        if state in {
+            ConnectionState.STARTING,
+            ConnectionState.CONNECTING,
+            ConnectionState.WAITING_FOR_AUTH,
+        }:
+            self._action_button.setText("Connecting...")
+            self._action_button.setEnabled(False)
+            return
+        if state is ConnectionState.DISCONNECTING:
+            self._action_button.setText("Disconnecting...")
+            self._action_button.setEnabled(False)
+            return
+        if state is ConnectionState.CONNECTED:
+            self._action_button.setText("Disconnect")
+            self._action_button.setEnabled(True)
+            return
+        if profile is not None and profile.use_sso:
+            self._action_button.setText("Connect with SSO")
+        else:
+            self._action_button.setText("Connect")
+        self._action_button.setEnabled(has_profile)
 
     def _on_profile_changed(self, _index: int) -> None:
         self._show_profile(self.selected_profile())
+        self.apply_snapshot(self._vpn.snapshot())
 
     def _show_profile(self, profile: ConnectionProfile | None) -> None:
-        self._status_label.setText("Disconnected")
         if profile is None:
             self._gateway_label.setText("Not configured")
             self._port_label.setText("—")
@@ -160,12 +229,25 @@ class ConnectionPage(QWidget):
         self._port_label.setText(str(profile.port))
         self._sso_label.setText("Enabled" if profile.use_sso else "Disabled")
 
-    def _on_connect_clicked(self) -> None:
-        QMessageBox.information(
-            self,
-            "Not implemented",
-            "Connect with SSO is a placeholder.\n\n"
-            "SAML/SSO authentication, Microsoft Entra ID, and FortiGate SSL VPN "
-            "connectivity are planned for a later release. No network request "
-            "was made.",
-        )
+    def _on_action_clicked(self) -> None:
+        state = self._vpn.current_state()
+        if state is ConnectionState.CONNECTED:
+            self._vpn.disconnect()
+            return
+        self._vpn.connect(self.selected_profile())
+
+
+def _error_title(code: VpnErrorCode | None) -> str:
+    mapping = {
+        VpnErrorCode.SSO_NOT_SUPPORTED: "SAML/SSO not available",
+        VpnErrorCode.OPENFORTIVPN_MISSING: "openfortivpn is missing",
+        VpnErrorCode.PERMISSION_DENIED: "Insufficient privileges",
+        VpnErrorCode.AUTH_FAILURE: "Authentication failed",
+        VpnErrorCode.FAILED_TO_START: "Failed to start VPN",
+        VpnErrorCode.UNEXPECTED_EXIT: "VPN process ended",
+        VpnErrorCode.INVALID_PROFILE: "Invalid profile",
+        VpnErrorCode.ALREADY_BUSY: "VPN busy",
+    }
+    if code is None:
+        return "VPN"
+    return mapping.get(code, "VPN")

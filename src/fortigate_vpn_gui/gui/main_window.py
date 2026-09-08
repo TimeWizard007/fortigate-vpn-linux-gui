@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -18,10 +19,15 @@ from PySide6.QtWidgets import (
 from fortigate_vpn_gui import APP_NAME, __version__
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
 from fortigate_vpn_gui.gui.diagnostics_page import DiagnosticsPage
-from fortigate_vpn_gui.gui.placeholder_page import PlaceholderPage
+from fortigate_vpn_gui.gui.event_pump import BackendEventPump
+from fortigate_vpn_gui.gui.logs_page import LogsPage
 from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
 from fortigate_vpn_gui.gui.settings_page import SettingsPage
 from fortigate_vpn_gui.profiles.manager import ProfileManager
+from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
+from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
+from fortigate_vpn_gui.vpn.log_buffer import LogBuffer
+from fortigate_vpn_gui.vpn.models import state_label
 
 _NAV_ITEMS: tuple[str, ...] = (
     "Connection",
@@ -40,6 +46,9 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         *,
         profile_manager: ProfileManager | None = None,
+        vpn_backend: VpnBackend | None = None,
+        log_buffer: LogBuffer | None = None,
+        detect=detect_openfortivpn,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(APP_NAME)
@@ -47,22 +56,26 @@ class MainWindow(QMainWindow):
         self.resize(960, 640)
 
         self._profile_manager = profile_manager or ProfileManager()
-        self._connection_page = ConnectionPage(self._profile_manager)
+        self._log_buffer = log_buffer if log_buffer is not None else LogBuffer()
+        self._vpn = vpn_backend or VpnBackend(log_buffer=self._log_buffer)
+        if vpn_backend is not None and log_buffer is None:
+            self._log_buffer = vpn_backend.log_buffer
+
+        self._connection_page = ConnectionPage(self._profile_manager, self._vpn)
         self._profiles_page = ProfilesPage(self._profile_manager)
+        self._diagnostics_page = DiagnosticsPage(
+            self._profile_manager,
+            self._vpn,
+            self._connection_page.selected_profile,
+            detect=detect,
+        )
+        self._logs_page = LogsPage(self._log_buffer)
 
         self._stack = QStackedWidget()
         self._stack.addWidget(self._connection_page)
         self._stack.addWidget(self._profiles_page)
-        self._stack.addWidget(DiagnosticsPage(self._profile_manager))
-        self._stack.addWidget(
-            PlaceholderPage(
-                "Logs",
-                "Application logs will appear here in a later release.\n\n"
-                "When logging is added, credentials, SAML tokens, cookies, and "
-                "other authentication material must be redacted. Nothing is "
-                "written to disk by this page.",
-            )
-        )
+        self._stack.addWidget(self._diagnostics_page)
+        self._stack.addWidget(self._logs_page)
         self._stack.addWidget(SettingsPage(self._profile_manager))
 
         self._nav = QListWidget()
@@ -71,7 +84,7 @@ class MainWindow(QMainWindow):
         for label in _NAV_ITEMS:
             QListWidgetItem(label, self._nav)
         self._nav.setCurrentRow(0)
-        self._nav.currentRowChanged.connect(self._stack.setCurrentIndex)
+        self._nav.currentRowChanged.connect(self._on_nav_changed)
 
         header = QLabel(f"{APP_NAME}  ·  v{__version__}")
         header.setObjectName("appHeader")
@@ -93,11 +106,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         self.statusBar().showMessage("Disconnected")
+        self._pump = BackendEventPump(self._vpn, self._log_buffer, parent=self)
+        self._pump.state_changed.connect(self._on_vpn_snapshot)
+        self._pump.user_error.connect(self._on_vpn_error)
+        self._pump.log_record.connect(self._logs_page.append_record)
         self._apply_style()
 
     @property
     def profile_manager(self) -> ProfileManager:
         return self._profile_manager
+
+    @property
+    def vpn_backend(self) -> VpnBackend:
+        return self._vpn
 
     @property
     def connection_page(self) -> ConnectionPage:
@@ -107,9 +128,32 @@ class MainWindow(QMainWindow):
     def profiles_page(self) -> ProfilesPage:
         return self._profiles_page
 
+    @property
+    def logs_page(self) -> LogsPage:
+        return self._logs_page
+
+    @property
+    def diagnostics_page(self) -> DiagnosticsPage:
+        return self._diagnostics_page
+
     def connection_status(self) -> str:
-        """Return the connection status shown in the Connection page."""
         return self._connection_page.status_text()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._vpn.shutdown(timeout=5.0)
+        super().closeEvent(event)
+
+    def _on_nav_changed(self, index: int) -> None:
+        self._stack.setCurrentIndex(index)
+        if index == 2:
+            self._diagnostics_page.refresh()
+
+    def _on_vpn_snapshot(self, snapshot) -> None:
+        self._connection_page.apply_snapshot(snapshot)
+        self.statusBar().showMessage(state_label(snapshot.state))
+
+    def _on_vpn_error(self, event: VpnEvent) -> None:
+        self._connection_page.show_user_error(event)
 
     def _apply_style(self) -> None:
         self.setStyleSheet(

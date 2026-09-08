@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-08
+
+### Added
+
+- openfortivpn backend integration
+- process lifecycle management
+- connection states
+- Connect/Disconnect GUI wiring
+- runtime openfortivpn detection
+- Logs page
+- Diagnostics backend information
+- log redaction
+- mocked backend tests
+
+### Security
+
+- no shell execution
+- no credentials in command-line arguments
+- redaction of sensitive VPN output
+- GUI remains unprivileged
+
+### Limitations
+
+- SAML/SSO is not implemented yet
+- privileged helper/polkit is not implemented yet
+
 ## [0.2.0] - 2026-09-08
 
 ### Added
@@ -36,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases/tag/v0.1.0

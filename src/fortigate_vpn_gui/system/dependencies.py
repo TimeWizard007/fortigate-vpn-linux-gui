@@ -33,8 +33,8 @@ _SAFE_EXECUTABLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 class RequirementStage(Enum):
     """When a dependency becomes relevant.
 
-    Only ``GUI_STARTUP`` is enforced in v0.2.x. Other stages exist so later
-    VPN, SAML, and helper checks can be added without changing the checker.
+    Only ``GUI_STARTUP`` is enforced at launch. ``VPN_BACKEND`` (openfortivpn)
+    is required to connect, but missing openfortivpn does not block the GUI.
     """
 
     GUI_STARTUP = "gui_startup"
@@ -123,7 +123,7 @@ DEPENDENCY_CATALOG: tuple[RuntimeDependency, ...] = (
     RuntimeDependency(
         dependency_id="openfortivpn",
         display_name="openfortivpn",
-        reason="Planned FortiGate SSL VPN backend. Not required until connect is implemented.",
+        reason="FortiGate SSL VPN backend. Required to connect; the GUI still starts without it.",
         stage=RequirementStage.VPN_BACKEND,
         probe=ProbeKind.EXECUTABLE,
         probe_name="openfortivpn",

@@ -21,11 +21,16 @@ sudo apt install python3.12-venv libxcb-cursor0
   tej biblioteki do tworzenia okien. Bez niej wtyczka platformy Qt xcb nie
   wczyta się.
 
-W wersji v0.2.x **nie** potrzebujesz `openfortivpn`.
+Aby ćwiczyć łączność VPN, potrzebujesz także:
 
-Aplikacja **nie** instaluje pakietów systemowych automatycznie. Nigdy nie
-uruchamia `sudo`, `pkexec` ani `apt`. Te polecenia są podane do ręcznego
-wykonania.
+```bash
+sudo apt install openfortivpn
+```
+
+GUI i tak startuje bez `openfortivpn`. Strona Connection wtedy wyjaśnia, że
+łączność VPN jest niedostępna. Aplikacja **nie** instaluje pakietów
+systemowych automatycznie. Nigdy nie uruchamia `sudo`, `pkexec` ani `apt`.
+Te polecenia są podane do ręcznego wykonania.
 
 ## Przechowywanie profili
 
@@ -61,8 +66,20 @@ Zanim powstanie okno główne, proces:
    `sudo apt install libxcb-cursor0`.
 4. Oferuje **Copy command** i **Exit**. Komenda nigdy nie jest uruchamiana.
 
-Ten sam mechanizm jest przygotowany na późniejsze etapy (`openfortivpn`,
-`ppp`, polkit, przeglądarka systemowa), które dziś nie są wymagane.
+`openfortivpn` jest w katalogu jako zależność `VPN_BACKEND`. **Nie** jest
+wymuszany przy starcie GUI. Szukanie na PATH następuje przy łączeniu albo
+przy otwarciu Diagnostics. `openfortivpn --version` jest używane tylko w
+Diagnostics.
+
+## Testy zaplecza VPN
+
+Testy muszą udawać wykonanie procesu. Nie mogą:
+
+- łączyć się z VPN
+- wołać prawdziwego `openfortivpn`
+- wołać `sudo` ani `pkexec`
+- zmieniać tras, DNS ani zapory
+- korzystać z sieci
 
 ## Wirtualne środowisko
 
@@ -82,7 +99,8 @@ python -m fortigate_vpn_gui
 ```
 
 Nie uruchamiaj tego jako root. Proces kończy się błędem, gdy efektywny UID
-wynosi 0.
+wynosi 0. Dodatkowe uprawnienia do PPP/tras/DNS należą do przyszłego
+pomocnika, nie do procesu Qt.
 
 ## Lint
 
@@ -106,7 +124,12 @@ apt ani sudo.
 
 ```text
 src/fortigate_vpn_gui/   pakiet aplikacji
-tests/                   zestaw pytest
+  gui/                   strony Qt (Connection, Profiles, Diagnostics, Logs)
+  vpn/                   zaplecze procesu (bez Qt)
+  profiles/              magazyn JSON XDG
+  system/                katalog preflight
+  diagnostics/           ocenzurowane migawki
+tests/                   zestaw pytest (udawane procesy)
 docs/en/                 dokumentacja angielska
 docs/pl/                 dokumentacja polska
 assets/                  przyszłe ikony i identyfikacja wizualna

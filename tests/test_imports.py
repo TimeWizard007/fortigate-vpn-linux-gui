@@ -7,7 +7,7 @@ from __future__ import annotations
 def test_package_imports() -> None:
     import fortigate_vpn_gui
 
-    assert fortigate_vpn_gui.__version__ == "0.2.0"
+    assert fortigate_vpn_gui.__version__ == "0.3.0"
     assert fortigate_vpn_gui.APP_NAME == "FortiGate VPN Linux GUI"
 
 

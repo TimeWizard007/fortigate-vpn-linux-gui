@@ -7,16 +7,18 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.2.x adds persistent connection profiles. VPN connectivity, SAML/SSO, sudo,
-polkit, and network changes are **out of scope** until they are designed and
-implemented deliberately.
+v0.3.x adds an unprivileged openfortivpn process backend. SAML/SSO, sudo,
+polkit, and network changes by the GUI are **out of scope** until they are
+designed and implemented deliberately.
 
 Please do not send pull requests that:
 
-- execute `openfortivpn` or other VPN tools
-- implement SAML or Microsoft Entra ID login
-- invoke `sudo` or install privileged services
+- implement SAML or Microsoft Entra ID login, or open a browser for SSO
+- invoke `sudo`/`pkexec` or install privileged services
 - modify routes, DNS, or firewall rules
+- silently disable certificate verification
+- store passwords, tokens, or VPN cookies
+- call a real `openfortivpn` binary from tests
 
 ## Local development
 

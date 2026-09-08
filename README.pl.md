@@ -9,21 +9,30 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.2.0**. Trwałe profile połączeń są zaimplementowane.
-Łączność VPN i SAML/SSO **nie**.
+Aktualna wersja to **0.3.0**. Trwałe profile oraz nieuprzywilejowane zaplecze
+procesu `openfortivpn` są zaimplementowane. SAML/SSO i pomocnik
+uprzywilejowany/polkit **nie**.
 
 | Funkcja | Status |
 | ------- | ------ |
 | Okno aplikacji i nawigacja | Zaimplementowane |
 | Trwałe profile połączeń | Zaimplementowane |
-| Połączenie / rozłączenie VPN | **Niezaimplementowane** |
+| Cykl życia procesu openfortivpn | Zaimplementowany |
+| Połączenie / rozłączenie (profile bez SSO) | Zaimplementowane |
+| Logi (w pamięci, ocenzurowane) | Zaimplementowane |
+| Wykrywanie openfortivpn w czasie działania | Zaimplementowane |
 | SAML / SSO (Microsoft Entra ID) | **Niezaimplementowane** |
-| Integracja z openfortivpn | **Niezaimplementowana** |
 | Pomocnik uprzywilejowany / polkit | **Niezaimplementowany** |
 
-Przycisk **Connect with SSO** pozostaje zastępczy. Nie otwiera przeglądarki, nie
-uwierzytelnia i nie zmienia konfiguracji sieci. Jest włączony tylko wtedy, gdy
-istnieje profil.
+Profile bez SSO uruchamiają `openfortivpn <brama>:<port>` jako bieżący
+użytkownik. Hasła nie są przechowywane, więc uwierzytelnianie może się nie
+powieść. W v0.3.0 to oczekiwane: celem jest cykl życia procesu, a nie pełny
+przepływ logowania.
+
+Profile SSO **nie** uruchamiają VPN. GUI pokazuje:
+`SAML/SSO connection support is planned for v0.4.0.`
+
+GUI nigdy nie otwiera przeglądarki i nigdy nie działa jako root.
 
 ## Profile połączeń
 
@@ -46,29 +55,42 @@ Dodawanie, edycja i usuwanie są na stronie Profiles. Selektor na stronie
 Connection odświeża się od razu. Strony Settings i Diagnostics pokazują ścieżkę
 pliku konfiguracyjnego tylko do odczytu.
 
-`openfortivpn` **nie** jest wymagany w wersji v0.2.x.
+## openfortivpn
 
-## Zamierzona architektura (planowana)
+`openfortivpn` jest rzeczywistą zależnością uruchomieniową dla łączności VPN.
+GUI i tak startuje, gdy go brakuje; strona Connection wyjaśnia, że łączność
+VPN jest niedostępna.
 
-Uwierzytelnianie SAML ma korzystać z systemowej przeglądarki użytkownika oraz
-Microsoft Entra ID. Poniższy stos jest celem projektowym. Profile już są w
-warstwie aplikacji; warstwy VPN, pomocnika i openfortivpn jeszcze nie istnieją:
+Na Ubuntu:
 
-```text
-GUI
-  ↓
-Warstwa aplikacji / usług
-  ↓
-Pomocnik uprzywilejowany
-  ↓
-openfortivpn
-  ↓
-FortiGate SSL VPN
+```bash
+sudo apt install openfortivpn
 ```
 
-GUI pozostanie nieuprzywilejowane. Operacje wymagające uprawnień (uruchomienie
-procesu VPN, trasy, DNS) przejdą przez minimalny pomocnik, a nie przez `sudo`
-z aplikacji pulpitu.
+Aplikacja nigdy nie instaluje pakietów automatycznie. Nigdy nie uruchamia
+`sudo`, `pkexec` ani `apt`.
+
+Ponieważ `openfortivpn` może wymagać dodatkowych uprawnień do PPP, tras lub
+DNS, błąd uprawnień jest zgłaszany wprost. Wsparcie pomocnika/polkit jest
+planowane na późniejszą wersję. Nie uruchamiaj tego GUI jako root, żeby to
+obejść.
+
+## Architektura (obecna)
+
+```text
+GUI                          Widżety PySide6 (nieuprzywilejowane)
+  ↓
+Warstwa aplikacji / usług    VpnBackend, profile, ocenzurowane logi
+  ↓
+openfortivpn                 uruchamiany jako bieżący użytkownik
+  ↓
+FortiGate SSL VPN            brama
+```
+
+W późniejszej wersji między warstwą usług a `openfortivpn` pojawi się
+pomocnik uprzywilejowany. Uwierzytelnianie SAML ma korzystać z systemowej
+przeglądarki i Microsoft Entra ID; ta ścieżka nie jest jeszcze
+zaimplementowana.
 
 ## Wymagania
 
@@ -76,6 +98,7 @@ z aplikacji pulpitu.
 - Python 3.10 lub nowszy
 - Qt 6 przez PySide6
 - Sesja pulpitu (X11 lub Wayland)
+- `openfortivpn`, aby faktycznie uruchomić tunel (opcjonalny do startu GUI)
 
 Na Ubuntu 24.04 z Pythonem 3.12 zainstaluj pakiety środowiska wirtualnego
 i bibliotekę Qt przed utworzeniem venv:
@@ -98,8 +121,6 @@ czy bibliotekę da się załadować; jeśli jej brakuje, pokazuje okno z komend�
 
 do skopiowania i kończy działanie. Nigdy nie uruchamia `sudo`, `pkexec` ani
 `apt`.
-
-`openfortivpn` **nie** jest wymagany w wersji v0.2.x.
 
 ## Środowisko deweloperskie
 

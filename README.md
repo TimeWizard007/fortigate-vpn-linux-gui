@@ -9,20 +9,29 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.2.0**. Persistent connection profiles are implemented.
-VPN connectivity and SAML/SSO are **not**.
+The current version is **0.3.0**. Persistent profiles and an unprivileged
+`openfortivpn` process backend are implemented. SAML/SSO and a privileged
+helper/polkit path are **not**.
 
 | Capability | Status |
 | ---------- | ------ |
 | Application window and navigation | Implemented |
 | Persistent connection profiles | Implemented |
-| Connect / disconnect a VPN | **Not implemented** |
+| openfortivpn process lifecycle | Implemented |
+| Connect / disconnect (non-SSO profiles) | Implemented |
+| Logs (in-memory, redacted) | Implemented |
+| Runtime openfortivpn detection | Implemented |
 | SAML / SSO (Microsoft Entra ID) | **Not implemented** |
-| openfortivpn integration | **Not implemented** |
 | Privileged helper / polkit | **Not implemented** |
 
-The **Connect with SSO** button stays a placeholder. It does not open a browser,
-authenticate, or change your network. It is enabled only when a profile exists.
+Non-SSO profiles start `openfortivpn <gateway>:<port>` as the current user.
+Passwords are not stored, so authentication may fail. That is expected in
+v0.3.0: the goal is process lifecycle, not a complete login flow.
+
+SSO profiles do **not** start a VPN. The GUI shows:
+`SAML/SSO connection support is planned for v0.4.0.`
+
+The GUI never opens a browser and never runs as root.
 
 ## Connection profiles
 
@@ -44,28 +53,40 @@ Add, edit, and delete profiles on the Profiles page. The Connection page
 selector updates immediately. The Settings and Diagnostics pages show the
 configuration path as read-only.
 
-`openfortivpn` is **not** required for v0.2.x.
+## openfortivpn
 
-## Intended architecture (planned)
+`openfortivpn` is a real runtime dependency for VPN connectivity. The GUI
+still starts if it is missing; the Connection page explains that VPN
+connectivity is unavailable.
 
-SAML authentication is expected to use the user's system browser and Microsoft
-Entra ID. The following stack is the design target. Profiles already live in
-the application layer; VPN, helper, and openfortivpn layers do not exist yet:
+On Ubuntu:
 
-```text
-GUI
-  ↓
-Application / service layer
-  ↓
-Privileged helper
-  ↓
-openfortivpn
-  ↓
-FortiGate SSL VPN
+```bash
+sudo apt install openfortivpn
 ```
 
-The GUI will stay unprivileged. Privileged work (starting the VPN process,
-routes, DNS) will go through a minimal helper, not `sudo` from the desktop app.
+The application never installs packages automatically. It never runs `sudo`,
+`pkexec`, or `apt`.
+
+Because `openfortivpn` may need extra rights for PPP, routes, or DNS, a
+permission failure is reported clearly. Privileged helper/polkit support is
+planned for a later release. Do not start this GUI as root to work around that.
+
+## Architecture (current)
+
+```text
+GUI                          PySide6 widgets (unprivileged)
+  ↓
+Application / service layer  VpnBackend, profiles, redacted logs
+  ↓
+openfortivpn                 started as the current user
+  ↓
+FortiGate SSL VPN            gateway
+```
+
+A privileged helper will sit between the service layer and `openfortivpn` in a
+later release. SAML authentication is expected to use the user's system
+browser and Microsoft Entra ID; that path is not implemented yet.
 
 ## Requirements
 
@@ -73,6 +94,7 @@ routes, DNS) will go through a minimal helper, not `sudo` from the desktop app.
 - Python 3.10 or newer
 - Qt 6 via PySide6
 - A desktop session (X11 or Wayland)
+- `openfortivpn` to actually start a tunnel (optional for launching the GUI)
 
 On Ubuntu 24.04 with Python 3.12, install the runtime and venv packages
 before creating a virtual environment:
@@ -94,8 +116,6 @@ can be loaded; if it is missing, it shows a dialog with a copyable
 `sudo apt install libxcb-cursor0`
 
 command and exits. It never runs `sudo`, `pkexec`, or `apt`.
-
-`openfortivpn` is **not** required for v0.2.x.
 
 ## Development setup
 

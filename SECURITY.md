@@ -2,11 +2,12 @@
 
 ## Supported versions
 
-This project is in early development (v0.2.x). There is no stable VPN client
+This project is in early development (v0.3.x). There is no stable VPN client
 release yet. Security reports are still welcome.
 
 | Version | Supported |
 | ------- | --------- |
+| 0.3.x   | Yes       |
 | 0.2.x   | Yes       |
 | 0.1.x   | Yes       |
 
@@ -50,9 +51,12 @@ These rules apply now and to future VPN, SAML, and helper work:
    be opted into `trusted-cert` (or equivalent) without an explicit, visible
    choice and a clear warning. Insecure defaults are not acceptable.
 
-## Current scope (v0.2.x)
+## Current scope (v0.3.x)
 
-v0.2.x does not execute openfortivpn, perform SAML authentication, invoke sudo,
-or modify the network. Connection profiles are stored as local JSON without
-passwords, SAML tokens, cookies, or other secrets. The principles above still
-constrain how VPN and SAML features will be added.
+v0.3.x starts `openfortivpn` as the current user with
+`openfortivpn <gateway>:<port>` (list argv, `shell=False`, no credentials).
+It does not perform SAML authentication, invoke sudo/pkexec, or modify the
+network itself. Connection profiles are stored as local JSON without
+passwords, SAML tokens, cookies, or other secrets. Backend log lines are
+redacted in memory. The principles above still constrain how SAML and a
+privileged helper will be added.

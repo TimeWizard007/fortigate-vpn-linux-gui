@@ -21,11 +21,16 @@ sudo apt install python3.12-venv libxcb-cursor0
   library to create desktop windows. Without it the Qt xcb platform plugin
   fails to load.
 
-You do **not** need `openfortivpn` for v0.2.x.
+To exercise VPN connectivity you also need:
 
-The application does **not** install system packages automatically. It never
-runs `sudo`, `pkexec`, or `apt`. Those commands are documented for you to run
-manually.
+```bash
+sudo apt install openfortivpn
+```
+
+The GUI still starts without `openfortivpn`. The Connection page then explains
+that VPN connectivity is unavailable. The application does **not** install
+system packages automatically. It never runs `sudo`, `pkexec`, or `apt`.
+Those commands are documented for you to run manually.
 
 ## Profile storage
 
@@ -61,8 +66,19 @@ Before the main window is created, the process:
    command `sudo apt install libxcb-cursor0`.
 4. Offers **Copy command** and **Exit**. The command is never executed.
 
-The same checker is structured so later stages can add `openfortivpn`, `ppp`,
-polkit, and a system browser without requiring them today.
+`openfortivpn` is catalogued as a `VPN_BACKEND` dependency. It is **not**
+enforced at GUI startup. PATH lookup happens when connecting or when
+Diagnostics is shown. `openfortivpn --version` is used only for Diagnostics.
+
+## VPN backend tests
+
+Tests must mock process execution. They must not:
+
+- connect to a VPN
+- call a real `openfortivpn` binary
+- call `sudo` or `pkexec`
+- modify routes, DNS, or firewall rules
+- use the network
 
 ## Virtual environment
 
@@ -82,7 +98,8 @@ python -m fortigate_vpn_gui
 ```
 
 Do not run this as root. The process exits with an error if the effective UID
-is 0.
+is 0. Extra rights for PPP/routes/DNS belong in a future helper, not in the
+Qt process.
 
 ## Lint
 
@@ -105,7 +122,12 @@ fake library/executable probes and never call apt or sudo.
 
 ```text
 src/fortigate_vpn_gui/   application package
-tests/                   pytest suite
+  gui/                   Qt pages (Connection, Profiles, Diagnostics, Logs)
+  vpn/                   process backend (no Qt)
+  profiles/              XDG JSON storage
+  system/                preflight catalog
+  diagnostics/           redacted snapshots
+tests/                   pytest suite (mocked processes)
 docs/en/                 English documentation
 docs/pl/                 Polish documentation
 assets/                  future icons and branding

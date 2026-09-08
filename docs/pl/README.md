@@ -7,8 +7,9 @@ SSL VPN na systemie Linux.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v0.2.x dodaje trwałe profile połączeń. Łączność VPN oraz SAML/SSO są
-planowane i nie są zaimplementowane.
+Wersja v0.3.x dodaje nieuprzywilejowane zaplecze procesu openfortivpn.
+SAML/SSO oraz pomocnik uprzywilejowany są planowane i nie są
+zaimplementowane.
 
 | Temat | Dokument |
 | ----- | -------- |

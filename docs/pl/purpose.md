@@ -12,11 +12,13 @@ dystrybucji. Ten projekt ma dostarczyć przejrzysty, nowoczesny interfejs, któr
 - planuje SAML/SSO z Microsoft Entra ID przez systemową przeglądarkę
 - pozostaje niezależny od Fortinet
 
-Aplikacja będzie w przyszłości używać [openfortivpn](https://github.com/adrienverge/openfortivpn)
-jako zaplecza VPN. Ta integracja **nie** wchodzi w zakres v0.2.x.
+Aplikacja używa [openfortivpn](https://github.com/adrienverge/openfortivpn)
+jako zaplecza VPN. v0.3.x uruchamia go jako bieżący użytkownik. SAML/SSO i
+pomocnik uprzywilejowany **nie** wchodzą w zakres tej wersji.
 
-Wersja v0.2.x dodaje trwałe profile połączeń per-użytkownik na fundamencie GUI.
-Nadal nie jest to działający klient VPN.
+Wersja v0.3.x dodaje cykl życia procesu, Connect/Disconnect, ocenzurowane
+logi i wykrywanie openfortivpn na fundamencie trwałych profili. Nadal nie
+jest to kompletny klient VPN.
 
 Ten projekt **nie** jest powiązany, wspierany ani sponsorowany przez Fortinet.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
