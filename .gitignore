@@ -1,0 +1,105 @@
+# Byte-compiled / optimized / shared objects
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Packaging / distribution
+build/
+dist/
+wheels/
+downloads/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+share/python-wheels/
+
+# Virtual environments
+.venv/
+.local-venv/
+venv/
+ENV/
+env/
+.env/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.cache/
+
+# Ruff
+.ruff_cache/
+
+# Type checkers (reserved for later use)
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Translations
+*.mo
+*.pot
+
+# Qt / PySide
+*.qmlc
+*.jsc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE / editor
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# VS Code and Cursor: ignore local settings, keep shared recommendations
+.vscode/*
+!.vscode/extensions.json
+.cursor/*
+!.cursor/environment.json
+
+# OS / Linux temporary files
+.DS_Store
+.directory
+.nfs*
+lost+found/
+*.orig
+*.bak
+*.tmp
+*.temp
+core
+core.*
+vgcore.*
+
+# Logs (application logs must never be committed)
+*.log
+logs/
+
+# Secrets and local machine configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/

@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fortigate-vpn-linux-gui"
+version = "0.1.0"
+description = "Native Linux desktop GUI client for FortiGate SSL VPN"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "TimeWizard007" },
+]
+keywords = [
+    "fortigate",
+    "linux",
+    "openfortivpn",
+    "pyside6",
+    "ssl-vpn",
+    "vpn",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Networking",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui"
+Repository = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui"
+Issues = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui/issues"
+Changelog = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui/blob/main/CHANGELOG.md"
+
+[project.scripts]
+fortigate-vpn-gui = "fortigate_vpn_gui.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fortigate_vpn_gui = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-q"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "E",
+    "F",
+    "I",
+    "UP",
+]
+
+[tool.ruff.format]
+quote-style = "double"
