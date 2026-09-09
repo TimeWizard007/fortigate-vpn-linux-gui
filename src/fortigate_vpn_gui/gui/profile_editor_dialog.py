@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -10,11 +11,13 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile, ProfileValidationError
 
@@ -33,6 +36,7 @@ class ProfileEditorDialog(QDialog):
         self._existing = profile
         self.setWindowTitle("Edit profile" if profile else "Add profile")
         self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
         self.setMinimumWidth(420)
 
         self._error_label = QLabel()
@@ -56,6 +60,14 @@ class ProfileEditorDialog(QDialog):
         self._use_sso = QCheckBox("Use SSO")
         self._use_sso.setObjectName("profileUseSso")
         self._use_sso.setChecked(True)
+        self._clear_trust = False
+
+        self._cert_status = QLabel("No certificate pinned")
+        self._cert_status.setObjectName("profileCertStatus")
+        self._cert_status.setWordWrap(True)
+        self._reset_cert = QPushButton("Remove certificate trust")
+        self._reset_cert.setObjectName("profileResetCert")
+        self._reset_cert.clicked.connect(self._on_reset_cert)
 
         if profile is not None:
             self._name.setText(profile.name)
@@ -64,6 +76,10 @@ class ProfileEditorDialog(QDialog):
             self._description.setText(profile.description)
             self._username_hint.setText(profile.username_hint)
             self._use_sso.setChecked(profile.use_sso)
+            self._refresh_cert_status(profile.trusted_cert_sha256)
+        else:
+            self._refresh_cert_status(None)
+            self._reset_cert.setEnabled(False)
 
         form = QFormLayout()
         form.addRow("Profile name:", self._name)
@@ -72,6 +88,8 @@ class ProfileEditorDialog(QDialog):
         form.addRow("Description:", self._description)
         form.addRow("Username hint:", self._username_hint)
         form.addRow("", self._use_sso)
+        form.addRow("Certificate pin:", self._cert_status)
+        form.addRow("", self._reset_cert)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -98,6 +116,10 @@ class ProfileEditorDialog(QDialog):
             "username_hint": self._username_hint.text(),
             "use_sso": self._use_sso.isChecked(),
         }
+        if self._existing is not None:
+            values["trusted_cert_sha256"] = (
+                None if self._clear_trust else self._existing.trusted_cert_sha256
+            )
         try:
             if self._existing is None:
                 self._manager.add(**values)
@@ -109,3 +131,17 @@ class ProfileEditorDialog(QDialog):
             return False
         self.accept()
         return True
+
+    def _on_reset_cert(self) -> None:
+        self._clear_trust = True
+        self._refresh_cert_status(None)
+        self._reset_cert.setEnabled(False)
+
+    def _refresh_cert_status(self, fingerprint: str | None) -> None:
+        if fingerprint:
+            shown = format_sha256_fingerprint(fingerprint)
+            self._cert_status.setText(f"Pinned SHA-256:\n{shown}")
+            self._reset_cert.setEnabled(True)
+        else:
+            self._cert_status.setText("No certificate pinned")
+            self._reset_cert.setEnabled(False)

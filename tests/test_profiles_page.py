@@ -64,3 +64,20 @@ def test_profile_editor_shows_validation_error(qapp, profile_manager: ProfileMan
     assert dialog.submit() is False
     assert "name cannot be empty" in dialog.error_text().lower()
     assert profile_manager.list_profiles() == ()
+
+
+def test_profile_editor_shows_and_clears_certificate_pin(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    digest = "ab" * 32
+    profile = profile_manager.add(
+        name="Office", gateway="vpn.example.com", trusted_cert_sha256=digest
+    )
+    page = ProfilesPage(profile_manager)
+    dialog = ProfileEditorDialog(profile_manager, profile, parent=page)
+    assert "Pinned SHA-256" in dialog._cert_status.text()
+    dialog._on_reset_cert()
+    assert dialog.submit() is True
+    updated = profile_manager.get(profile.id)
+    assert updated is not None
+    assert updated.trusted_cert_sha256 is None

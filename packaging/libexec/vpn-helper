@@ -1,0 +1,17 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Installed privileged helper entry point.
+
+This file is intended to be installed as a root-owned executable at
+``/usr/libexec/fortigate-vpn-linux-gui/vpn-helper``. The GUI must never
+run this module as the desktop user for real tunnel setup; pkexec starts it.
+"""
+
+from __future__ import annotations
+
+import sys
+
+from fortigate_vpn_gui.helper.main import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

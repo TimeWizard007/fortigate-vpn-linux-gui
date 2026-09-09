@@ -19,6 +19,8 @@ from fortigate_vpn_gui.profiles.model import (
 )
 from fortigate_vpn_gui.profiles.storage import ProfileStore
 
+_UNSET = object()
+
 
 class ProfileManager:
     """List, add, update, and delete connection profiles."""
@@ -73,6 +75,7 @@ class ProfileManager:
         description: object = "",
         username_hint: object = "",
         use_sso: object = True,
+        trusted_cert_sha256: object = None,
     ) -> ConnectionProfile:
         profile = build_profile(
             profile_id=new_profile_id(),
@@ -82,6 +85,7 @@ class ProfileManager:
             description=description,
             username_hint=username_hint,
             use_sso=use_sso,
+            trusted_cert_sha256=trusted_cert_sha256,
         )
         self._ensure_unique_name(profile.name)
         self._profiles.append(profile)
@@ -98,9 +102,12 @@ class ProfileManager:
         description: object = "",
         username_hint: object = "",
         use_sso: object = True,
+        trusted_cert_sha256: object = _UNSET,
     ) -> ConnectionProfile:
-        if self.get(profile_id) is None:
+        existing = self.get(profile_id)
+        if existing is None:
             raise ProfileNotFoundError(profile_id)
+        pin = existing.trusted_cert_sha256 if trusted_cert_sha256 is _UNSET else trusted_cert_sha256
         profile = build_profile(
             profile_id=profile_id,
             name=name,
@@ -109,11 +116,32 @@ class ProfileManager:
             description=description,
             username_hint=username_hint,
             use_sso=use_sso,
+            trusted_cert_sha256=pin,
         )
         self._ensure_unique_name(profile.name, ignore_id=profile_id)
         self._profiles = [profile if item.id == profile_id else item for item in self._profiles]
         self._persist_and_notify()
         return profile
+
+    def set_trusted_certificate(self, profile_id: str, fingerprint: object) -> ConnectionProfile:
+        """Pin a SHA-256 fingerprint on an existing profile."""
+        existing = self.get(profile_id)
+        if existing is None:
+            raise ProfileNotFoundError(profile_id)
+        return self.update(
+            profile_id,
+            name=existing.name,
+            gateway=existing.gateway,
+            port=existing.port,
+            description=existing.description,
+            username_hint=existing.username_hint,
+            use_sso=existing.use_sso,
+            trusted_cert_sha256=fingerprint,
+        )
+
+    def clear_trusted_certificate(self, profile_id: str) -> ConnectionProfile:
+        """Remove a stored certificate pin."""
+        return self.set_trusted_certificate(profile_id, None)
 
     def delete(self, profile_id: str) -> bool:
         """Remove a profile. Returns False if the id was not present."""

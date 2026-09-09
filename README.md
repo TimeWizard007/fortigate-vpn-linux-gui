@@ -1,7 +1,7 @@
 # FortiGate VPN Linux GUI
 
-A modern native Linux desktop GUI client for FortiGate SSL VPN, with planned
-support for SAML/SSO authentication using Microsoft Entra ID.
+A modern native Linux desktop GUI client for FortiGate SSL VPN, with
+SAML/SSO authentication using Microsoft Entra ID via the system browser.
 
 **This project is independent and is not affiliated with, endorsed by, or
 sponsored by Fortinet.** Fortinet, FortiGate, and FortiClient are trademarks of
@@ -9,9 +9,9 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.3.0**. Persistent profiles and an unprivileged
-`openfortivpn` process backend are implemented. SAML/SSO and a privileged
-helper/polkit path are **not**.
+The current version is **0.5.0**. Persistent profiles, SAML/SSO via
+`--saml-login` and the system browser, a polkit privileged helper, and
+explicit FortiGate certificate pinning are implemented.
 
 | Capability | Status |
 | ---------- | ------ |
@@ -21,17 +21,27 @@ helper/polkit path are **not**.
 | Connect / disconnect (non-SSO profiles) | Implemented |
 | Logs (in-memory, redacted) | Implemented |
 | Runtime openfortivpn detection | Implemented |
-| SAML / SSO (Microsoft Entra ID) | **Not implemented** |
-| Privileged helper / polkit | **Not implemented** |
+| SAML / SSO (Microsoft Entra ID, system browser) | Implemented |
+| Privileged helper / polkit | Implemented |
+| Explicit gateway certificate pinning | Implemented |
 
-Non-SSO profiles start `openfortivpn <gateway>:<port>` as the current user.
-Passwords are not stored, so authentication may fail. That is expected in
-v0.3.0: the goal is process lifecycle, not a complete login flow.
+SSO profiles send a structured connect request to a minimal privileged helper.
+The helper constructs `[openfortivpn, gateway:port, --saml-login]` (list argv,
+`shell=False`) from approved paths only. The GUI stays unprivileged, receives
+the validated SAML URL, and opens it once in the system browser. FortiGate then
+redirects to Microsoft Entra ID. The local callback listener belongs to
+openfortivpn; this GUI does not bind an extra port.
 
-SSO profiles do **not** start a VPN. The GUI shows:
-`SAML/SSO connection support is planned for v0.4.0.`
+The Ubuntu 24.04 package (`/usr/bin/openfortivpn` 1.21.0) may **not** provide
+`--saml-login`. A newer build such as **openfortivpn 1.24.1** (for example
+`/usr/local/bin/openfortivpn`) is required for SSO. The helper discovers
+approved candidates and prefers a SAML-capable executable. It does not fall
+back to insecure authentication.
 
-The GUI never opens a browser and never runs as root.
+The GUI never runs as root and never uses sudo. Connecting asks polkit to
+authorize the helper (`pkexec` starts only the helper, not the GUI).
+Passwords, SAML tokens, and SVPNCOOKIE are not stored and are not passed on
+the command line. Gateway certificates are never auto-trusted.
 
 ## Connection profiles
 
@@ -44,7 +54,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 Typical Ubuntu path: `~/.config/fortigate-vpn-linux-gui/profiles.json`.
 
 Each profile has a stable id, name, gateway, port (default 443), optional
-description, optional username hint, and a Use SSO flag (default on).
+description, optional username hint, a Use SSO flag (default on), and an
+optional `trusted_cert_sha256` pin. The pin is a SHA-256 fingerprint, not a
+secret.
 
 **The profile file does not store passwords, SAML tokens, cookies, client
 secrets, or MFA data.** The application never writes those fields.
@@ -59,34 +71,58 @@ configuration path as read-only.
 still starts if it is missing; the Connection page explains that VPN
 connectivity is unavailable.
 
-On Ubuntu:
+On Ubuntu the packaged client is often too old for SAML:
 
 ```bash
 sudo apt install openfortivpn
 ```
 
-The application never installs packages automatically. It never runs `sudo`,
-`pkexec`, or `apt`.
+That typically installs **1.21.0** at `/usr/bin/openfortivpn` without
+`--saml-login`. SSO needs a build that advertises `--saml-login` (tested:
+**1.24.1** at `/usr/local/bin/openfortivpn`). The GUI will select the
+SAML-capable binary when an SSO profile is used.
 
-Because `openfortivpn` may need extra rights for PPP, routes, or DNS, a
-permission failure is reported clearly. Privileged helper/polkit support is
-planned for a later release. Do not start this GUI as root to work around that.
+The application never installs packages automatically. It never runs `sudo`
+or `apt`. Connecting uses `pkexec` only to start the privileged helper.
+
+Because `openfortivpn` needs extra rights for PPP, routes, or DNS, it runs
+through the helper after a normal Linux authentication dialog. Do not start
+this GUI as root.
 
 ## Architecture (current)
 
 ```text
 GUI                          PySide6 widgets (unprivileged)
-  ↓
-Application / service layer  VpnBackend, profiles, redacted logs
-  ↓
-openfortivpn                 started as the current user
+  ↓ structured request
+Privileged helper            root via polkit (pkexec)
+  ↓ controlled argv
+openfortivpn                 PPP / routes / DNS
+  ↓ SAML URL event
+System browser               unprivileged desktop session
   ↓
 FortiGate SSL VPN            gateway
 ```
 
-A privileged helper will sit between the service layer and `openfortivpn` in a
-later release. SAML authentication is expected to use the user's system
-browser and Microsoft Entra ID; that path is not implemented yet.
+The helper exposes only connect, disconnect, and status. It constructs the
+openfortivpn command itself. The GUI never sends a shell string or an
+arbitrary executable path.
+
+When FortiGate certificate validation fails, the GUI shows a pinning dialog.
+Trust stores the SHA-256 fingerprint on that profile only. A later different
+fingerprint is a certificate-change warning and is never auto-replaced.
+
+## Privileged helper install (development)
+
+```bash
+sudo install -D -m 0755 packaging/libexec/vpn-helper \
+  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
+  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+```
+
+The helper must be able to import `fortigate_vpn_gui` (editable install into
+the system interpreter, or a packaged install). Details:
+[`packaging/README.md`](packaging/README.md).
 
 ## Requirements
 
@@ -115,7 +151,8 @@ can be loaded; if it is missing, it shows a dialog with a copyable
 
 `sudo apt install libxcb-cursor0`
 
-command and exits. It never runs `sudo`, `pkexec`, or `apt`.
+command and exits. It never runs `sudo` or `apt` to install packages. `pkexec`
+is used later only to start the VPN helper, never to launch this GUI.
 
 ## Development setup
 

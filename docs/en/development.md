@@ -24,13 +24,31 @@ sudo apt install python3.12-venv libxcb-cursor0
 To exercise VPN connectivity you also need:
 
 ```bash
-sudo apt install openfortivpn
+sudo apt install openfortivpn pkexec
 ```
 
-The GUI still starts without `openfortivpn`. The Connection page then explains
-that VPN connectivity is unavailable. The application does **not** install
-system packages automatically. It never runs `sudo`, `pkexec`, or `apt`.
-Those commands are documented for you to run manually.
+Ubuntu's packaged **1.21.0** may lack `--saml-login`; SSO needs a SAML-capable
+build (tested **1.24.1**). The GUI still starts without `openfortivpn`. The
+application does **not** install system packages automatically.
+
+## Privileged helper (development)
+
+Real tunnels need the helper and polkit policy. The GUI never runs as root
+and does not fall back to sudo.
+
+```bash
+sudo install -D -m 0755 packaging/libexec/vpn-helper \
+  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
+  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+```
+
+The installed helper must import `fortigate_vpn_gui` (packaged install, or
+point the wrapper at this checkout). See [`packaging/README.md`](../../packaging/README.md).
+
+Optional override: `FORTIGATE_VPN_HELPER=/path/to/vpn-helper`. Missing helper,
+missing polkit, authorization denied, and version mismatch are reported.
+There is no silent insecure fallback.
 
 ## Profile storage
 
@@ -40,16 +58,9 @@ Connection profiles are per-user UTF-8 JSON:
 ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
-If `XDG_CONFIG_HOME` is unset, the file is
-`~/.config/fortigate-vpn-linux-gui/profiles.json`.
-
-The directory is created only when a profile is saved. Writes are atomic
-(temporary file + replace). Malformed JSON is treated as an empty list and
-does not crash the GUI.
-
 Stored fields: `id`, `name`, `gateway`, `port`, `description`,
-`username_hint`, `use_sso`. Passwords, SAML tokens, cookies, and other secrets
-are never written.
+`username_hint`, `use_sso`, optional `trusted_cert_sha256`. Passwords, SAML
+tokens, cookies, and other secrets are never written.
 
 Pytest uses a temporary `XDG_CONFIG_HOME` so tests never modify the real
 `~/.config`.
@@ -66,9 +77,8 @@ Before the main window is created, the process:
    command `sudo apt install libxcb-cursor0`.
 4. Offers **Copy command** and **Exit**. The command is never executed.
 
-`openfortivpn` is catalogued as a `VPN_BACKEND` dependency. It is **not**
-enforced at GUI startup. PATH lookup happens when connecting or when
-Diagnostics is shown. `openfortivpn --version` is used only for Diagnostics.
+`openfortivpn` and `pkexec` are catalogued. They are **not** enforced at GUI
+startup.
 
 ## VPN backend tests
 
@@ -76,9 +86,11 @@ Tests must mock process execution. They must not:
 
 - connect to a VPN
 - call a real `openfortivpn` binary
-- call `sudo` or `pkexec`
+- open a real browser
+- call `sudo` or a real `pkexec` dialog
 - modify routes, DNS, or firewall rules
 - use the network
+- run as root
 
 ## Virtual environment
 
@@ -98,8 +110,7 @@ python -m fortigate_vpn_gui
 ```
 
 Do not run this as root. The process exits with an error if the effective UID
-is 0. Extra rights for PPP/routes/DNS belong in a future helper, not in the
-Qt process.
+is 0.
 
 ## Lint
 
@@ -114,24 +125,20 @@ ruff format src tests
 python -m pytest
 ```
 
-Widget tests set `QT_QPA_PLATFORM=offscreen` and do not use the network. The
-same environment variable is used in GitHub Actions. Preflight tests inject
-fake library/executable probes and never call apt or sudo.
+Widget tests set `QT_QPA_PLATFORM=offscreen` and do not use the network.
 
 ## Project layout
 
 ```text
 src/fortigate_vpn_gui/   application package
-  gui/                   Qt pages (Connection, Profiles, Diagnostics, Logs)
-  vpn/                   process backend (no Qt)
+  gui/                   Qt pages
+  vpn/                   GUI-side VPN state (no Qt)
+  helper/                privileged protocol and process owner
   profiles/              XDG JSON storage
-  system/                preflight catalog
+  system/                preflight catalog and polkit client
   diagnostics/           redacted snapshots
+packaging/               helper, polkit policy
 tests/                   pytest suite (mocked processes)
 docs/en/                 English documentation
 docs/pl/                 Polish documentation
-assets/                  future icons and branding
-packaging/               future distribution packaging
-scripts/                 future maintainer scripts
-.github/workflows/       CI
 ```

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -33,6 +34,7 @@ class LogsPage(QWidget):
 
         self._view = QPlainTextEdit()
         self._view.setObjectName("logsView")
+        self._view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._view.setReadOnly(True)
         self._view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 

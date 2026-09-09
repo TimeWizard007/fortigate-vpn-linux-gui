@@ -3,12 +3,15 @@
 
 Profiles never include passwords, SAML tokens, cookies, client secrets, or
 MFA material. Those keys are rejected if they appear in stored JSON.
+``trusted_cert_sha256`` is an optional certificate pin, not a secret.
 """
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass
+
+from fortigate_vpn_gui.helper.validation import normalize_sha256_fingerprint
 
 SCHEMA_VERSION = 1
 
@@ -40,6 +43,7 @@ STORED_FIELDS = (
     "description",
     "username_hint",
     "use_sso",
+    "trusted_cert_sha256",
 )
 
 _MAX_NAME_LENGTH = 200
@@ -74,10 +78,14 @@ class ConnectionProfile:
     description: str = ""
     username_hint: str = ""
     use_sso: bool = True
+    trusted_cert_sha256: str | None = None
 
     def to_json(self) -> dict[str, object]:
         """Return the JSON-serialisable record. Secret keys are never included."""
-        return {key: asdict(self)[key] for key in STORED_FIELDS}
+        payload = {key: asdict(self)[key] for key in STORED_FIELDS}
+        if not payload.get("trusted_cert_sha256"):
+            payload["trusted_cert_sha256"] = None
+        return payload
 
 
 def new_profile_id() -> str:
@@ -94,6 +102,7 @@ def build_profile(
     description: object = "",
     username_hint: object = "",
     use_sso: object = True,
+    trusted_cert_sha256: object = None,
 ) -> ConnectionProfile:
     """Validate and construct a profile. Raises ``ProfileValidationError``."""
     errors: list[str] = []
@@ -135,6 +144,12 @@ def build_profile(
     if sso_value is None:
         errors.append("Use SSO must be true or false.")
 
+    pin_value: str | None = None
+    if trusted_cert_sha256 not in (None, ""):
+        pin_value = normalize_sha256_fingerprint(trusted_cert_sha256)
+        if pin_value is None:
+            errors.append("Trusted certificate fingerprint must be a SHA-256 hex digest.")
+
     if errors:
         raise ProfileValidationError(errors)
 
@@ -153,6 +168,7 @@ def build_profile(
         description=description_text,
         username_hint=hint_text,
         use_sso=sso_value,
+        trusted_cert_sha256=pin_value,
     )
 
 

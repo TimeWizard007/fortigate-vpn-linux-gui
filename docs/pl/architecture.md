@@ -4,137 +4,127 @@ Projekt oddziela interfejs pulpitu od sterowania procesem VPN i od uprawnień.
 
 ```text
 GUI                          Widżety PySide6 (nieuprzywilejowane)
-  ↓
-Warstwa aplikacji / usług    VpnBackend, profile, ocenzurowane logi
-  ↓
-openfortivpn                 uruchamiany jako bieżący użytkownik (v0.3)
+  ↓ strukturalne żądanie JSON
+Pomocnik uprzywilejowany     root przez polkit (pkexec)
+  ↓ kontrolowane argv
+openfortivpn                 --saml-login dla SSO; PPP / trasy / DNS
+  ↓ zdarzenie URL SAML
+Przeglądarka systemowa       Microsoft Entra ID przez FortiGate SAML
   ↓
 FortiGate SSL VPN            brama
 ```
 
-Między warstwą usług a `openfortivpn` planowany jest pomocnik uprzywilejowany
-(polkit). W v0.3.x go nie ma. GUI nigdy nie może stać się tym pomocnikiem i
-nigdy nie może działać jako root.
+GUI nigdy nie może stać się pomocnikiem i nigdy nie może działać jako root.
+`pkexec` uruchamia tylko `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`.
+Aplikacja pulpitu nie jest uruchamiana przez pkexec ani sudo.
 
 ## Warstwy
 
 ### GUI
 
 Widżety Qt w `src/fortigate_vpn_gui/gui/`. GUI pokazuje stan i zbiera intencje
-użytkownika. Nie może działać jako root, wywoływać `sudo`/`pkexec` ani zmieniać
-tras, DNS albo reguł zapory. Connect/Disconnect woła `VpnBackend`; widżety
-same nie budują podprocesów. Dodawanie, edycja i usuwanie profili idzie przez
-`ProfileManager`; widżety same nie czytają i nie zapisują JSON.
+użytkownika. Nie może działać jako root, wywoływać `sudo` ani zmieniać tras,
+DNS albo reguł zapory. Connect/Disconnect woła `VpnBackend`.
+
+Gdy certyfikatu bramy nie da się zweryfikować, strona Connection pokazuje
+jawne okno pinowania. Przeglądarka systemowa otwiera się w sesji
+nieuprzywilejowanej po zweryfikowanym zdarzeniu URL SAML.
 
 ### Warstwa aplikacji / usług
 
-Pakiety bez Qt (`vpn`, `profiles`, `diagnostics`).
+Pakiety bez Qt (`vpn`, `profiles`, `helper`, `diagnostics`).
 
-`fortigate_vpn_gui.vpn` odpowiada za proces openfortivpn:
+`fortigate_vpn_gui.vpn` trzyma stan po stronie GUI. `fortigate_vpn_gui.helper`
+właściwie uruchamia openfortivpn.
 
 | Moduł | Rola |
 | ----- | ---- |
-| `backend.py` | `connect`, `disconnect`, `is_running`, `current_state`, `process_info` |
-| `process.py` | `subprocess.Popen` z listą argumentów i `shell=False` |
-| `command.py` | Buduje `[openfortivpn, brama:port]` bez sekretów |
-| `models.py` | `ConnectionState` i migawki stanu |
-| `log_redaction.py` | Centralna cenzura haseł, ciasteczek, tokenów |
-| `detect.py` | Szukanie na PATH; `--version` tylko dla Diagnostics |
-
-GUI może wystartować, gdy brakuje `openfortivpn`. Wersja nie jest odpytywana
-przy starcie aplikacji.
+| `vpn/backend.py` | `connect`, `disconnect`, timeout/cancel SAML, migawki |
+| `system/helper_client.py` | Nieuprzywilejowany klient JSON-lines; pkexec |
+| `helper/service.py` | Connect/disconnect/status; właściciel grupy procesów |
+| `helper/validation.py` | Brama, port, odcisk, operacja |
+| `vpn/command.py` | Lista `[openfortivpn, brama:port]` i opcjonalne flagi |
+| `helper/executables.py` | Tylko `/usr/local/bin` i `/usr/bin` |
+| `vpn/browser.py` | `xdg-open` po walidacji URL |
+| `helper/certificate.py` | Metadane nieudanej walidacji certyfikatu |
+| `vpn/log_redaction.py` | Hasła, ciasteczka, SAMLResponse, tokeny |
 
 ### Pomocnik uprzywilejowany
 
-Przyszły mały pomocnik (pakiet `system` / artefakty pakietowania) uruchamiany
-przez polkit. Powinien wykonywać wyłącznie operacje, które naprawdę wymagają
-dodatkowych uprawnień. v0.3.x uruchamia `openfortivpn` jako bieżący użytkownik
-i zgłasza błędy uprawnień zamiast eskalować.
+Mały pomocnik z akcją polkit `com.fortigate-vpn-linux-gui.manage-vpn`. To nie
+jest ogólny executor poleceń. Operacje: `hello`, `connect`, `disconnect`,
+`status`.
+
+Lokalizacje instalacji:
+
+```text
+/usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+/usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+```
+
+Pomocnik ponownie waliduje każde pole, wybiera zatwierdzone binarium
+openfortivpn i sam buduje argv. Nie przyjmuje ciągu polecenia, listy argv ani
+ścieżki wykonywalnej z GUI.
 
 ### openfortivpn
 
-Silnik VPN. v0.3.x uruchamia go jako bieżący użytkownik poleceniem:
+Bez SSO: `openfortivpn <brama>:<port>`. SSO:
+`openfortivpn <brama>:<port> --saml-login`. Z pinem:
+`--trusted-cert <sha256>` jako osobny argument. Walidacja TLS nigdy nie jest
+wyłączana.
 
-```text
-openfortivpn <brama>:<port>
-```
-
-Nie dodaje argumentów z hasłem, ciasteczkiem, tokenem ani `--trusted-cert`.
-
-### FortiGate SSL VPN
-
-Zdalna brama. Ten projekt nie implementuje protokołu VPN samodzielnie.
+Kandydaci pomocnika: `/usr/local/bin/openfortivpn`, `/usr/bin/openfortivpn`.
+Zdolności z `--help`. Paczka Ubuntu 24.04 (**1.21.0**) zwykle nie ma SAML;
+przetestowane SAML to **1.24.1**.
 
 ## Stany połączenia
 
-`ConnectionState` to enumeracja z deterministycznymi przejściami:
+Bez SSO: `DISCONNECTED → STARTING → CONNECTING → CONNECTED`.
 
-```text
-DISCONNECTED → STARTING → CONNECTING → CONNECTED
-CONNECTED → DISCONNECTING → DISCONNECTED
-nieodwracalny błąd procesu → FAILED
-FAILED → DISCONNECTED (po posprzątaniu) albo STARTING (ponowienie)
-```
+SSO: `DISCONNECTED → STARTING → WAITING_FOR_AUTH → CONNECTING → CONNECTED`.
 
-`WAITING_FOR_AUTH` istnieje pod przyszły przepływ SAML. v0.3.x nie otwiera
-przeglądarki i nie wchodzi w ten stan dla SSO.
+Powody błędu przy FAILED obejmują m.in. `PRIVILEGE_DENIED`,
+`HELPER_NOT_AVAILABLE`, `CERTIFICATE_UNTRUSTED`, `CERTIFICATE_CHANGED`,
+`SAML_FAILED`, `VPN_PROCESS_FAILED`.
 
-Profile SSO (`use_sso=True`) są odrzucane, zanim powstanie jakikolwiek proces.
+Przeglądarka otwierana jest tylko raz, w nieuprzywilejowanym procesie GUI.
 
 ## Profile połączeń
-
-Profile to lokalna konfiguracja per-użytkownik:
 
 ```text
 ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
-Schemat JSON (wersja 1): `id`, `name`, `gateway`, `port` (domyślnie 443),
-`description`, `username_hint`, `use_sso` (domyślnie true).
+Schemat (wersja 1): `id`, `name`, `gateway`, `port`, `description`,
+`username_hint`, `use_sso`, opcjonalne `trusted_cert_sha256`.
 
-Hasła, tokeny SAML, ciasteczka, sekrety klienta i dane MFA nie są
-przechowywane. Nieznane pola JSON są ignorowane. Uszkodzony plik nie powoduje
-awarii aplikacji.
-
-`ProfileManager` powiadamia słuchaczy po add/update/delete, więc strona
-Connection odświeża się bez restartu.
+Hasła, tokeny SAML, ciasteczka i dane MFA nie są przechowywane.
 
 ## Cenzura logów
 
-Każda linia logu zaplecza przechodzi przez `redact_log_line` zanim trafi do
-pamięci albo na ekran. Dopasowanie nie zależy od wielkości liter. Typowe
-zamiany:
+Każda linia przechodzi przez `redact_log_line`. Odciski certyfikatów nie są
+sekretami i mogą być pokazywane w Diagnostics. Logi zostają w pamięci.
 
-- `password=***`
-- `SVPNCOOKIE=***`
-- `Authorization: Bearer ***`
-- `Cookie: ***`
+## SAML / SSO
 
-Logi zostają w pamięci na czas sesji. W v0.3.x nie są zapisywane na dysk.
-
-## SAML / SSO (planowane)
-
-Uwierzytelnianie SAML ma korzystać z **systemowej przeglądarki użytkownika**
-oraz **Microsoft Entra ID**. Tokeny i ciasteczka z tego przepływu nie mogą
-trafiać do logów ani do plików profili. Ta ścieżka jest planowana na v0.4.0
-i nie jest zaimplementowana.
+SAML używa **systemowej przeglądarki** użytkownika i **Microsoft Entra ID**.
+`openfortivpn` (własność pomocnika) trzyma listener callback. GUI nie
+uruchamia przeglądarki jako root.
 
 ## Dlaczego GUI nigdy nie działa jako root
 
-Konfiguracja PPP, tras i DNS wymaga dodatkowych uprawnień. Uruchomienie całego
-programu Qt jako root powiększałoby powierzchnię ataku (interfejs, schowek,
-okna plików, wtyczki). Dodatkowe prawa należą do przyszłego minimalnego
-pomocnika, nie do procesu pulpitu. Dlatego v0.3.x uruchamia `openfortivpn`
-bez uprawnień i wyjaśnia błędy permission denied zamiast prosić o `sudo`
-dla całego GUI.
+Konfiguracja PPP, tras i DNS wymaga dodatkowych praw. Cała aplikacja Qt jako
+root powiększałaby powierzchnię ataku. Te prawa należą do minimalnego
+pomocnika.
 
 ## Mapa pakietów
 
 | Pakiet | Rola |
 | ------ | ---- |
 | `fortigate_vpn_gui.gui` | Okna i strony Qt |
-| `fortigate_vpn_gui.runtime` | Kontrole procesu (GUI odmawia uruchomienia jako root) |
-| `fortigate_vpn_gui.vpn` | Zaplecze openfortivpn, stany, ocenzurowane logi |
-| `fortigate_vpn_gui.profiles` | Model profilu, magazyn JSON XDG, menedżer |
-| `fortigate_vpn_gui.system` | Sprawdzenie zależności przy starcie; przyszła integracja pomocnika / polkit |
-| `fortigate_vpn_gui.diagnostics` | Ocenzurowane migawki diagnostyczne |
+| `fortigate_vpn_gui.runtime` | GUI odmawia startu jako root |
+| `fortigate_vpn_gui.vpn` | Stan VPN po stronie GUI, SAML, przeglądarka |
+| `fortigate_vpn_gui.helper` | Protokół uprzywilejowany i właściciel procesu |
+| `fortigate_vpn_gui.profiles` | Model i zapis JSON XDG |
+| `fortigate_vpn_gui.system` | Preflight i klient polkit |
+| `fortigate_vpn_gui.diagnostics` | Ocenzurowane migawki |

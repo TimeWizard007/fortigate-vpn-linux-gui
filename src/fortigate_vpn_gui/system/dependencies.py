@@ -141,7 +141,7 @@ DEPENDENCY_CATALOG: tuple[RuntimeDependency, ...] = (
     RuntimeDependency(
         dependency_id="pkexec",
         display_name="polkit (pkexec)",
-        reason="Planned polkit helper runtime. The GUI must never run as root.",
+        reason="polkit helper runtime (pkexec). The GUI must never run as root.",
         stage=RequirementStage.PRIVILEGED_HELPER,
         probe=ProbeKind.EXECUTABLE,
         probe_name="pkexec",
@@ -150,7 +150,7 @@ DEPENDENCY_CATALOG: tuple[RuntimeDependency, ...] = (
     RuntimeDependency(
         dependency_id="system-browser",
         display_name="system web browser (xdg-open)",
-        reason="Planned SAML/SSO via the system browser and Microsoft Entra ID.",
+        reason="SAML/SSO via the system browser and Microsoft Entra ID (xdg-open).",
         stage=RequirementStage.SAML,
         probe=ProbeKind.EXECUTABLE,
         probe_name="xdg-open",

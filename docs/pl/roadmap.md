@@ -1,35 +1,43 @@
 # Plan rozwoju
 
-Daty nie są zobowiązujące. Kolejność może się zmienić wraz z pracą projektową.
+Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 
 ## v0.1.x — fundament
 
-- Pakiet Python i punkt wejścia `python -m fortigate_vpn_gui`
-- Zastępcze GUI PySide6 (bez operacji VPN)
+- Pakiet Python i `python -m fortigate_vpn_gui`
+- Szkielet GUI PySide6
 - Sprawdzenie zależności przy starcie
-- Dokumentacja angielska i polska, pytest, Ruff oraz CI w GitHub Actions
+- Dokumentacja EN/PL, pytest, Ruff, CI
 
 ## v0.2.x — profile
 
-- Trwałe profile połączeń FortiGate
-- Magazyn JSON XDG bez sekretów
-- Strona Profiles: dodawanie / edycja / usuwanie
-- Integracja selektora na stronie Connection
+- Trwałe profile FortiGate
+- JSON XDG bez sekretów
+- Strona Profiles
 
-## v0.3.x — zaplecze openfortivpn (obecnie)
+## v0.3.x — zaplecze openfortivpn
 
-- Cykl życia nieuprzywilejowanego procesu `openfortivpn`
-- Stany połączenia oraz podłączenie Connect / Disconnect
-- Wykrywanie `openfortivpn` w czasie działania (GUI startuje także bez niego)
-- Strona Logs w pamięci z cenzurą
-- Diagnostics: ścieżka, wersja, stan VPN, PID
-- Testy z udawanym procesem (bez prawdziwego VPN, sudo i sieci)
+- Cykl życia procesu
+- Stany połączenia
+- Logi w pamięci z cenzurą
 
-## Później (planowane, niezaimplementowane)
+## v0.4.x — SAML/SSO
 
-- Projekt pomocnika uprzywilejowanego i polityki polkit
-- SAML/SSO przez systemową przeglądarkę i Microsoft Entra ID (cel v0.4.0)
-- Pakietowanie Ubuntu (`.deb` i wpis pulpitu)
+- Natywne `openfortivpn --saml-login`
+- Przeglądarka systemowa / Microsoft Entra ID
+- `WAITING_FOR_AUTH`
 
-Uwierzytelnianie SAML oraz eskalacja uprawnień są **planowane**. W tej wersji
-są niedostępne.
+## v0.5.x — pomocnik uprzywilejowany (obecnie)
+
+- Pomocnik polkit: connect / disconnect / status
+- Kontrolowane uprzywilejowane uruchamianie openfortivpn
+- Jawne pinowanie SHA-256 certyfikatu per profil
+- Ostrzeżenie o zmianie certyfikatu
+- Diagnostyka pomocnika
+
+## Później (planowane, niezrealizowane)
+
+- Pakiet Ubuntu (`.deb` i wpis pulpitu)
+- Szersze pakietowanie dystrybucyjne
+
+GUI nigdy nie może działać jako root.

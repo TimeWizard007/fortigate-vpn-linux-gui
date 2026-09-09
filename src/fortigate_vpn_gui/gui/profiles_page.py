@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
+from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 
@@ -43,6 +45,7 @@ class ProfilesPage(QWidget):
 
         self._table = QTableWidget(0, len(_COLUMNS))
         self._table.setObjectName("profilesTable")
+        self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._table.setHorizontalHeaderLabels(_COLUMNS)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -121,14 +124,14 @@ class ProfilesPage(QWidget):
         return self._manager.get(profile_id)
 
     def add_profile(self) -> None:
-        dialog = ProfileEditorDialog(self._manager, parent=self)
+        dialog = ProfileEditorDialog(self._manager, parent=dialog_parent_for(self))
         dialog.exec()
 
     def edit_profile(self) -> None:
         profile = self.selected_profile()
         if profile is None:
             return
-        dialog = ProfileEditorDialog(self._manager, profile, parent=self)
+        dialog = ProfileEditorDialog(self._manager, profile, parent=dialog_parent_for(self))
         dialog.exec()
 
     def delete_profile(self, *, confirmed: bool | None = None) -> None:
@@ -141,7 +144,7 @@ class ProfilesPage(QWidget):
             return
         if confirmed is None:
             answer = QMessageBox.question(
-                self,
+                dialog_parent_for(self),
                 "Delete profile",
                 f'Delete profile "{profile.name}"?\n\nThis cannot be undone.',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,

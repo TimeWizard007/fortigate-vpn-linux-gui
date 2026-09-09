@@ -7,18 +7,19 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.3.x adds an unprivileged openfortivpn process backend. SAML/SSO, sudo,
-polkit, and network changes by the GUI are **out of scope** until they are
-designed and implemented deliberately.
+v0.5.x adds a polkit privileged helper and explicit FortiGate certificate
+pinning on top of SAML/SSO. The GUI must never run as root and must never
+call `sudo`. Privileged VPN work belongs only in the project helper.
 
 Please do not send pull requests that:
 
-- implement SAML or Microsoft Entra ID login, or open a browser for SSO
-- invoke `sudo`/`pkexec` or install privileged services
-- modify routes, DNS, or firewall rules
-- silently disable certificate verification
+- invoke `sudo` or add sudoers rules
+- launch the whole GUI with `pkexec` or run any process as root from tests
+- accept arbitrary root commands, argv, or executable paths from the GUI
+- modify routes, DNS, or firewall rules from the GUI process
+- silently disable certificate verification or auto-trust unknown certificates
 - store passwords, tokens, or VPN cookies
-- call a real `openfortivpn` binary from tests
+- call a real `openfortivpn` binary, real pkexec dialog, or real browser from tests
 
 ## Local development
 

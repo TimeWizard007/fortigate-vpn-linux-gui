@@ -28,6 +28,33 @@ def test_redact_cookie() -> None:
     assert redact_log_line("cookie=xyz") == "cookie=***"
 
 
+def test_redact_saml_response_and_relay_state() -> None:
+    assert "abc" not in redact_log_line("SAMLResponse=abc123")
+    assert redact_log_line("SAMLResponse=abc123") == "SAMLResponse=***"
+    assert "xyz" not in redact_log_line("RelayState=xyz")
+    assert redact_log_line("RelayState=xyz") == "RelayState=***"
+
+
+def test_redact_id_and_session_identifiers() -> None:
+    assert "secret" not in redact_log_line("http://127.0.0.1:8020/?id=secret")
+    assert "id=***" in redact_log_line("callback id=secretid")
+    assert redact_log_line("session_id=sess-99") == "session_id=***"
+
+
+def test_redact_token_query_parameters() -> None:
+    line = "https://login.example.com/cb?access_token=aaa&refresh_token=bbb&id_token=ccc"
+    redacted = redact_log_line(line)
+    assert "aaa" not in redacted
+    assert "bbb" not in redacted
+    assert "ccc" not in redacted
+    assert "access_token=***" in redacted
+
+
+def test_redact_id_token_and_client_secret() -> None:
+    assert redact_log_line("id_token=hunter2") == "id_token=***"
+    assert redact_log_line("client_secret=shh") == "client_secret=***"
+
+
 def test_redact_mixed_capitalization() -> None:
     text = "PaSsWoRd=abc SVPNCOOKIE=tok Authorization: BeArEr jwt"
     redacted = redact_log_line(text)

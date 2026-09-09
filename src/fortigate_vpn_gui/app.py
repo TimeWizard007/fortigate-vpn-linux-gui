@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from fortigate_vpn_gui import APP_NAME, __version__
 from fortigate_vpn_gui.gui.dependency_dialog import show_missing_dependency_dialog
 from fortigate_vpn_gui.gui.main_window import MainWindow
-from fortigate_vpn_gui.runtime import is_running_as_root
+from fortigate_vpn_gui.runtime import detach_from_launcher_window, is_running_as_root
 from fortigate_vpn_gui.system.dependencies import (
     PreflightReport,
     check_gui_startup,
@@ -45,6 +45,7 @@ def main(
         Otherwise the Qt event-loop exit code.
     """
     args = list(sys.argv if argv is None else argv)
+    detach_from_launcher_window()
     report = check_dependencies()
 
     if running_as_root():
@@ -140,8 +141,8 @@ def _show_root_error() -> None:
         None,
         APP_NAME,
         "This application must never run as root.\n\n"
-        "The GUI stays unprivileged. Future VPN operations will use a "
-        "minimal helper (for example polkit), not a root GUI.",
+        "The GUI stays unprivileged. Privileged VPN operations use a "
+        "minimal polkit helper, not a root GUI.",
     )
 
 

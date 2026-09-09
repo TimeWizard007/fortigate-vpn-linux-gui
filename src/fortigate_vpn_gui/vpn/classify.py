@@ -11,6 +11,7 @@ class OutputHint(Enum):
     CONNECTED = "connected"
     PERMISSION = "permission"
     AUTH_FAILURE = "auth_failure"
+    CERTIFICATE = "certificate"
 
 
 _CONNECTED = (
@@ -42,10 +43,16 @@ _AUTH = (
     "wrong password",
 )
 
+_CERTIFICATE = (
+    "gateway certificate validation failed",
+)
+
 
 def classify_output(line: str) -> OutputHint:
     """Return a coarse hint derived from a redacted log line."""
     lowered = line.lower()
+    if any(marker in lowered for marker in _CERTIFICATE):
+        return OutputHint.CERTIFICATE
     if any(marker in lowered for marker in _PERMISSION):
         return OutputHint.PERMISSION
     if any(marker in lowered for marker in _AUTH):

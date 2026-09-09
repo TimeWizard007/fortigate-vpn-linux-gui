@@ -9,55 +9,92 @@ live in [`SECURITY.md`](../../SECURITY.md) at the repository root.
 
 | Process | Privilege | Role |
 | ------- | --------- | ---- |
-| GUI | Unprivileged user | Display UI, collect intent |
-| VpnBackend | Same unprivileged user | Start/stop `openfortivpn`, redact logs |
-| openfortivpn | Current user in v0.3.x | SSL VPN tunnel (may fail without extra rights) |
-| Future helper | Minimal extra rights via polkit | Only operations that need them |
+| GUI | Unprivileged user | Display UI, collect intent, open the system browser |
+| VpnBackend | Same unprivileged user | Structured helper requests, SAML URL handling, redacted logs |
+| Privileged helper | Root via polkit | Start/stop openfortivpn only |
+| openfortivpn | Helper-owned | SSL VPN tunnel and SAML callback listener |
+| System browser | Unprivileged user | Microsoft Entra ID / FortiGate SAML pages |
 
 The GUI must never run as root. It refuses to start as UID 0. Extra rights for
-PPP, routes, and DNS belong in a future helper, not in the Qt process. Running
-the whole desktop app as root would enlarge the attack surface (UI, clipboard,
+PPP, routes, and DNS belong in the helper, not in the Qt process. Running the
+whole desktop app as root would enlarge the attack surface (UI, clipboard,
 file dialogs, plugins).
+
+polkit action: `com.fortigate-vpn-linux-gui.manage-vpn`. The desktop user sees
+the normal Linux authentication dialog. The GUI is not launched with pkexec.
+There are no sudoers rules and openfortivpn is not setuid.
 
 ## Command construction
 
-`openfortivpn` is started with an argument **list** and `shell=False`:
+Non-SSO:
 
 ```text
 openfortivpn <gateway>:<port>
 ```
 
-No password, cookie, token, or certificate-bypass flag is passed on the
-command line.
+SSO:
+
+```text
+openfortivpn <gateway>:<port> --saml-login
+```
+
+Pinned certificate:
+
+```text
+openfortivpn <gateway>:<port> [--saml-login] --trusted-cert <sha256>
+```
+
+Arguments are a **list** with `shell=False`. No password, cookie, or token is
+passed on the command line. `--trusted-cert` is added only with a helper-
+validated SHA-256 digest as a separate argv item. The helper never accepts a
+raw command string or an arbitrary executable path.
+
+Gateway, port, fingerprint, and operation are validated in the GUI **and**
+again inside the helper.
+
+## Browser and URLs
+
+Subprocess output is untrusted. Before opening a URL the backend:
+
+- parses it with `urllib.parse`
+- requires `http` or `https`
+- rejects `javascript:`, `file:`, `data:`, loopback callback URLs, and
+  whitespace/shell fragments
+- never passes the URL through a shell
+
+The helper emits a validated SAML URL event. The unprivileged GUI opens the
+browser. The helper/openfortivpn keep the localhost callback.
+
+The GUI does not display the full sign-in URL. Copy uses origin+path only
+because query strings can carry session identifiers.
 
 ## Secrets
 
-- VPN passwords must never be stored in plaintext. v0.3.x does not store them
-  at all.
-- SAML tokens and cookies must never be written to logs or profile files.
-- Diagnostics must redact credentials and authentication material.
-- Connection profile files contain **no secrets**: no passwords, SAML tokens,
-  cookies, client secrets, or MFA data. They may contain a gateway hostname,
-  port, display name, description, and an optional username hint.
+- VPN passwords are not stored.
+- SAML tokens, SVPNCOOKIE, and session ids must never be written to logs,
+  profile files, diagnostics, or exceptions.
 - Every backend log line passes through `redact_log_line` (case-insensitive)
-  before it is shown. Examples: `password=***`, `SVPNCOOKIE=***`,
-  `Authorization: Bearer ***`.
-
-Profiles are stored per-user at
-`${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json`.
-That path is shown in Settings and Diagnostics as read-only.
+  before it is shown.
+- Connection profile files contain **no authentication secrets**.
+  `trusted_cert_sha256` is a public certificate pin, not a password.
 
 ## Trust
 
-Certificate verification must not be silently disabled. Insecure TLS settings
-must be explicit, rare, and clearly warned. The default path must verify the
-gateway certificate. v0.3.x never adds `--trusted-cert`.
+Certificate verification is never silently disabled. An unknown FortiGate
+certificate requires an explicit **Trust this certificate for this VPN
+profile** action (pinning). Cancel does not save a pin and does not retry.
 
-## What v0.3.x does not do
+If a pin exists and openfortivpn presents a **different** fingerprint, the UI
+warns that the gateway certificate has changed. The previous pin is never
+replaced automatically.
 
-- No SAML/SSO, browser, or Microsoft Entra ID authentication.
-- No sudo, pkexec, or polkit helper.
+## What v0.5.x does not do
+
+- No sudo or sudoers integration.
+- No arbitrary root command execution through the helper.
 - No automatic package installation.
 - No direct firewall, route, or DNS changes by the GUI.
 - No password, token, or VPN cookie storage.
 - Logs are in memory only; they are not persisted to disk.
+- No custom username/password login and no embedded webview.
+- No auto-trust and no TLS validation disable.

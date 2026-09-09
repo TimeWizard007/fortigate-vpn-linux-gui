@@ -1,60 +1,45 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build the openfortivpn argument vector.
+"""Profile-aware openfortivpn argv wrapper.
 
-Arguments are always a list. This module never uses a shell and never adds
-passwords, cookies, tokens, or certificate-bypass flags.
+Command construction primitives live in ``fortigate_vpn_gui.command`` so the
+privileged helper can import them without loading VpnBackend or Qt.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
+from fortigate_vpn_gui.command import (
+    OPENFORTIVPN_NAME,
+    CommandConstructionError,
+    assert_argv_is_controlled,
+    build_openfortivpn_argv,
+    is_openfortivpn_executable,
+)
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 
-OPENFORTIVPN_NAME = "openfortivpn"
+_assert_argv_is_controlled = assert_argv_is_controlled
 
-_FORBIDDEN_FRAGMENTS = (
-    "password",
-    "passwd",
-    "cookie",
-    "token",
-    "secret",
-    "trusted-cert",
-)
-
-
-class CommandConstructionError(ValueError):
-    """The connect argv would be unsafe or invalid."""
+__all__ = [
+    "OPENFORTIVPN_NAME",
+    "CommandConstructionError",
+    "assert_argv_is_controlled",
+    "build_connect_argv",
+    "build_openfortivpn_argv",
+    "is_openfortivpn_executable",
+]
 
 
-def is_openfortivpn_executable(path: str) -> bool:
-    """Return True if *path* refers to the openfortivpn binary by name."""
-    if not path or path.strip() != path:
-        return False
-    return Path(path).name == OPENFORTIVPN_NAME
-
-
-def build_connect_argv(profile: ConnectionProfile, executable: str) -> list[str]:
-    """Return ``[openfortivpn, gateway:port]`` for the selected profile."""
-    if not is_openfortivpn_executable(executable):
-        raise CommandConstructionError("refusing to execute a binary that is not openfortivpn")
-    if not profile.gateway or not profile.gateway.strip():
-        raise CommandConstructionError("profile gateway is empty")
-    if not 1 <= profile.port <= 65535:
-        raise CommandConstructionError("profile port is out of range")
-    if any(ch.isspace() for ch in profile.gateway):
-        raise CommandConstructionError("profile gateway must not contain whitespace")
-    target = f"{profile.gateway}:{profile.port}"
-    argv = [executable, target]
-    _assert_argv_has_no_secrets(argv)
-    return argv
-
-
-def _assert_argv_has_no_secrets(argv: list[str]) -> None:
-    for index, argument in enumerate(argv):
-        if index == 0:
-            continue
-        lowered = argument.lower()
-        for fragment in _FORBIDDEN_FRAGMENTS:
-            if fragment in lowered:
-                raise CommandConstructionError("refusing to pass credential-like arguments")
+def build_connect_argv(
+    profile: ConnectionProfile,
+    executable: str,
+    *,
+    saml: bool = False,
+    trusted_cert_sha256: str | None = None,
+) -> list[str]:
+    """Return a list argv for *profile*. Never a shell command string."""
+    return build_openfortivpn_argv(
+        executable=executable,
+        gateway=profile.gateway,
+        port=profile.port,
+        saml=saml,
+        trusted_cert_sha256=trusted_cert_sha256,
+    )

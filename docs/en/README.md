@@ -7,13 +7,13 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v0.3.x adds an unprivileged openfortivpn process backend. SAML/SSO and a
-privileged helper are planned and are not implemented.
+v0.5.x adds a polkit privileged helper and explicit FortiGate certificate
+pinning on top of SAML/SSO.
 
 | Topic | Document |
 | ----- | -------- |
 | Project purpose | [purpose.md](purpose.md) |
-| Planned architecture | [architecture.md](architecture.md) |
+| Architecture | [architecture.md](architecture.md) |
 | Development setup | [development.md](development.md) |
 | Roadmap | [roadmap.md](roadmap.md) |
 | Security model | [security.md](security.md) |

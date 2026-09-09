@@ -71,6 +71,7 @@ def test_failed_process_startup() -> None:
         log_buffer=harness.log,
         process_factory=factory,
         locator=lambda: "/usr/bin/openfortivpn",
+        selector=harness.selector,
     )
     errors: list[VpnErrorCode] = []
     harness.backend.subscribe(
@@ -86,7 +87,7 @@ def test_non_zero_exit() -> None:
     harness.backend.connect(_profile())
     harness.process.finish(1)
     assert harness.backend.current_state() is ConnectionState.FAILED
-    assert harness.backend.snapshot().error_code is VpnErrorCode.UNEXPECTED_EXIT
+    assert harness.backend.snapshot().error_code is VpnErrorCode.VPN_PROCESS_FAILED
 
 
 def test_permission_denied_message() -> None:
@@ -121,8 +122,8 @@ def test_forced_kill_fallback() -> None:
     assert harness.backend.current_state() is ConnectionState.DISCONNECTED
 
 
-def test_sso_profile_refused() -> None:
-    harness = VpnHarness()
+def test_sso_profile_refused_without_saml_binary() -> None:
+    harness = VpnHarness(executable="/usr/bin/openfortivpn", version="1.21.0", supports_saml=False)
     codes: list[VpnErrorCode] = []
     harness.backend.subscribe(
         lambda event: codes.append(event.error_code) if event.error_code else None
@@ -137,6 +138,7 @@ def test_missing_openfortivpn_does_not_start_process() -> None:
     backend = VpnBackend(
         process_factory=lambda *args: (_ for _ in ()).throw(AssertionError("factory")),
         locator=lambda: None,
+        selector=lambda _require_saml: None,
     )
     codes: list[VpnErrorCode] = []
     backend.subscribe(lambda event: codes.append(event.error_code) if event.error_code else None)

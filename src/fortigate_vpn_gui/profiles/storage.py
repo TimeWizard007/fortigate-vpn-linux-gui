@@ -131,6 +131,7 @@ def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None
     profile_id = cleaned.get("id")
     if not isinstance(profile_id, str) or not profile_id.strip():
         return None
+    pin = cleaned.get("trusted_cert_sha256")
     try:
         return build_profile(
             profile_id=profile_id,
@@ -140,9 +141,22 @@ def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None
             description=cleaned.get("description", ""),
             username_hint=cleaned.get("username_hint", ""),
             use_sso=cleaned.get("use_sso", True),
+            trusted_cert_sha256=pin,
         )
     except ProfileValidationError:
-        return None
+        try:
+            return build_profile(
+                profile_id=profile_id,
+                name=cleaned.get("name"),
+                gateway=cleaned.get("gateway"),
+                port=cleaned.get("port", 443),
+                description=cleaned.get("description", ""),
+                username_hint=cleaned.get("username_hint", ""),
+                use_sso=cleaned.get("use_sso", True),
+                trusted_cert_sha256=None,
+            )
+        except ProfileValidationError:
+            return None
 
 
 def atomic_write_text(path: Path, text: str) -> None:

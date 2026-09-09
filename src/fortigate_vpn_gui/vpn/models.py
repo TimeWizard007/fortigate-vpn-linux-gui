@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from fortigate_vpn_gui.helper.protocol import CertificateInfo, HelperProbe
+
 
 class ConnectionState(Enum):
     """Deterministic VPN process states."""
@@ -49,6 +51,18 @@ class VpnErrorCode(Enum):
     INVALID_PROFILE = "invalid_profile"
     ALREADY_BUSY = "already_busy"
     NOT_CONNECTED = "not_connected"
+    BROWSER_FAILED = "browser_failed"
+    SAML_TIMEOUT = "saml_timeout"
+    INVALID_AUTH_URL = "invalid_auth_url"
+    PRIVILEGE_DENIED = "privilege_denied"
+    HELPER_NOT_AVAILABLE = "helper_not_available"
+    HELPER_VERSION_MISMATCH = "helper_version_mismatch"
+    POLKIT_UNAVAILABLE = "polkit_unavailable"
+    HELPER_STARTUP_FAILED = "helper_startup_failed"
+    CERTIFICATE_UNTRUSTED = "certificate_untrusted"
+    CERTIFICATE_CHANGED = "certificate_changed"
+    SAML_FAILED = "saml_failed"
+    VPN_PROCESS_FAILED = "vpn_process_failed"
 
 
 @dataclass(frozen=True)
@@ -70,6 +84,26 @@ class VpnSnapshot:
     error_code: VpnErrorCode | None
     error_message: str | None
     process: ProcessInfo | None
+    auth_mode: str | None = None
+    browser_status: str | None = None
+    safe_auth_url: str | None = None
+    selected_executable: str | None = None
+    openfortivpn_version: str | None = None
+    supports_saml: bool | None = None
+    supports_cookie_stdin: bool | None = None
+    use_sso: bool | None = None
+    failure_reason: str | None = None
+    helper_installed: bool | None = None
+    helper_version: str | None = None
+    helper_status: str | None = None
+    authorization_mechanism: str | None = None
+    privileged_pid: int | None = None
+    certificate_pinned: bool | None = None
+    certificate_fingerprint: str | None = None
+    certificate_subject: str | None = None
+    certificate_issuer: str | None = None
+    presented_certificate: CertificateInfo | None = None
+    helper_probe: HelperProbe | None = None
 
 
 def state_label(state: ConnectionState) -> str:
@@ -81,14 +115,19 @@ def state_label(state: ConnectionState) -> str:
         ConnectionState.CONNECTED: "Connected",
         ConnectionState.DISCONNECTING: "Disconnecting",
         ConnectionState.FAILED: "Failed",
-        ConnectionState.WAITING_FOR_AUTH: "Waiting for authentication",
+        ConnectionState.WAITING_FOR_AUTH: "Waiting for SSO",
     }[state]
 
 
 ALLOWED_TRANSITIONS: dict[ConnectionState, frozenset[ConnectionState]] = {
     ConnectionState.DISCONNECTED: frozenset({ConnectionState.STARTING, ConnectionState.FAILED}),
     ConnectionState.STARTING: frozenset(
-        {ConnectionState.CONNECTING, ConnectionState.FAILED, ConnectionState.DISCONNECTING}
+        {
+            ConnectionState.CONNECTING,
+            ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.FAILED,
+            ConnectionState.DISCONNECTING,
+        }
     ),
     ConnectionState.CONNECTING: frozenset(
         {

@@ -175,3 +175,71 @@ def test_no_secret_fields_stored(tmp_path: Path) -> None:
     assert "password" not in payload
     assert "token" not in payload
     assert "cookie" not in payload
+
+
+def test_old_schema_loads_without_trusted_cert(tmp_path: Path) -> None:
+    path = tmp_path / "profiles.json"
+    document = {
+        "version": 1,
+        "profiles": [
+            {
+                "id": "legacy",
+                "name": "Office",
+                "gateway": "vpn.example.com",
+                "port": 443,
+                "use_sso": True,
+            }
+        ],
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    profiles = ProfileStore(path).load()
+    assert len(profiles) == 1
+    assert profiles[0].trusted_cert_sha256 is None
+
+
+def test_trusted_cert_round_trip(tmp_path: Path) -> None:
+    digest = "ab" * 32
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    profile = manager.add(
+        name="Office",
+        gateway="vpn.example.com",
+        trusted_cert_sha256="AB:" * 31 + "AB",
+    )
+    assert profile.trusted_cert_sha256 == digest
+    reloaded = ProfileManager(config_dir=tmp_path / "cfg").get(profile.id)
+    assert reloaded is not None
+    assert reloaded.trusted_cert_sha256 == digest
+    manager.clear_trusted_certificate(profile.id)
+    cleared = manager.get(profile.id)
+    assert cleared is not None
+    assert cleared.trusted_cert_sha256 is None
+
+
+def test_malformed_fingerprint_rejected_on_build() -> None:
+    with pytest.raises(ProfileValidationError, match="SHA-256"):
+        build_profile(
+            name="Office",
+            gateway="vpn.example.com",
+            trusted_cert_sha256="not-valid",
+        )
+
+
+def test_malformed_fingerprint_on_load_is_dropped(tmp_path: Path) -> None:
+    path = tmp_path / "profiles.json"
+    document = {
+        "version": 1,
+        "profiles": [
+            {
+                "id": "badpin",
+                "name": "Office",
+                "gateway": "vpn.example.com",
+                "port": 443,
+                "use_sso": True,
+                "trusted_cert_sha256": "nope",
+            }
+        ],
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    profiles = ProfileStore(path).load()
+    assert len(profiles) == 1
+    assert profiles[0].trusted_cert_sha256 is None

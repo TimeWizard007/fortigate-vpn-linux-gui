@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Connection page: profile selector and Connect/Disconnect controls."""
+"""Connection page: profile selector and Connect/Disconnect/SSO controls."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
+    QDialog,
     QFormLayout,
     QFrame,
     QLabel,
@@ -15,6 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fortigate_vpn_gui.gui.certificate_dialog import CertificateTrustDialog
+from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
+from fortigate_vpn_gui.gui.windowing import dialog_parent_for
+from fortigate_vpn_gui.helper.protocol import CertificateInfo
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
@@ -24,8 +32,11 @@ from fortigate_vpn_gui.vpn.models import (
     BUSY_STATES,
     ConnectionState,
     VpnErrorCode,
+    VpnSnapshot,
     state_label,
 )
+
+TrustPrompt = Callable[..., bool]
 
 
 class ConnectionPage(QWidget):
@@ -38,12 +49,16 @@ class ConnectionPage(QWidget):
         parent: QWidget | None = None,
         *,
         locator=locate_openfortivpn,
+        trust_prompt: TrustPrompt | None = None,
     ) -> None:
         super().__init__(parent)
         self._manager = manager
         self._vpn = vpn
+        self._trust_prompt = trust_prompt
         self._manager.add_change_listener(self.refresh_profiles)
         self._openfortivpn_path = locator()
+        self._safe_auth_url: str | None = None
+        self._last_trust_decision: bool | None = None
 
         title = QLabel("Connection")
         title.setObjectName("pageTitle")
@@ -84,6 +99,11 @@ class ConnectionPage(QWidget):
         self._action_button.setDefault(True)
         self._action_button.clicked.connect(self._on_action_clicked)
 
+        self._copy_url_button = QPushButton("Copy sign-in address")
+        self._copy_url_button.setObjectName("copySignInUrlButton")
+        self._copy_url_button.setVisible(False)
+        self._copy_url_button.clicked.connect(self._copy_safe_auth_url)
+
         self._empty_hint = QLabel(
             "No profiles configured. Open the Profiles page and add a "
             "connection profile to enable Connect."
@@ -102,25 +122,49 @@ class ConnectionPage(QWidget):
         self._missing_hint.setWordWrap(True)
         self._missing_hint.setObjectName("missingOpenfortivpnHint")
 
+        self._sso_hint = QLabel("Complete sign-in in your web browser.")
+        self._sso_hint.setWordWrap(True)
+        self._sso_hint.setObjectName("ssoBrowserHint")
+        self._sso_hint.setVisible(False)
+
+        self._helper_hint = QLabel(
+            "The privileged VPN helper is not installed. Install the helper "
+            "and polkit policy documented in packaging/README.md. The GUI will "
+            "not run as root, will not call sudo, and will not start "
+            "openfortivpn without the helper."
+        )
+        self._helper_hint.setWordWrap(True)
+        self._helper_hint.setObjectName("missingHelperHint")
+        self._helper_hint.setVisible(False)
+
         self._notice = QLabel(
-            "SAML/SSO profiles do not start a VPN in v0.3.0. Use a profile with "
-            "Use SSO disabled to exercise the openfortivpn process lifecycle. "
-            "Passwords are not stored; authentication may fail, which is expected. "
-            "A privileged helper is not implemented yet."
+            "SSO profiles use openfortivpn --saml-login and the system browser "
+            "(Microsoft Entra ID via FortiGate SAML). Connect with SSO asks "
+            "polkit to authorize the privileged helper. The helper starts "
+            "openfortivpn; this GUI stays unprivileged and opens the browser "
+            "in your desktop session. Query parameters are never shown."
         )
         self._notice.setWordWrap(True)
         self._notice.setObjectName("placeholderNotice")
 
-        layout = QVBoxLayout(self)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(16, 12, 24, 16)
         layout.setSpacing(16)
         layout.addWidget(title)
         layout.addWidget(form_frame)
         layout.addWidget(self._action_button)
+        layout.addWidget(self._copy_url_button)
         layout.addWidget(self._empty_hint)
         layout.addWidget(self._missing_hint)
+        layout.addWidget(self._helper_hint)
+        layout.addWidget(self._sso_hint)
         layout.addWidget(self._notice)
         layout.addStretch(1)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(create_page_scroll_area(inner))
         self.refresh_profiles()
         self.apply_snapshot(self._vpn.snapshot())
 
@@ -147,6 +191,18 @@ class ConnectionPage(QWidget):
 
     def missing_openfortivpn_visible(self) -> bool:
         return not self._missing_hint.isHidden()
+
+    def sso_hint_visible(self) -> bool:
+        return not self._sso_hint.isHidden()
+
+    def copy_url_visible(self) -> bool:
+        return not self._copy_url_button.isHidden()
+
+    def missing_helper_visible(self) -> bool:
+        return not self._helper_hint.isHidden()
+
+    def last_trust_decision(self) -> bool | None:
+        return self._last_trust_decision
 
     def selected_profile(self) -> ConnectionProfile | None:
         profile_id = self._profile_combo.currentData()
@@ -176,28 +232,68 @@ class ConnectionPage(QWidget):
         self._show_profile(profiles[selected_index])
         self.apply_snapshot(self._vpn.snapshot())
 
-    def apply_snapshot(self, snapshot) -> None:
+    def apply_snapshot(self, snapshot: VpnSnapshot) -> None:
         """Update status and buttons from a backend snapshot."""
         self._status_label.setText(state_label(snapshot.state))
+        self._safe_auth_url = snapshot.safe_auth_url
         busy = snapshot.state in BUSY_STATES
         has_profile = self.selected_profile() is not None
         missing = self._openfortivpn_path is None
+        waiting = snapshot.state is ConnectionState.WAITING_FOR_AUTH
+        helper_missing = snapshot.helper_installed is False or snapshot.helper_status == "missing"
         self._missing_hint.setVisible(missing)
+        self._helper_hint.setVisible(helper_missing)
         self._empty_hint.setVisible(not has_profile)
+        self._sso_hint.setVisible(waiting)
+        self._copy_url_button.setVisible(waiting and bool(snapshot.safe_auth_url))
         self._profile_combo.setEnabled(has_profile and not busy)
         self._sync_button(snapshot.state, has_profile)
 
     def show_user_error(self, event: VpnEvent) -> None:
+        if event.error_code in {
+            VpnErrorCode.CERTIFICATE_UNTRUSTED,
+            VpnErrorCode.CERTIFICATE_CHANGED,
+        }:
+            self._handle_certificate_error(event)
+            return
         message = event.error_message or "The VPN operation could not continue."
-        QMessageBox.warning(self, _error_title(event.error_code), message)
+        QMessageBox.warning(dialog_parent_for(self), _error_title(event.error_code), message)
+
+    def _handle_certificate_error(self, event: VpnEvent) -> None:
+        profile = self.selected_profile()
+        info = event.certificate or event.snapshot.presented_certificate
+        if profile is None or info is None:
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                _error_title(event.error_code),
+                event.error_message or "",
+            )
+            return
+        changed = event.error_code is VpnErrorCode.CERTIFICATE_CHANGED
+        accepted = self._ask_certificate_trust(
+            gateway=profile.gateway,
+            certificate=info,
+            previous_fingerprint=profile.trusted_cert_sha256,
+            changed=changed,
+        )
+        self._last_trust_decision = accepted
+        if not accepted:
+            return
+        self._manager.set_trusted_certificate(profile.id, info.sha256)
+        updated = self._manager.get(profile.id)
+        self._vpn.connect(updated)
 
     def _sync_button(self, state: ConnectionState, has_profile: bool) -> None:
         profile = self.selected_profile()
-        if state in {
-            ConnectionState.STARTING,
-            ConnectionState.CONNECTING,
-            ConnectionState.WAITING_FOR_AUTH,
-        }:
+        if state is ConnectionState.STARTING:
+            self._action_button.setText("Starting...")
+            self._action_button.setEnabled(False)
+            return
+        if state is ConnectionState.WAITING_FOR_AUTH:
+            self._action_button.setText("Cancel")
+            self._action_button.setEnabled(True)
+            return
+        if state is ConnectionState.CONNECTING:
             self._action_button.setText("Connecting...")
             self._action_button.setEnabled(False)
             return
@@ -231,10 +327,43 @@ class ConnectionPage(QWidget):
 
     def _on_action_clicked(self) -> None:
         state = self._vpn.current_state()
-        if state is ConnectionState.CONNECTED:
+        if state in {ConnectionState.CONNECTED, ConnectionState.WAITING_FOR_AUTH}:
             self._vpn.disconnect()
             return
         self._vpn.connect(self.selected_profile())
+
+    def _copy_safe_auth_url(self) -> None:
+        """Copy origin+path only. Query values are never placed on the clipboard."""
+        if not self._safe_auth_url:
+            return
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self._safe_auth_url)
+
+    def _ask_certificate_trust(
+        self,
+        *,
+        gateway: str,
+        certificate: CertificateInfo,
+        previous_fingerprint: str | None,
+        changed: bool,
+    ) -> bool:
+        if self._trust_prompt is not None:
+            return bool(
+                self._trust_prompt(
+                    gateway=gateway,
+                    certificate=certificate,
+                    previous_fingerprint=previous_fingerprint,
+                    changed=changed,
+                )
+            )
+        dialog = CertificateTrustDialog(
+            gateway=gateway,
+            certificate=certificate,
+            previous_fingerprint=previous_fingerprint,
+            changed=changed,
+            parent=dialog_parent_for(self),
+        )
+        return dialog.exec() == QDialog.DialogCode.Accepted
 
 
 def _error_title(code: VpnErrorCode | None) -> str:
@@ -247,6 +376,18 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.UNEXPECTED_EXIT: "VPN process ended",
         VpnErrorCode.INVALID_PROFILE: "Invalid profile",
         VpnErrorCode.ALREADY_BUSY: "VPN busy",
+        VpnErrorCode.BROWSER_FAILED: "Browser launch failed",
+        VpnErrorCode.SAML_TIMEOUT: "SAML sign-in timed out",
+        VpnErrorCode.INVALID_AUTH_URL: "Unsafe sign-in URL",
+        VpnErrorCode.PRIVILEGE_DENIED: "Authorization denied",
+        VpnErrorCode.HELPER_NOT_AVAILABLE: "Privileged helper missing",
+        VpnErrorCode.HELPER_VERSION_MISMATCH: "Helper version mismatch",
+        VpnErrorCode.HELPER_STARTUP_FAILED: "Privileged helper failed to start",
+        VpnErrorCode.POLKIT_UNAVAILABLE: "polkit unavailable",
+        VpnErrorCode.CERTIFICATE_UNTRUSTED: "Gateway certificate",
+        VpnErrorCode.CERTIFICATE_CHANGED: "Gateway certificate changed",
+        VpnErrorCode.SAML_FAILED: "SAML sign-in failed",
+        VpnErrorCode.VPN_PROCESS_FAILED: "VPN process ended",
     }
     if code is None:
         return "VPN"

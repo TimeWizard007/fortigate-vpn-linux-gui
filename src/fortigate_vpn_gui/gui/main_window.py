@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QCloseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -23,6 +23,11 @@ from fortigate_vpn_gui.gui.event_pump import BackendEventPump
 from fortigate_vpn_gui.gui.logs_page import LogsPage
 from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
 from fortigate_vpn_gui.gui.settings_page import SettingsPage
+from fortigate_vpn_gui.gui.windowing import (
+    apply_always_on_top,
+    clear_transient_parent,
+    configure_independent_main_window,
+)
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
@@ -36,6 +41,7 @@ _NAV_ITEMS: tuple[str, ...] = (
     "Logs",
     "Settings",
 )
+_ALWAYS_ON_TOP_KEY = "ui/always_on_top"
 
 
 class MainWindow(QMainWindow):
@@ -49,11 +55,19 @@ class MainWindow(QMainWindow):
         vpn_backend: VpnBackend | None = None,
         log_buffer: LogBuffer | None = None,
         detect=detect_openfortivpn,
+        settings: QSettings | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(None)
+        _ = parent
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(840, 560)
+        self.setMinimumSize(640, 420)
         self.resize(960, 640)
+        self._settings = settings or QSettings(
+            "fortigate-vpn-linux-gui",
+            "fortigate-vpn-linux-gui",
+        )
+        self._always_on_top = self._read_always_on_top()
+        configure_independent_main_window(self, always_on_top=self._always_on_top)
 
         self._profile_manager = profile_manager or ProfileManager()
         self._log_buffer = log_buffer if log_buffer is not None else LogBuffer()
@@ -70,17 +84,22 @@ class MainWindow(QMainWindow):
             detect=detect,
         )
         self._logs_page = LogsPage(self._log_buffer)
+        self._settings_page = SettingsPage(
+            self._profile_manager,
+            always_on_top=self._always_on_top,
+            on_always_on_top=self.set_always_on_top,
+        )
 
         self._stack = QStackedWidget()
         self._stack.addWidget(self._connection_page)
         self._stack.addWidget(self._profiles_page)
         self._stack.addWidget(self._diagnostics_page)
         self._stack.addWidget(self._logs_page)
-        self._stack.addWidget(SettingsPage(self._profile_manager))
+        self._stack.addWidget(self._settings_page)
 
         self._nav = QListWidget()
         self._nav.setObjectName("navList")
-        self._nav.setFixedWidth(180)
+        self._nav.setFixedWidth(160)
         for label in _NAV_ITEMS:
             QListWidgetItem(label, self._nav)
         self._nav.setCurrentRow(0)
@@ -112,6 +131,14 @@ class MainWindow(QMainWindow):
         self._pump.log_record.connect(self._logs_page.append_record)
         self._apply_style()
 
+    def _read_always_on_top(self) -> bool:
+        value = self._settings.value(_ALWAYS_ON_TOP_KEY, False)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in {"1", "true", "yes"}
+        return bool(value)
+
     @property
     def profile_manager(self) -> ProfileManager:
         return self._profile_manager
@@ -135,6 +162,22 @@ class MainWindow(QMainWindow):
     @property
     def diagnostics_page(self) -> DiagnosticsPage:
         return self._diagnostics_page
+
+    @property
+    def settings_page(self) -> SettingsPage:
+        return self._settings_page
+
+    def always_on_top(self) -> bool:
+        return self._always_on_top
+
+    def set_always_on_top(self, enabled: bool) -> None:
+        self._always_on_top = bool(enabled)
+        self._settings.setValue(_ALWAYS_ON_TOP_KEY, self._always_on_top)
+        apply_always_on_top(self, self._always_on_top)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 — Qt API
+        super().showEvent(event)
+        clear_transient_parent(self)
 
     def connection_status(self) -> str:
         return self._connection_page.status_text()

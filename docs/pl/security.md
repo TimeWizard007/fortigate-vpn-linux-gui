@@ -1,8 +1,7 @@
 # Model bezpieczeństwa
 
-Ten dokument podsumowuje model bezpieczeństwa. Instrukcje zgłaszania problemów
-znajdują się w [`SECURITY.md`](../../SECURITY.md) w katalogu głównym
-repozytorium.
+Ten dokument podsumowuje model bezpieczeństwa. Instrukcje zgłaszania są w
+[`SECURITY.md`](../../SECURITY.md) w katalogu głównym.
 
 **Ten projekt nie jest powiązany, wspierany ani sponsorowany przez Fortinet.**
 
@@ -10,55 +9,51 @@ repozytorium.
 
 | Proces | Uprawnienia | Rola |
 | ------ | ----------- | ---- |
-| GUI | Nieuprzywilejowany użytkownik | Interfejs, zbieranie intencji |
-| VpnBackend | Ten sam nieuprzywilejowany użytkownik | Start/stop `openfortivpn`, cenzura logów |
-| openfortivpn | Bieżący użytkownik w v0.3.x | Tunel SSL VPN (może paść bez dodatkowych praw) |
-| Przyszły pomocnik | Minimalne dodatkowe prawa przez polkit | Tylko operacje, które ich wymagają |
+| GUI | Nieuprzywilejowany użytkownik | UI, intencje, przeglądarka systemowa |
+| VpnBackend | Ten sam użytkownik | Żądania do pomocnika, SAML, ocenzurowane logi |
+| Pomocnik | Root przez polkit | Start/stop openfortivpn |
+| openfortivpn | Własność pomocnika | Tunel SSL VPN i listener SAML |
+| Przeglądarka | Nieuprzywilejowany użytkownik | Strony Entra ID / FortiGate SAML |
 
-GUI nigdy nie może działać jako root. Odmawia startu przy UID 0. Dodatkowe
-uprawnienia do PPP, tras i DNS należą do przyszłego pomocnika, nie do procesu
-Qt. Uruchomienie całego programu pulpitu jako root powiększałoby powierzchnię
-ataku (interfejs, schowek, okna plików, wtyczki).
+GUI nigdy nie działa jako root. Odmawia startu przy UID 0. Dodatkowe prawa do
+PPP, tras i DNS należą do pomocnika, nie do procesu Qt.
+
+Akcja polkit: `com.fortigate-vpn-linux-gui.manage-vpn`. Użytkownik pulpitu
+widzi zwykłe okno uwierzytelniania Linux. GUI nie jest uruchamiane przez
+pkexec. Brak reguł sudoers; openfortivpn nie jest setuid.
 
 ## Budowa polecenia
 
-`openfortivpn` jest uruchamiany z **listą** argumentów i `shell=False`:
+Argumenty to **lista** z `shell=False`. Brak hasła, ciasteczka i tokenu.
+`--trusted-cert` dodawane jest tylko z zwalidowanym SHA-256 jako osobny
+element argv. Pomocnik nie przyjmuje surowego polecenia ani dowolnej ścieżki
+wykonywalnej.
 
-```text
-openfortivpn <brama>:<port>
-```
+Walidacja bramy, portu, odcisku i operacji jest po stronie GUI **oraz** w
+pomocniku.
 
-Na linii poleceń nie ma hasła, ciasteczka, tokenu ani flagi omijającej
-weryfikację certyfikatu.
+## Przeglądarka i URL
+
+Wyjście procesu jest niewiarygodne. Przed otwarciem URL backend wymaga
+http/https i odrzuca javascript/file/data/loopback. Pomocnik emituje
+zweryfikowane zdarzenie URL SAML. Nieuprzywilejowane GUI otwiera przeglądarkę.
 
 ## Sekrety
 
-- Hasła VPN nigdy nie mogą być przechowywane jawnym tekstem. v0.3.x w ogóle
-  ich nie zapisuje.
-- Tokeny SAML i ciasteczka nigdy nie mogą trafiać do logów ani plików profili.
-- Diagnostyka musi cenzurować poświadczenia i materiał uwierzytelniający.
-- Pliki profili połączeń **nie zawierają sekretów**: bez haseł, tokenów SAML,
-  ciasteczek, sekretów klienta i danych MFA. Mogą zawierać nazwę bramy, port,
-  nazwę wyświetlaną, opis i opcjonalną podpowiedź nazwy użytkownika.
-- Każda linia logu zaplecza przechodzi przez `redact_log_line` (bez względu
-  na wielkość liter) zanim zostanie pokazana. Przykłady: `password=***`,
-  `SVPNCOOKIE=***`, `Authorization: Bearer ***`.
-
-Profile są zapisywane per-użytkownik w
-`${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json`.
-Ta ścieżka jest pokazana w Settings i Diagnostics tylko do odczytu.
+Hasła VPN, tokeny SAML i SVPNCOOKIE nie są przechowywane. `trusted_cert_sha256`
+to publiczny pin certyfikatu, nie hasło.
 
 ## Zaufanie
 
-Weryfikacja certyfikatów nie może być po cichu wyłączana. Niebezpieczne
-ustawienia TLS muszą być jawne, rzadkie i wyraźnie ostrzeżone. Domyślna ścieżka
-musi weryfikować certyfikat bramy. v0.3.x nigdy nie dodaje `--trusted-cert`.
+Walidacja certyfikatu nigdy nie jest po cichu wyłączana. Nieznany certyfikat
+FortiGate wymaga jawnego **Zaufaj temu certyfikatowi dla tego profilu VPN**.
+Anuluj nie zapisuje pinu. Zmiana odcisku nigdy nie jest przyjmowana
+automatycznie.
 
-## Czego v0.3.x nie robi
+## Czego v0.5.x nie robi
 
-- Brak SAML/SSO, przeglądarki i uwierzytelniania Microsoft Entra ID.
-- Brak sudo, pkexec i pomocnika polkit.
+- Brak sudo i sudoers.
+- Brak dowolnego wykonywania poleceń root przez pomocnika.
 - Brak automatycznej instalacji pakietów.
-- GUI nie zmienia bezpośrednio zapory, tras ani DNS.
-- Brak przechowywania haseł, tokenów i ciasteczek VPN.
-- Logi są tylko w pamięci; nie są zapisywane na dysk.
+- GUI samo nie zmienia zapory, tras ani DNS.
+- Brak automatycznego zaufania i wyłączania TLS.

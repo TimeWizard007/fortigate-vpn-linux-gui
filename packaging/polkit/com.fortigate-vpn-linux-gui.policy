@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig.dtd">
+<policyconfig>
+  <vendor>FortiGate VPN Linux GUI</vendor>
+  <vendor_url>https://github.com/TimeWizard007/fortigate-vpn-linux-gui</vendor_url>
+  <action id="com.fortigate-vpn-linux-gui.manage-vpn">
+    <description>Manage FortiGate SSL VPN tunnel</description>
+    <description xml:lang="pl">Zarządzaj tunelem SSL VPN FortiGate</description>
+    <message>Authentication is required to start or stop the FortiGate VPN tunnel</message>
+    <message xml:lang="pl">Wymagane jest uwierzytelnienie, aby uruchomić lub zatrzymać tunel VPN FortiGate</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/fortigate-vpn-linux-gui/vpn-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

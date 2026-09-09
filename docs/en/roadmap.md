@@ -16,20 +16,32 @@ Dates are not committed. Order may change as design work proceeds.
 - Profiles page Add / Edit / Delete
 - Connection page selector integration
 
-## v0.3.x — openfortivpn backend (current)
+## v0.3.x — openfortivpn backend
 
 - Unprivileged `openfortivpn` process lifecycle
 - Connection states and Connect / Disconnect wiring
-- Runtime detection of `openfortivpn` (GUI still starts without it)
+- Runtime detection of `openfortivpn`
 - In-memory Logs page with redaction
-- Diagnostics: path, version, VPN state, PID
-- Mocked process tests (no real VPN, sudo, or network)
+
+## v0.4.x — SAML/SSO
+
+- Native `openfortivpn --saml-login`
+- System-browser Microsoft Entra ID / FortiGate SAML
+- SAML-capable binary discovery (PATH, `/usr/local/bin`, `/usr/bin`)
+- `WAITING_FOR_AUTH`, Cancel, 120s timeout
+- Expanded redaction and SAML diagnostics
+
+## v0.5.x — privileged helper (current)
+
+- polkit helper for connect / disconnect / status
+- Controlled privileged openfortivpn execution
+- Explicit per-profile SHA-256 certificate pinning
+- Certificate-change warning
+- Helper diagnostics
 
 ## Later (planned, not implemented)
 
-- Privileged helper design and polkit policy
-- SAML/SSO through the system browser and Microsoft Entra ID (target v0.4.0)
 - Ubuntu packaging (`.deb` and a desktop entry)
+- Broader distribution packaging
 
-SAML authentication and privilege escalation are **planned**. They are not
-available in this version.
+The GUI must never run as root.
