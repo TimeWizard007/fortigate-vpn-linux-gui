@@ -109,7 +109,10 @@ The remote gateway. This project does not implement the VPN protocol itself.
 
 ## Connection states
 
-`ConnectionState` is an enum with deterministic transitions.
+`ConnectionState` is an enum with deterministic transitions. Only one
+connection attempt is active per GUI instance. A new Connect is ignored while
+the session is busy. Retry after certificate trust waits until the previous
+privileged process has exited.
 
 Non-SSO:
 
@@ -123,22 +126,48 @@ SSO:
 DISCONNECTED → STARTING → WAITING_FOR_AUTH → CONNECTING → CONNECTED
 ```
 
+Certificate trust:
+
+```text
+STARTING / WAITING_FOR_AUTH / CONNECTING
+  → WAITING_FOR_CERTIFICATE_TRUST
+  → cleanup → retry once → STARTING → …
+```
+
 Shared:
 
 ```text
 CONNECTED → DISCONNECTING → DISCONNECTED
 WAITING_FOR_AUTH → DISCONNECTING → DISCONNECTED   (Cancel)
+WAITING_FOR_CERTIFICATE_TRUST → FAILED            (Cancel; pin is not saved)
 WAITING_FOR_AUTH → FAILED                         (timeout / auth / browser)
+CONNECTED → FAILED                                (unexpected process exit)
 unrecoverable process error → FAILED
 FAILED → DISCONNECTED (after cleanup) or STARTING (retry)
 ```
 
+`WAITING_FOR_CERTIFICATE_TRUST` is not Connected. Duplicate certificate
+validation lines are one application-level event per fingerprint per attempt.
+Trust saves a normalized SHA-256 pin for that profile only, then retries once.
+Cancel does not store a pin and does not retry. A changed pin is never
+overwritten automatically.
+
+Unexpected tunnel loss leaves CONNECTED, shows `VPN connection was lost.`,
+cleans PID/state, and does **not** auto-reconnect (planned for v0.7.0).
+
+Disconnect/Cancel terminates the owned privileged process during STARTING,
+WAITING_FOR_AUTH, WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED.
+The SAML callback listener is removed by process shutdown; the browser is not
+force-closed.
+
 Structured failure reasons on FAILED include `PRIVILEGE_DENIED`,
 `HELPER_NOT_AVAILABLE`, `HELPER_STARTUP_FAILED`, `CERTIFICATE_UNTRUSTED`,
-`CERTIFICATE_CHANGED`, `SAML_FAILED`, and `VPN_PROCESS_FAILED`.
+`CERTIFICATE_CHANGED`, `SAML_FAILED`, `VPN_PROCESS_FAILED`, `CONNECTION_LOST`,
+`PPP_FAILED`, `ROUTE_FAILED`, and `DNS_FAILED`.
 
 The browser is opened only after a validated authentication URL is parsed,
-and only once, in the unprivileged GUI process.
+and only once, in the unprivileged GUI process. The SAML timeout is cancelled
+on successful authentication, Disconnect, and certificate-trust waiting.
 
 ## Connection profiles
 

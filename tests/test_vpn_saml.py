@@ -45,6 +45,8 @@ def test_sso_state_flow_to_connected() -> None:
     harness.process.emit("DEBUG:  Incoming HTTP connection")
     assert harness.backend.current_state() is ConnectionState.CONNECTING
     harness.process.emit("INFO:   Connected to gateway.")
+    assert harness.backend.current_state() is ConnectionState.CONNECTING
+    harness.process.emit("INFO:   Tunnel is up and running.")
     assert harness.backend.current_state() is ConnectionState.CONNECTED
 
 

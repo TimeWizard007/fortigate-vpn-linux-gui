@@ -79,15 +79,34 @@ przetestowane SAML to **1.24.1**.
 
 ## Stany połączenia
 
+Tylko jedna próba połączenia na instancję GUI. Ponowny Connect w trakcie
+zajętej sesji jest ignorowany. Ponowienie po zaufaniu certyfikatu czeka na
+zakończenie poprzedniego procesu.
+
 Bez SSO: `DISCONNECTED → STARTING → CONNECTING → CONNECTED`.
 
 SSO: `DISCONNECTED → STARTING → WAITING_FOR_AUTH → CONNECTING → CONNECTED`.
 
+Certyfikat: `STARTING` / `WAITING_FOR_AUTH` / `CONNECTING` →
+`WAITING_FOR_CERTIFICATE_TRUST` → sprzątanie → jedno ponowienie → `STARTING`.
+
+`WAITING_FOR_CERTIFICATE_TRUST` nie jest stanem Connected. Anulowanie nie
+zapisuje pinu. Zmiana odcisku nigdy nie nadpisuje pinu automatycznie.
+Nieoczekiwane wyjście procesu w `CONNECTED` przechodzi do `FAILED`
+(`VPN connection was lost.`) **bez** automatycznego ponowienia (v0.7.0).
+
+Disconnect/Cancel kończy własny proces uprzywilejowany w fazach STARTING,
+WAITING_FOR_AUTH, WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED.
+Listener SAML znika razem z procesem; przeglądarka nie jest zamykana na siłę.
+
 Powody błędu przy FAILED obejmują m.in. `PRIVILEGE_DENIED`,
 `HELPER_NOT_AVAILABLE`, `CERTIFICATE_UNTRUSTED`, `CERTIFICATE_CHANGED`,
-`SAML_FAILED`, `VPN_PROCESS_FAILED`.
+`SAML_FAILED`, `VPN_PROCESS_FAILED`, `CONNECTION_LOST`, `PPP_FAILED`,
+`ROUTE_FAILED` i `DNS_FAILED`.
 
 Przeglądarka otwierana jest tylko raz, w nieuprzywilejowanym procesie GUI.
+Timeout SAML jest anulowany po udanym logowaniu, Disconnect i oczekiwaniu na
+zaufanie certyfikatu.
 
 ## Profile połączeń
 

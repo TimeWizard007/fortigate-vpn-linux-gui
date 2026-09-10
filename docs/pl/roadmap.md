@@ -27,13 +27,28 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Przeglądarka systemowa / Microsoft Entra ID
 - `WAITING_FOR_AUTH`
 
-## v0.5.x — pomocnik uprzywilejowany (obecnie)
+## v0.5.x — pomocnik uprzywilejowany
 
 - Pomocnik polkit: connect / disconnect / status
 - Kontrolowane uprzywilejowane uruchamianie openfortivpn
 - Jawne pinowanie SHA-256 certyfikatu per profil
 - Ostrzeżenie o zmianie certyfikatu
 - Diagnostyka pomocnika
+
+## v0.6.x — niezawodność połączenia (obecnie)
+
+- Jawny stan `WAITING_FOR_CERTIFICATE_TRUST`
+- Jedna aktywna próba połączenia; ponowienie czeka na sprzątanie
+- Deduplikacja zdarzeń/okien certyfikatu
+- Wykrywanie nieoczekiwanej utraty tunelu (bez auto-reconnect)
+- Bezpieczniejszy Disconnect/Cancel we wszystkich fazach aktywnych
+- Jaśniejsza diagnostyka cyklu życia i logi dla użytkownika
+
+## v0.7.0 — UX pulpitu (planowane)
+
+- Ikona zasobnika
+- Automatyczne ponowienie po utracie tunelu
+- Autostart / odtworzenie sesji
 
 ## Później (planowane, niezrealizowane)
 

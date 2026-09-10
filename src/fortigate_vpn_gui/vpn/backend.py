@@ -18,7 +18,10 @@ from fortigate_vpn_gui.helper.protocol import (
     HelperEventKind,
     HelperProbe,
 )
-from fortigate_vpn_gui.helper.validation import connect_request_from_fields
+from fortigate_vpn_gui.helper.validation import (
+    connect_request_from_fields,
+    format_sha256_fingerprint,
+)
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
 from fortigate_vpn_gui.system.helper_client import (
@@ -39,6 +42,7 @@ from fortigate_vpn_gui.vpn.models import (
     ProcessInfo,
     VpnErrorCode,
     VpnSnapshot,
+    wait_reason_for,
 )
 from fortigate_vpn_gui.vpn.timeout import TimeoutScheduler, threaded_timeout_scheduler
 from fortigate_vpn_gui.vpn.url_safety import InvalidAuthUrl, safe_url_for_display, validate_auth_url
@@ -102,6 +106,10 @@ _CERT_CHANGED_MESSAGE = (
     "The gateway certificate has changed. The previously trusted fingerprint "
     "was not replaced automatically."
 )
+_CONNECTION_LOST_MESSAGE = "VPN connection was lost."
+_PPP_MESSAGE = "The VPN tunnel could not configure PPP. See Logs for details."
+_ROUTE_MESSAGE = "The VPN tunnel could not update routes. See Logs for details."
+_DNS_MESSAGE = "The VPN tunnel could not update DNS. See Logs for details."
 
 
 class VpnEvent:
@@ -176,6 +184,18 @@ class VpnBackend:
         self._presented_certificate: CertificateInfo | None = None
         self._certificate_subject: str | None = None
         self._certificate_issuer: str | None = None
+        self._attempt_id = 0
+        self._retry_count = 0
+        self._cert_logged_sha: str | None = None
+        self._cert_error_emitted = False
+        self._tunnel_established_logged = False
+        self._gateway_connected_logged = False
+        self._listener_logged = False
+        self._disconnect_logged = False
+        self._last_disconnect_reason: str | None = None
+        self._last_failure_reason: str | None = None
+        self._failing = False
+        self._saml_waiting_logged = False
 
     def subscribe(self, callback: VpnListener) -> None:
         self._listeners.append(callback)
@@ -203,20 +223,24 @@ class VpnBackend:
         with self._lock:
             return self._snapshot_locked()
 
-    def connect(self, profile: ConnectionProfile | None) -> None:
+    def connect(self, profile: ConnectionProfile | None, *, after_trust: bool = False) -> None:
         """Ask the privileged helper to start openfortivpn for *profile*."""
         if profile is None:
             self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
             return
         with self._lock:
-            if self._state not in CONNECTABLE_STATES:
-                self._log.append("vpn", "Ignoring repeated connect; session is busy.")
-                error = (VpnErrorCode.ALREADY_BUSY, _BUSY_MESSAGE)
+            if after_trust:
+                allowed = self._state in {
+                    ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+                    ConnectionState.FAILED,
+                }
             else:
-                error = None
-        if error is not None:
-            self._emit_error(*error)
-            return
+                allowed = self._state in CONNECTABLE_STATES
+            if not allowed:
+                self._log.append("vpn", "Ignoring repeated connect; session is busy.")
+                return
+
+        self._wait_helper_idle()
 
         probe = self._helper.probe()
         with self._lock:
@@ -252,25 +276,44 @@ class VpnBackend:
             self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
             return
 
-        self._begin_session(profile, capabilities, request)
+        self._begin_session(profile, capabilities, request, after_trust=after_trust)
 
     def disconnect(self, *, wait: bool = False, grace_seconds: float | None = None) -> None:
         """Ask the helper to stop the owned process. No-op when already idle."""
         self._cancel_saml_timeout()
         grace = self._grace_seconds if grace_seconds is None else grace_seconds
         with self._lock:
-            if self._state in {ConnectionState.DISCONNECTED, ConnectionState.FAILED}:
-                if self._state is ConnectionState.FAILED:
-                    self._transition(ConnectionState.DISCONNECTED)
-                    snapshot = self._snapshot_locked()
-                else:
-                    snapshot = None
+            if self._state in {ConnectionState.DISCONNECTED}:
+                snapshot = None
+                running = False
+            elif self._state is ConnectionState.FAILED:
+                self._transition(ConnectionState.DISCONNECTED)
+                snapshot = self._snapshot_locked()
+                running = self._helper.is_running()
+            elif self._state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST and (
+                not self._helper.is_running()
+            ):
+                self._last_disconnect_reason = "certificate_trust_cancelled"
+                if self._error_code is None:
+                    self._error_code = VpnErrorCode.CERTIFICATE_UNTRUSTED
+                    self._error_message = _CERT_UNTRUSTED_MESSAGE
+                self._transition(ConnectionState.FAILED)
+                snapshot = self._snapshot_locked()
                 running = False
             elif not self._helper.is_running():
-                self._transition(ConnectionState.DISCONNECTED)
+                if self._state is ConnectionState.CONNECTED:
+                    self._last_disconnect_reason = "connection_lost"
+                    self._error_code = VpnErrorCode.CONNECTION_LOST
+                    self._error_message = _CONNECTION_LOST_MESSAGE
+                    self._last_failure_reason = VpnErrorCode.CONNECTION_LOST.value
+                    self._transition(ConnectionState.FAILED)
+                else:
+                    self._last_disconnect_reason = "user_disconnect"
+                    self._transition(ConnectionState.DISCONNECTED)
                 snapshot = self._snapshot_locked()
                 running = False
             else:
+                self._last_disconnect_reason = "user_disconnect"
                 self._transition(ConnectionState.DISCONNECTING)
                 snapshot = self._snapshot_locked()
                 running = True
@@ -278,7 +321,9 @@ class VpnBackend:
             self._notify(VpnEvent("state", snapshot))
         if not running:
             return
-        self._log.append("vpn", "Disconnect requested.")
+        if not self._disconnect_logged:
+            self._disconnect_logged = True
+            self._app_log("Disconnect requested.")
         self._helper.disconnect(wait=wait, grace_seconds=grace)
 
     def shutdown(self, timeout: float = 5.0) -> None:
@@ -320,8 +365,27 @@ class VpnBackend:
         profile: ConnectionProfile,
         capabilities: OpenfortivpnCapabilities,
         request: ConnectRequest,
+        *,
+        after_trust: bool = False,
     ) -> None:
         with self._lock:
+            if after_trust:
+                allowed = self._state in {
+                    ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+                    ConnectionState.FAILED,
+                }
+            else:
+                allowed = self._state in CONNECTABLE_STATES
+            if not allowed:
+                self._log.append("vpn", "Ignoring connect after cleanup; session is busy.")
+                return
+            self._attempt_id += 1
+            if after_trust:
+                self._retry_count += 1
+                name = profile.name
+            else:
+                self._retry_count = 0
+                name = None
             self._profile = profile
             self._capabilities = capabilities
             self._use_sso = profile.use_sso
@@ -331,6 +395,14 @@ class VpnBackend:
             self._presented_certificate = None
             self._certificate_subject = None
             self._certificate_issuer = None
+            self._cert_logged_sha = None
+            self._cert_error_emitted = False
+            self._tunnel_established_logged = False
+            self._gateway_connected_logged = False
+            self._listener_logged = False
+            self._disconnect_logged = False
+            self._failing = False
+            self._saml_waiting_logged = False
             self._browser_status = "not_required" if not profile.use_sso else "idle"
             self._safe_auth_url = None
             self._browser_opened = False
@@ -338,6 +410,10 @@ class VpnBackend:
             self._transition(ConnectionState.STARTING)
             snapshot = self._snapshot_locked()
         self._notify(VpnEvent("state", snapshot))
+        if after_trust and name is not None:
+            self._app_log(f'Certificate trusted for profile "{name}".')
+            self._app_log("Retrying VPN connection.")
+        self._app_log("Starting VPN connection.")
         mode = "SAML/SSO" if profile.use_sso else "standard"
         self._log.append(
             "vpn",
@@ -351,6 +427,7 @@ class VpnBackend:
             self._log.append("vpn", exc.message, severity=LogLevel.ERROR)
             self._fail_and_clear(code, message)
             return
+        self._app_log("Privileged helper authorized.")
         with self._lock:
             if not profile.use_sso and self._state is ConnectionState.STARTING:
                 self._transition(ConnectionState.CONNECTING)
@@ -381,7 +458,9 @@ class VpnBackend:
             self._maybe_open_browser(event.url)
             return
         if event.kind is HelperEventKind.SAML_LISTENER:
-            self._log.append("vpn", "openfortivpn SAML callback listener is ready.")
+            if not self._listener_logged:
+                self._listener_logged = True
+                self._app_log("SAML callback listener ready.")
             return
         if event.kind is HelperEventKind.SAML_WAITING:
             self._enter_waiting_for_auth()
@@ -413,30 +492,77 @@ class VpnBackend:
         self._log.append("openfortivpn", text)
         hint = classify_output(text)
         snapshots: list[VpnSnapshot] = []
+        log_gateway = False
         with self._lock:
             if hint is not OutputHint.NONE:
                 self._output_hint = hint
+            if hint is OutputHint.GATEWAY_CONNECTED and not self._gateway_connected_logged:
+                self._gateway_connected_logged = True
+                log_gateway = True
             if hint is OutputHint.CONNECTED:
                 snapshots.extend(self._mark_connected_locked())
+        if log_gateway:
+            self._app_log("Connected to gateway.")
         for item in snapshots:
             self._notify(VpnEvent("state", item))
 
     def _handle_certificate(self, info: CertificateInfo) -> None:
+        events: list[VpnEvent] = []
         with self._lock:
             self._presented_certificate = info
             self._certificate_subject = info.subject
             self._certificate_issuer = info.issuer
             self._output_hint = OutputHint.CERTIFICATE
             pinned = None if self._profile is None else self._profile.trusted_cert_sha256
-        self._log.append(
-            "vpn",
-            "Gateway certificate validation failed; waiting for an explicit trust decision.",
+            duplicate = self._cert_logged_sha == info.sha256
+            if not duplicate:
+                self._cert_logged_sha = info.sha256
+                self._cancel_timeout_locked()
+                if self._state in {
+                    ConnectionState.STARTING,
+                    ConnectionState.WAITING_FOR_AUTH,
+                    ConnectionState.CONNECTING,
+                }:
+                    self._transition(ConnectionState.WAITING_FOR_CERTIFICATE_TRUST)
+                snapshot = self._snapshot_locked()
+                events.append(VpnEvent("state", snapshot, certificate=info))
+                if pinned and pinned != info.sha256:
+                    code = VpnErrorCode.CERTIFICATE_CHANGED
+                    message = _CERT_CHANGED_MESSAGE
+                else:
+                    code = VpnErrorCode.CERTIFICATE_UNTRUSTED
+                    message = _CERT_UNTRUSTED_MESSAGE
+                self._error_code = code
+                self._error_message = message
+                self._last_failure_reason = code.value
+                if not self._cert_error_emitted:
+                    self._cert_error_emitted = True
+                    events.append(
+                        VpnEvent(
+                            "error",
+                            snapshot,
+                            error_code=code,
+                            error_message=message,
+                            certificate=info,
+                        )
+                    )
+            else:
+                snapshot = None
+        if duplicate:
+            return
+        self._app_log(
+            "Gateway certificate requires explicit trust.",
+            severity=LogLevel.ERROR,
         )
+        self._app_log("Waiting for certificate trust decision.")
+        self._app_log(f"Certificate fingerprint: {format_sha256_fingerprint(info.sha256)}")
         if pinned and pinned != info.sha256:
-            self._log.append(
-                "vpn",
-                "Presented certificate fingerprint differs from the profile pin.",
+            self._app_log(
+                "The gateway certificate has changed.",
+                severity=LogLevel.WARNING,
             )
+        for event in events:
+            self._notify(event)
 
     def _enter_waiting_for_auth(self) -> None:
         with self._lock:
@@ -446,6 +572,9 @@ class VpnBackend:
             else:
                 snapshot = None
         if snapshot is not None:
+            if not self._saml_waiting_logged:
+                self._saml_waiting_logged = True
+                self._app_log("Waiting for SAML authentication.")
             self._notify(VpnEvent("state", snapshot))
             self._arm_saml_timeout()
 
@@ -458,7 +587,7 @@ class VpnBackend:
             else:
                 snapshot = None
         if snapshot is not None:
-            self._log.append("vpn", "SAML callback received; connecting the tunnel.")
+            self._app_log("Authenticated.")
             self._notify(VpnEvent("state", snapshot))
 
     def _handle_helper_error(self, event: HelperEvent) -> None:
@@ -481,6 +610,9 @@ class VpnBackend:
         if self._state is ConnectionState.CONNECTING:
             self._transition(ConnectionState.CONNECTED)
             snapshots.append(self._snapshot_locked())
+            if not self._tunnel_established_logged:
+                self._tunnel_established_logged = True
+                self._app_log("VPN tunnel established.")
         return snapshots
 
     def _maybe_open_browser(self, raw_url: str) -> None:
@@ -503,7 +635,11 @@ class VpnBackend:
                 self._transition(ConnectionState.WAITING_FOR_AUTH)
             snapshot = self._snapshot_locked()
         self._notify(VpnEvent("state", snapshot))
+        if not self._saml_waiting_logged:
+            self._saml_waiting_logged = True
+            self._app_log("Waiting for SAML authentication.")
         self._arm_saml_timeout()
+        self._app_log("Opening browser for SAML sign-in.")
         self._log.append("vpn", f"Opening system browser for SAML sign-in at {safe}.")
         try:
             self._browser.open(validated)
@@ -548,10 +684,18 @@ class VpnBackend:
         self._cancel_saml_timeout()
         running = False
         with self._lock:
-            if self._state in {ConnectionState.DISCONNECTED, ConnectionState.DISCONNECTING}:
+            if self._failing:
                 return
+            if self._state in {
+                ConnectionState.DISCONNECTED,
+                ConnectionState.DISCONNECTING,
+                ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+            }:
+                return
+            self._failing = True
             self._error_code = code
             self._error_message = message
+            self._last_failure_reason = code.value
             if self._state is not ConnectionState.FAILED:
                 self._transition(ConnectionState.FAILED)
             running = self._helper.is_running()
@@ -581,24 +725,59 @@ class VpnBackend:
             if previous is ConnectionState.DISCONNECTING:
                 self._error_code = None
                 self._error_message = None
+                self._last_disconnect_reason = self._last_disconnect_reason or "user_disconnect"
                 self._transition(ConnectionState.DISCONNECTED)
                 error = None
+                disconnected = True
+            elif previous is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST:
+                error = None
+                disconnected = False
             elif previous is ConnectionState.FAILED:
                 error = None
+                disconnected = False
+            elif previous is ConnectionState.CONNECTED:
+                error_code, message = (
+                    VpnErrorCode.CONNECTION_LOST,
+                    _CONNECTION_LOST_MESSAGE,
+                )
+                self._error_code = error_code
+                self._error_message = message
+                self._last_failure_reason = error_code.value
+                self._last_disconnect_reason = "connection_lost"
+                self._transition(ConnectionState.FAILED)
+                error = (error_code, message)
+                disconnected = False
             elif previous in {
                 ConnectionState.STARTING,
                 ConnectionState.CONNECTING,
-                ConnectionState.CONNECTED,
                 ConnectionState.WAITING_FOR_AUTH,
             }:
                 error_code, message = self._exit_error(hint, code, previous, presented, pinned)
                 self._error_code = error_code
                 self._error_message = message
-                self._transition(ConnectionState.FAILED)
-                error = (error_code, message)
+                self._last_failure_reason = error_code.value
+                if error_code in {
+                    VpnErrorCode.CERTIFICATE_UNTRUSTED,
+                    VpnErrorCode.CERTIFICATE_CHANGED,
+                }:
+                    self._transition(ConnectionState.WAITING_FOR_CERTIFICATE_TRUST)
+                    if not self._cert_error_emitted and presented is not None:
+                        self._cert_error_emitted = True
+                        error = (error_code, message)
+                    else:
+                        error = None
+                else:
+                    self._transition(ConnectionState.FAILED)
+                    error = (error_code, message)
+                disconnected = False
             else:
                 error = None
+                disconnected = False
             snapshot = self._snapshot_locked()
+        if disconnected:
+            self._app_log("VPN disconnected.")
+        if previous is ConnectionState.CONNECTED and error is not None:
+            self._app_log("VPN connection lost unexpectedly.", severity=LogLevel.ERROR)
         self._notify(VpnEvent("state", snapshot, certificate=snapshot.presented_certificate))
         if error is not None:
             self._notify(
@@ -625,6 +804,12 @@ class VpnBackend:
             return VpnErrorCode.CERTIFICATE_UNTRUSTED, _CERT_UNTRUSTED_MESSAGE
         if hint is OutputHint.PERMISSION:
             return VpnErrorCode.PERMISSION_DENIED, _PERMISSION_MESSAGE
+        if hint is OutputHint.PPP_FAILURE:
+            return VpnErrorCode.PPP_FAILED, _PPP_MESSAGE
+        if hint is OutputHint.ROUTE_FAILURE:
+            return VpnErrorCode.ROUTE_FAILED, _ROUTE_MESSAGE
+        if hint is OutputHint.DNS_FAILURE:
+            return VpnErrorCode.DNS_FAILED, _DNS_MESSAGE
         if hint is OutputHint.AUTH_FAILURE or previous is ConnectionState.WAITING_FOR_AUTH:
             if previous is ConnectionState.WAITING_FOR_AUTH:
                 return VpnErrorCode.SAML_FAILED, _SAML_AUTH_MESSAGE
@@ -637,6 +822,7 @@ class VpnBackend:
         with self._lock:
             self._error_code = code
             self._error_message = message
+            self._last_failure_reason = code.value
             snapshot = self._snapshot_locked()
         self._notify(VpnEvent("error", snapshot, error_code=code, error_message=message))
 
@@ -646,6 +832,7 @@ class VpnBackend:
             self._argv = ()
             self._error_code = code
             self._error_message = message
+            self._last_failure_reason = code.value
             self._transition(ConnectionState.FAILED)
             failed = self._snapshot_locked()
             self._transition(ConnectionState.DISCONNECTED)
@@ -715,6 +902,7 @@ class VpnBackend:
         fingerprint = None if profile is None else profile.trusted_cert_sha256
         presented = self._presented_certificate
         failure = None if self._error_code is None else self._error_code.value
+        wait = wait_reason_for(self._state)
         return VpnSnapshot(
             state=self._state,
             profile_id=None if profile is None else profile.id,
@@ -750,11 +938,25 @@ class VpnBackend:
             ),
             presented_certificate=presented,
             helper_probe=probe,
+            wait_reason=wait.value,
+            attempt_id=self._attempt_id,
+            retry_count=self._retry_count,
+            last_disconnect_reason=self._last_disconnect_reason,
+            last_failure_reason=self._last_failure_reason or failure,
         )
 
     def _notify(self, event: VpnEvent) -> None:
         for listener in list(self._listeners):
             listener(event)
+
+    def _wait_helper_idle(self) -> None:
+        """Block until any previous privileged process has exited."""
+        if not self._helper.is_running():
+            return
+        self._helper.disconnect(wait=True, grace_seconds=self._grace_seconds)
+
+    def _app_log(self, message: str, *, severity: LogLevel = LogLevel.INFO) -> None:
+        self._log.append("vpn", message, severity=severity)
 
 
 _CODE_MAP = {

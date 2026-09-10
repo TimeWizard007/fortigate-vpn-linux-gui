@@ -25,6 +25,8 @@ def test_valid_state_transitions_to_connected() -> None:
     assert harness.process is not None
     assert harness.process.started
     harness.process.emit("INFO: Connected to gateway.")
+    assert harness.backend.current_state() is ConnectionState.CONNECTING
+    harness.process.emit("INFO:   Tunnel is up and running.")
     assert harness.backend.current_state() is ConnectionState.CONNECTED
     assert harness.backend.is_running() is True
     assert harness.backend.process_info() is not None
@@ -44,7 +46,8 @@ def test_repeated_connect_is_ignored() -> None:
 def test_disconnect_lifecycle() -> None:
     harness = VpnHarness()
     harness.backend.connect(_profile())
-    harness.process.emit("Connected to gateway.")
+    harness.process.emit("INFO:   Tunnel is up and running.")
+    assert harness.backend.current_state() is ConnectionState.CONNECTED
     harness.backend.disconnect(wait=True)
     assert harness.process.terminate_called
     assert harness.backend.current_state() is ConnectionState.DISCONNECTED
@@ -105,7 +108,7 @@ def test_permission_denied_message() -> None:
 def test_graceful_shutdown() -> None:
     harness = VpnHarness()
     harness.backend.connect(_profile())
-    harness.process.emit("Connected to gateway.")
+    harness.process.emit("INFO:   Tunnel is up and running.")
     harness.backend.shutdown(timeout=0.05)
     assert harness.process.terminate_called
     assert harness.backend.current_state() is ConnectionState.DISCONNECTED

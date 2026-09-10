@@ -10,5 +10,5 @@ from __future__ import annotations
 
 __all__ = ["APP_NAME", "__version__"]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 APP_NAME = "FortiGate VPN Linux GUI"

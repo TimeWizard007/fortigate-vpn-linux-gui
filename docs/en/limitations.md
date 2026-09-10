@@ -1,7 +1,7 @@
 # Known limitations
 
-v0.5.0 adds a polkit privileged helper and explicit FortiGate certificate
-pinning on top of SAML/SSO.
+v0.6.0 hardens connection lifecycle, certificate-trust waiting, and unexpected
+tunnel-loss handling on top of the polkit helper and SAML/SSO.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing
@@ -14,6 +14,13 @@ pinning on top of SAML/SSO.
 - Certificates are never auto-trusted. TLS validation is never disabled.
   `--trusted-cert` is added only after an explicit per-profile pin.
 - A changed gateway certificate is not accepted automatically.
+- Only one connection attempt runs at a time. Rapid extra Connect clicks are
+  ignored. Certificate trust retries once after the previous process exits.
+- Unexpected tunnel loss is detected and shown (`VPN connection was lost.`);
+  the client does **not** auto-reconnect yet (planned for v0.7.0).
+- Disconnect/Cancel is safe during STARTING, WAITING_FOR_AUTH,
+  WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED. The browser is
+  not force-closed; the SAML listener goes away with the process.
 - Passwords, SAML cookies, and tokens are not stored.
 - The GUI does not modify firewall rules, routes, or DNS itself.
 - Packages are never installed automatically.

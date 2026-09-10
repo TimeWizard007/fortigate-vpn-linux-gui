@@ -59,6 +59,9 @@ class HelperService:
         self._capabilities: OpenfortivpnCapabilities | None = None
         self._cert_parser = CertificateFailureParser()
         self._saml = False
+        self._emitted_cert_sha: str | None = None
+        self._connected_emitted = False
+        self._saml_url_emitted = False
 
     def set_listener(self, listener: HelperListener | None) -> None:
         self._listener = listener
@@ -142,6 +145,9 @@ class HelperService:
         )
         self._cert_parser.reset()
         self._saml = request.auth_mode == "saml"
+        self._emitted_cert_sha = None
+        self._connected_emitted = False
+        self._saml_url_emitted = False
         with self._lock:
             self._argv = tuple(argv)
             self._capabilities = capabilities
@@ -216,7 +222,8 @@ class HelperService:
         cert = self._cert_parser.feed(line)
         if is_certificate_validation_failure(line) or cert is not None:
             info = cert or self._cert_parser.snapshot()
-            if info is not None:
+            if info is not None and info.sha256 != self._emitted_cert_sha:
+                self._emitted_cert_sha = info.sha256
                 self._emit(
                     HelperEvent(
                         kind=HelperEventKind.CERTIFICATE,
@@ -224,7 +231,8 @@ class HelperService:
                         line=redacted,
                     )
                 )
-        if classify_output(redacted) is OutputHint.CONNECTED:
+        if classify_output(redacted) is OutputHint.CONNECTED and not self._connected_emitted:
+            self._connected_emitted = True
             self._emit(HelperEvent(kind=HelperEventKind.CONNECTED, line=redacted))
         if not self._saml:
             return
@@ -241,6 +249,9 @@ class HelperService:
                     )
                 )
                 return
+            if self._saml_url_emitted:
+                return
+            self._saml_url_emitted = True
             self._emit(HelperEvent(kind=HelperEventKind.SAML_URL, url=url))
             return
         if parsed.kind is SamlEventKind.LISTENER_READY:

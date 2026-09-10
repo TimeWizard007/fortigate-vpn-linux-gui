@@ -17,7 +17,7 @@ def test_diagnostics_snapshot_values() -> None:
     harness = VpnHarness()
     profile = build_profile(name="Office", gateway="vpn.example.com", port=443, use_sso=False)
     harness.backend.connect(profile)
-    harness.process.emit("Connected to gateway.")
+    harness.process.emit("INFO:   Tunnel is up and running.")
 
     def detect(**kwargs):
         return OpenfortivpnDetection(
@@ -44,6 +44,13 @@ def test_diagnostics_snapshot_values() -> None:
     assert "Office" in data["selected_profile"]
     assert data["auth_mode"] == "non-SSO"
     assert data["waiting_for_auth"] == "No"
+    assert data["browser_waiting"] == "No"
+    assert data["connection_state"] == "connected"
+    assert data["wait_reason"] == "—"
+    assert data["attempt_id"] == "1"
+    assert data["retry_count"] == "0"
+    assert data["last_disconnect_reason"] == "—"
+    assert data["last_failure_reason"] == "—"
     assert data["config_path"] == "/tmp/profiles.json"
     assert "should-not-leak" not in str(data.values())
     assert data["helper_installed"] == "Yes"
@@ -73,6 +80,10 @@ def test_diagnostics_saml_waiting_state() -> None:
     assert data["supports_saml"] == "Yes"
     assert data["auth_mode"] == "SAML/SSO"
     assert data["waiting_for_auth"] == "Yes"
+    assert data["browser_waiting"] == "Yes"
+    assert data["connection_state"] == "waiting_for_auth"
+    assert data["wait_reason"] == "saml_browser"
+    assert data["attempt_id"] == "1"
     assert data["browser_status"] == "opened"
     assert "should-not-leak" not in str(data.values())
     assert "id=" not in str(data.values())

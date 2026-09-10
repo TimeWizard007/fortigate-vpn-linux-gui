@@ -13,8 +13,9 @@ This project exists to provide a clear, modern GUI that:
 - stays independent of Fortinet
 
 The application uses [openfortivpn](https://github.com/adrienverge/openfortivpn)
-as the VPN backend. v0.5.x starts it through a minimal privileged helper. The
-GUI remains unprivileged and opens the system browser for SAML.
+as the VPN backend. v0.6.x still starts it through a minimal privileged helper.
+The GUI remains unprivileged, opens the system browser for SAML, and does not
+auto-reconnect after an unexpected tunnel loss.
 
 This project is **not** affiliated with, endorsed by, or sponsored by Fortinet.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective

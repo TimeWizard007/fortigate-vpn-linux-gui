@@ -8,19 +8,18 @@ from enum import Enum
 
 class OutputHint(Enum):
     NONE = "none"
+    GATEWAY_CONNECTED = "gateway_connected"
     CONNECTED = "connected"
     PERMISSION = "permission"
     AUTH_FAILURE = "auth_failure"
     CERTIFICATE = "certificate"
+    PPP_FAILURE = "ppp_failure"
+    ROUTE_FAILURE = "route_failure"
+    DNS_FAILURE = "dns_failure"
 
 
-_CONNECTED = (
-    "connected to gateway",
-    "tunnel is up",
-    "interface ppp",
-    "ppp0 is up",
-    "ppp1 is up",
-)
+_TUNNEL_READY = "tunnel is up and running"
+_GATEWAY_CONNECTED = "connected to gateway"
 
 _PERMISSION = (
     "permission denied",
@@ -47,6 +46,8 @@ _CERTIFICATE = (
     "gateway certificate validation failed",
 )
 
+_FAILURE_MARKERS = ("error", "failed", "failure", "fatal")
+
 
 def classify_output(line: str) -> OutputHint:
     """Return a coarse hint derived from a redacted log line."""
@@ -57,6 +58,19 @@ def classify_output(line: str) -> OutputHint:
         return OutputHint.PERMISSION
     if any(marker in lowered for marker in _AUTH):
         return OutputHint.AUTH_FAILURE
-    if any(marker in lowered for marker in _CONNECTED):
+    if _looks_like_failure(lowered):
+        if "ppp" in lowered:
+            return OutputHint.PPP_FAILURE
+        if "route" in lowered:
+            return OutputHint.ROUTE_FAILURE
+        if "dns" in lowered or "nameserver" in lowered:
+            return OutputHint.DNS_FAILURE
+    if _TUNNEL_READY in lowered:
         return OutputHint.CONNECTED
+    if _GATEWAY_CONNECTED in lowered:
+        return OutputHint.GATEWAY_CONNECTED
     return OutputHint.NONE
+
+
+def _looks_like_failure(lowered: str) -> bool:
+    return any(marker in lowered for marker in _FAILURE_MARKERS)

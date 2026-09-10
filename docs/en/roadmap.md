@@ -31,13 +31,28 @@ Dates are not committed. Order may change as design work proceeds.
 - `WAITING_FOR_AUTH`, Cancel, 120s timeout
 - Expanded redaction and SAML diagnostics
 
-## v0.5.x — privileged helper (current)
+## v0.5.x — privileged helper
 
 - polkit helper for connect / disconnect / status
 - Controlled privileged openfortivpn execution
 - Explicit per-profile SHA-256 certificate pinning
 - Certificate-change warning
 - Helper diagnostics
+
+## v0.6.x — connection reliability (current)
+
+- Explicit `WAITING_FOR_CERTIFICATE_TRUST` wait
+- One active connection attempt; retry waits for cleanup
+- Certificate event/dialog deduplication
+- Unexpected tunnel-loss detection (no auto-reconnect)
+- Safer Disconnect/Cancel during all active phases
+- Clearer lifecycle diagnostics and user-facing logs
+
+## v0.7.0 — desktop UX (planned)
+
+- Tray icon
+- Auto-reconnect after unexpected tunnel loss
+- Autostart / session restore
 
 ## Later (planned, not implemented)
 

@@ -7,9 +7,10 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.5.x adds a polkit privileged helper and explicit FortiGate certificate
-pinning on top of SAML/SSO. The GUI must never run as root and must never
-call `sudo`. Privileged VPN work belongs only in the project helper.
+v0.6.x hardens connection lifecycle, certificate-trust waiting, and unexpected
+tunnel-loss handling on top of the polkit helper and SAML/SSO. The GUI must
+never run as root and must never call `sudo`. Privileged VPN work belongs only
+in the project helper.
 
 Please do not send pull requests that:
 

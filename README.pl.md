@@ -9,9 +9,11 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.5.0**. Trwałe profile, SAML/SSO przez `--saml-login`
+Aktualna wersja to **0.6.0**. Trwałe profile, SAML/SSO przez `--saml-login`
 i systemową przeglądarkę, pomocnik uprzywilejowany polkit oraz jawne
-przypinanie certyfikatu FortiGate są zaimplementowane.
+przypinanie certyfikatu FortiGate są zaimplementowane. Cykl życia połączenia,
+oczekiwanie na zaufanie certyfikatu i utrata tunelu są utwardzone; GUI nadal
+nie ponawia połączenia automatycznie.
 
 | Funkcja | Status |
 | ------- | ------ |

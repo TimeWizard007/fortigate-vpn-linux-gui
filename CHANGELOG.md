@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-09
+
+### Added
+
+- explicit certificate-trust waiting state
+- improved connection lifecycle diagnostics
+- unexpected tunnel-loss detection
+
+### Changed
+
+- hardened connect/disconnect/retry lifecycle
+- improved state accuracy
+- cleaner user-facing logging
+
+### Fixed
+
+- duplicate certificate validation events/dialogs
+- overlapping connection attempts
+- retry races
+- stale process/PID states
+- timeout cleanup races
+- CONNECTED emitted before the VPN tunnel was fully ready
+- SAML authentication URL query strings visible in openfortivpn logs
+
+### Security
+
+- certificate changes still require explicit approval
+- no new privilege or secret-storage paths introduced
+
 ## [0.5.0] - 2026-09-08
 
 ### Added
@@ -117,7 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.2.0...v0.3.0

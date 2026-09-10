@@ -7,8 +7,8 @@ FortiGate SSL VPN na Linuxie.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v0.5.x dodaje pomocnika uprzywilejowanego polkit i jawne pinowanie
-certyfikatu FortiGate na bazie SAML/SSO.
+Wersja v0.6.x utwardza cykl życia połączenia, oczekiwanie na zaufanie
+certyfikatu i utratę tunelu na bazie pomocnika polkit i SAML/SSO.
 
 | Temat | Dokument |
 | ----- | -------- |

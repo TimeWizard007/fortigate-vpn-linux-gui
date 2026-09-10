@@ -6,6 +6,7 @@ from __future__ import annotations
 import threading
 from subprocess import TimeoutExpired
 
+from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
 from fortigate_vpn_gui.system.helper_client import InProcessHelperClient
 from fortigate_vpn_gui.vpn.backend import VpnBackend
 from fortigate_vpn_gui.vpn.browser import BrowserLaunchError
@@ -111,7 +112,7 @@ class VpnHarness:
         helper_installed: bool = True,
         polkit_available: bool = True,
         privilege_denied: bool = False,
-        helper_version: str = "0.5.0",
+        helper_version: str = HELPER_VERSION,
         version_mismatch: bool = False,
     ) -> None:
         self._process: FakeVpnProcess | None = None

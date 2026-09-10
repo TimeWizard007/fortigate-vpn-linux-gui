@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from fortigate_vpn_gui.vpn.url_safety import safe_url_for_display
+
 _REDACTED = "***"
 
 _SENSITIVE_QUERY_KEYS = frozenset(
@@ -71,7 +73,15 @@ def redact_log_line(line: str) -> str:
 
 
 def _redact_url_match(match: re.Match[str]) -> str:
-    return redact_url(match.group(0))
+    url = match.group(0)
+    if _is_saml_auth_url(url):
+        return safe_url_for_display(url)
+    return redact_url(url)
+
+
+def _is_saml_auth_url(url: str) -> bool:
+    path = (urlparse(url).path or "").lower()
+    return "/saml" in path
 
 
 def redact_url(url: str) -> str:

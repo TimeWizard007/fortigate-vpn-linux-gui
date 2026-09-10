@@ -9,9 +9,11 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.5.0**. Persistent profiles, SAML/SSO via
+The current version is **0.6.0**. Persistent profiles, SAML/SSO via
 `--saml-login` and the system browser, a polkit privileged helper, and
-explicit FortiGate certificate pinning are implemented.
+explicit FortiGate certificate pinning are implemented. Connection lifecycle,
+certificate-trust waiting, and unexpected tunnel-loss handling are hardened;
+the GUI still does not auto-reconnect.
 
 | Capability | Status |
 | ---------- | ------ |

@@ -51,6 +51,13 @@ def build_diagnostics_snapshot(
     presented = snapshot.presented_certificate
     raw_version = probe.helper_version or snapshot.helper_version
     helper_version = raw_version if is_valid_helper_version(raw_version) else "—"
+    wait_reason = snapshot.wait_reason
+    if not wait_reason or wait_reason == "none":
+        wait_display = "—"
+    else:
+        wait_display = wait_reason
+    attempt = "—" if snapshot.attempt_id in (None, 0) else str(snapshot.attempt_id)
+    retry = "—" if snapshot.retry_count is None else str(snapshot.retry_count)
     return {
         "helper_installed": "Yes" if probe.installed else "No",
         "helper_version": helper_version,
@@ -79,12 +86,19 @@ def build_diagnostics_snapshot(
             or "—"
         ),
         "vpn_state": state_label(snapshot.state),
+        "connection_state": snapshot.state.value,
+        "wait_reason": wait_display,
         "failure_reason": snapshot.failure_reason or "—",
+        "last_failure_reason": snapshot.last_failure_reason or "—",
+        "last_disconnect_reason": snapshot.last_disconnect_reason or "—",
+        "attempt_id": attempt,
+        "retry_count": retry,
         "process_pid": pid,
         "selected_profile": profile,
         "auth_mode": auth_mode,
         "browser_status": snapshot.browser_status or "idle",
         "waiting_for_auth": "Yes" if waiting else "No",
+        "browser_waiting": "Yes" if waiting else "No",
         "config_path": config_path,
     }
 

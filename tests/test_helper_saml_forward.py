@@ -21,3 +21,6 @@ def test_helper_saml_event_opens_unprivileged_browser_once() -> None:
     assert "secret-session" not in (harness.backend.snapshot().safe_auth_url or "")
     joined = " ".join(record.message for record in harness.log.records())
     assert "secret-session" not in joined
+    assert "redirect=1" not in joined
+    assert "id=" not in joined
+    assert "https://vpn.example.com:443/remote/saml/start" in joined

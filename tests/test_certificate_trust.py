@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from fortigate_vpn_gui.profiles.model import build_profile
-from fortigate_vpn_gui.vpn.models import VpnErrorCode
+from fortigate_vpn_gui.vpn.models import ConnectionState, VpnErrorCode
 from tests.vpn_fakes import VpnHarness
 
 _DIGEST_A = "aa" * 32
@@ -35,6 +35,7 @@ def test_unknown_certificate_prompts_untrusted() -> None:
     harness.backend.connect(profile)
     _emit_cert(harness)
     snapshot = harness.backend.snapshot()
+    assert snapshot.state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
     assert snapshot.error_code is VpnErrorCode.CERTIFICATE_UNTRUSTED
     assert snapshot.presented_certificate is not None
     assert snapshot.presented_certificate.sha256 == _DIGEST_A
@@ -67,6 +68,7 @@ def test_changed_certificate_never_auto_replaces_pin() -> None:
     harness.backend.connect(profile)
     _emit_cert(harness, _DIGEST_B)
     snapshot = harness.backend.snapshot()
+    assert snapshot.state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
     assert snapshot.error_code is VpnErrorCode.CERTIFICATE_CHANGED
     assert snapshot.presented_certificate is not None
     assert snapshot.presented_certificate.sha256 == _DIGEST_B
@@ -91,3 +93,87 @@ def test_retry_uses_trusted_cert_after_pin() -> None:
     assert harness.process is not None
     assert harness.process.argv[-2:] == ["--trusted-cert", _DIGEST_A]
     assert "--saml-login" in harness.process.argv
+
+
+def _vpn_messages(harness: VpnHarness) -> list[str]:
+    return [record.message for record in harness.log.records() if record.source == "vpn"]
+
+
+def test_repeated_certificate_lines_are_one_logical_event() -> None:
+    harness = VpnHarness()
+    errors: list[VpnErrorCode] = []
+    harness.backend.subscribe(
+        lambda event: errors.append(event.error_code) if event.error_code else None
+    )
+    profile = build_profile(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness.backend.connect(profile)
+    assert harness.process is not None
+    for _ in range(3):
+        for line in _CERT_LINES:
+            harness.process.emit(line)
+    harness.process.finish(1)
+    assert errors.count(VpnErrorCode.CERTIFICATE_UNTRUSTED) == 1
+    assert harness.backend.current_state() is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
+    assert (
+        _vpn_messages(harness).count("Gateway certificate requires explicit trust.") == 1
+    )
+
+
+def test_trust_retries_once_after_cleanup() -> None:
+    harness = VpnHarness()
+    profile = build_profile(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness.backend.connect(profile)
+    first = harness.process
+    assert first is not None
+    for line in _CERT_LINES:
+        first.emit(line)
+    assert harness.backend.current_state() is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
+    pinned = build_profile(
+        profile_id=profile.id,
+        name=profile.name,
+        gateway=profile.gateway,
+        port=profile.port,
+        use_sso=True,
+        trusted_cert_sha256=_DIGEST_A,
+    )
+    harness.backend.connect(pinned, after_trust=True)
+    second = harness.process
+    assert second is not first
+    assert first.terminate_called
+    assert first.poll() is not None
+    assert second.poll() is None
+    assert second.argv[-2:] == ["--trusted-cert", _DIGEST_A]
+    assert "--saml-login" in second.argv
+    assert harness.backend.snapshot().retry_count == 1
+    harness.backend.connect(pinned, after_trust=True)
+    assert harness.process is second
+
+
+def test_certificate_cancel_does_not_save_or_retry() -> None:
+    harness = VpnHarness()
+    profile = build_profile(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness.backend.connect(profile)
+    _emit_cert(harness)
+    harness.backend.disconnect(wait=True)
+    assert profile.trusted_cert_sha256 is None
+    assert harness.backend.current_state() is ConnectionState.FAILED
+    assert harness.process is None or harness.process.poll() is not None
+    harness.backend.connect(profile)
+    assert harness.backend.current_state() is ConnectionState.STARTING
+    assert harness.process is not None
+    assert "--trusted-cert" not in harness.process.argv
+
+
+def test_rejected_certificate_change_keeps_old_pin() -> None:
+    harness = VpnHarness()
+    profile = build_profile(
+        name="Office",
+        gateway="vpn.example.com",
+        use_sso=True,
+        trusted_cert_sha256=_DIGEST_A,
+    )
+    harness.backend.connect(profile)
+    _emit_cert(harness, _DIGEST_B)
+    harness.backend.disconnect(wait=True)
+    assert profile.trusted_cert_sha256 == _DIGEST_A
+    assert harness.backend.snapshot().error_code is VpnErrorCode.CERTIFICATE_CHANGED

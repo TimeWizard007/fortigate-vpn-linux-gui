@@ -30,6 +30,7 @@ from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
 from fortigate_vpn_gui.vpn.models import (
     BUSY_STATES,
+    CANCELABLE_STATES,
     ConnectionState,
     VpnErrorCode,
     VpnSnapshot,
@@ -59,6 +60,7 @@ class ConnectionPage(QWidget):
         self._openfortivpn_path = locator()
         self._safe_auth_url: str | None = None
         self._last_trust_decision: bool | None = None
+        self._shown_cert_sha: str | None = None
 
         title = QLabel("Connection")
         title.setObjectName("pageTitle")
@@ -127,6 +129,11 @@ class ConnectionPage(QWidget):
         self._sso_hint.setObjectName("ssoBrowserHint")
         self._sso_hint.setVisible(False)
 
+        self._cert_hint = QLabel("Waiting for certificate trust")
+        self._cert_hint.setWordWrap(True)
+        self._cert_hint.setObjectName("certificateTrustHint")
+        self._cert_hint.setVisible(False)
+
         self._helper_hint = QLabel(
             "The privileged VPN helper is not installed. Install the helper "
             "and polkit policy documented in packaging/README.md. The GUI will "
@@ -159,6 +166,7 @@ class ConnectionPage(QWidget):
         layout.addWidget(self._missing_hint)
         layout.addWidget(self._helper_hint)
         layout.addWidget(self._sso_hint)
+        layout.addWidget(self._cert_hint)
         layout.addWidget(self._notice)
         layout.addStretch(1)
 
@@ -194,6 +202,9 @@ class ConnectionPage(QWidget):
 
     def sso_hint_visible(self) -> bool:
         return not self._sso_hint.isHidden()
+
+    def cert_hint_visible(self) -> bool:
+        return not self._cert_hint.isHidden()
 
     def copy_url_visible(self) -> bool:
         return not self._copy_url_button.isHidden()
@@ -240,14 +251,18 @@ class ConnectionPage(QWidget):
         has_profile = self.selected_profile() is not None
         missing = self._openfortivpn_path is None
         waiting = snapshot.state is ConnectionState.WAITING_FOR_AUTH
+        waiting_cert = snapshot.state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
         helper_missing = snapshot.helper_installed is False or snapshot.helper_status == "missing"
         self._missing_hint.setVisible(missing)
         self._helper_hint.setVisible(helper_missing)
         self._empty_hint.setVisible(not has_profile)
         self._sso_hint.setVisible(waiting)
+        self._cert_hint.setVisible(waiting_cert)
         self._copy_url_button.setVisible(waiting and bool(snapshot.safe_auth_url))
         self._profile_combo.setEnabled(has_profile and not busy)
         self._sync_button(snapshot.state, has_profile)
+        if snapshot.state in {ConnectionState.DISCONNECTED, ConnectionState.STARTING}:
+            self._shown_cert_sha = None
 
     def show_user_error(self, event: VpnEvent) -> None:
         if event.error_code in {
@@ -269,6 +284,9 @@ class ConnectionPage(QWidget):
                 event.error_message or "",
             )
             return
+        if self._shown_cert_sha == info.sha256:
+            return
+        self._shown_cert_sha = info.sha256
         changed = event.error_code is VpnErrorCode.CERTIFICATE_CHANGED
         accepted = self._ask_certificate_trust(
             gateway=profile.gateway,
@@ -278,10 +296,11 @@ class ConnectionPage(QWidget):
         )
         self._last_trust_decision = accepted
         if not accepted:
+            self._vpn.disconnect()
             return
         self._manager.set_trusted_certificate(profile.id, info.sha256)
         updated = self._manager.get(profile.id)
-        self._vpn.connect(updated)
+        self._vpn.connect(updated, after_trust=True)
 
     def _sync_button(self, state: ConnectionState, has_profile: bool) -> None:
         profile = self.selected_profile()
@@ -293,9 +312,13 @@ class ConnectionPage(QWidget):
             self._action_button.setText("Cancel")
             self._action_button.setEnabled(True)
             return
+        if state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST:
+            self._action_button.setText("Cancel")
+            self._action_button.setEnabled(True)
+            return
         if state is ConnectionState.CONNECTING:
-            self._action_button.setText("Connecting...")
-            self._action_button.setEnabled(False)
+            self._action_button.setText("Cancel")
+            self._action_button.setEnabled(True)
             return
         if state is ConnectionState.DISCONNECTING:
             self._action_button.setText("Disconnecting...")
@@ -304,6 +327,10 @@ class ConnectionPage(QWidget):
         if state is ConnectionState.CONNECTED:
             self._action_button.setText("Disconnect")
             self._action_button.setEnabled(True)
+            return
+        if state is ConnectionState.FAILED:
+            self._action_button.setText("Connect again")
+            self._action_button.setEnabled(has_profile)
             return
         if profile is not None and profile.use_sso:
             self._action_button.setText("Connect with SSO")
@@ -327,7 +354,7 @@ class ConnectionPage(QWidget):
 
     def _on_action_clicked(self) -> None:
         state = self._vpn.current_state()
-        if state in {ConnectionState.CONNECTED, ConnectionState.WAITING_FOR_AUTH}:
+        if state in CANCELABLE_STATES:
             self._vpn.disconnect()
             return
         self._vpn.connect(self.selected_profile())
@@ -388,6 +415,10 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.CERTIFICATE_CHANGED: "Gateway certificate changed",
         VpnErrorCode.SAML_FAILED: "SAML sign-in failed",
         VpnErrorCode.VPN_PROCESS_FAILED: "VPN process ended",
+        VpnErrorCode.CONNECTION_LOST: "VPN connection lost",
+        VpnErrorCode.PPP_FAILED: "PPP setup failed",
+        VpnErrorCode.ROUTE_FAILED: "Route setup failed",
+        VpnErrorCode.DNS_FAILED: "DNS setup failed",
     }
     if code is None:
         return "VPN"

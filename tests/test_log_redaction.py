@@ -62,3 +62,40 @@ def test_redact_mixed_capitalization() -> None:
     assert "tok" not in redacted
     assert "jwt" not in redacted
     assert "***" in redacted
+
+
+def test_saml_auth_url_strips_query_and_fragment() -> None:
+    line = (
+        "INFO:   Authenticate at "
+        "'https://vpnbiuro.itsolution.pl:17414/remote/saml/start?redirect=1'"
+    )
+    redacted = redact_log_line(line)
+    assert redacted == (
+        "INFO:   Authenticate at "
+        "'https://vpnbiuro.itsolution.pl:17414/remote/saml/start'"
+    )
+    assert "redirect" not in redacted
+    assert "?" not in redacted
+
+
+def test_saml_auth_url_strips_fragment() -> None:
+    line = (
+        "INFO:   Authenticate at "
+        "'https://vpn.example.com:443/remote/saml/start?redirect=1#session'"
+    )
+    redacted = redact_log_line(line)
+    assert redacted == (
+        "INFO:   Authenticate at 'https://vpn.example.com:443/remote/saml/start'"
+    )
+    assert "session" not in redacted
+    assert "redirect" not in redacted
+
+
+def test_saml_auth_url_strips_id_query_not_just_value() -> None:
+    line = "INFO:   Authenticate at 'https://vpn.example.com:443/remote/saml/start?id=secret'"
+    redacted = redact_log_line(line)
+    assert redacted == (
+        "INFO:   Authenticate at 'https://vpn.example.com:443/remote/saml/start'"
+    )
+    assert "secret" not in redacted
+    assert "id=" not in redacted

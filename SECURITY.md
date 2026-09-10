@@ -2,11 +2,12 @@
 
 ## Supported versions
 
-This project is in early development (v0.5.x). There is no stable VPN client
+This project is in early development (v0.6.x). There is no stable VPN client
 release yet. Security reports are still welcome.
 
 | Version | Supported |
 | ------- | --------- |
+| 0.6.x   | Yes       |
 | 0.5.x   | Yes       |
 | 0.4.x   | Yes       |
 | 0.3.x   | Yes       |
@@ -53,15 +54,16 @@ These rules apply now and to future VPN, SAML, and helper work:
    be opted into `trusted-cert` (or equivalent) without an explicit, visible
    choice and a clear warning. Insecure defaults are not acceptable.
 
-## Current scope (v0.5.x)
+## Current scope (v0.6.x)
 
-v0.5.x starts `openfortivpn` only through a minimal privileged helper
+v0.6.x starts `openfortivpn` only through a minimal privileged helper
 authorized by polkit. The GUI remains a normal desktop user process. SSO uses
 `openfortivpn <gateway>:<port> --saml-login` constructed by the helper (list
 argv, `shell=False`, no credentials). Sign-in happens in the unprivileged
 system browser after a validated SAML auth URL event. `--trusted-cert` is
-added only after an explicit per-profile SHA-256 pin. The GUI does not invoke
-`sudo`, does not install sudoers rules, and does not modify the network
-itself. Connection profiles are stored as local JSON without passwords, SAML
-tokens, cookies, or other secrets. Certificate fingerprints may be stored and
-shown; SAML material is redacted.
+added only after an explicit per-profile SHA-256 pin. Certificate changes
+still require explicit approval. Unexpected tunnel loss is detected and does
+not auto-reconnect. The GUI does not invoke `sudo`, does not install sudoers
+rules, and does not modify the network itself. Connection profiles are stored
+as local JSON without passwords, SAML tokens, cookies, or other secrets.
+Certificate fingerprints may be stored and shown; SAML material is redacted.

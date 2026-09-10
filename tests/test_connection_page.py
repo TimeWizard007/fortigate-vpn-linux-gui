@@ -44,6 +44,10 @@ def test_connection_page_with_sso_profile(qapp, profile_manager: ProfileManager)
     harness.process.emit("DEBUG:  Incoming HTTP connection")
     harness.process.emit("INFO:   Connected to gateway.")
     page.apply_snapshot(harness.backend.snapshot())
+    assert page.action_text() == "Cancel"
+    assert page.status_text() == "Connecting"
+    harness.process.emit("INFO:   Tunnel is up and running.")
+    page.apply_snapshot(harness.backend.snapshot())
     assert page.action_text() == "Disconnect"
     assert page.status_text() == "Connected"
 
@@ -71,9 +75,10 @@ def test_connection_page_connect_disconnect_states(qapp, profile_manager: Profil
     assert page.action_text() == "Connect"
     page._on_action_clicked()
     page.apply_snapshot(harness.backend.snapshot())
-    assert page.action_text() == "Connecting..."
-    assert page.connect_enabled() is False
-    harness.process.emit("Connected to gateway.")
+    assert page.action_text() == "Cancel"
+    assert page.connect_enabled() is True
+    assert page.status_text() == "Connecting"
+    harness.process.emit("INFO:   Tunnel is up and running.")
     page.apply_snapshot(harness.backend.snapshot())
     assert page.status_text() == "Connected"
     assert page.action_text() == "Disconnect"
@@ -226,4 +231,63 @@ def test_connection_page_changed_cert_dialog(qapp, profile_manager: ProfileManag
     )
     assert seen == [True]
     assert profile_manager.list_profiles()[0].trusted_cert_sha256 == old
+
+
+def test_connection_page_certificate_wait_and_failed_retry(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    digest = "aa" * 32
+    profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness = VpnHarness()
+    page = ConnectionPage(
+        profile_manager,
+        harness.backend,
+        locator=lambda: "/usr/local/bin/openfortivpn",
+        trust_prompt=lambda **kwargs: False,
+    )
+    page._on_action_clicked()
+    harness.process.emit(_FAIL)
+    harness.process.emit("ERROR:      subject: /CN=vpn.example.com")
+    harness.process.emit("ERROR:      issuer: /C=US/O=Example")
+    harness.process.emit(f"ERROR:      sha256 digest: {digest}")
+    harness.process.finish(1)
+    page.apply_snapshot(harness.backend.snapshot())
+    assert page.action_text() == "Cancel"
+    assert page.cert_hint_visible() is True
+    assert page._cert_hint.text() == "Waiting for certificate trust"
+    page._on_action_clicked()
+    page.apply_snapshot(harness.backend.snapshot())
+    assert page.action_text() == "Connect again"
+    assert page.cert_hint_visible() is False
+
+
+def test_connection_page_same_fingerprint_opens_one_dialog(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    digest = "aa" * 32
+    profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness = VpnHarness()
+    prompts: list[dict] = []
+    page = ConnectionPage(
+        profile_manager,
+        harness.backend,
+        locator=lambda: "/usr/local/bin/openfortivpn",
+        trust_prompt=lambda **kwargs: prompts.append(kwargs) or False,
+    )
+    page._on_action_clicked()
+    harness.process.emit(_FAIL)
+    harness.process.emit("ERROR:      subject: /CN=vpn.example.com")
+    harness.process.emit("ERROR:      issuer: /C=US/O=Example")
+    harness.process.emit(f"ERROR:      sha256 digest: {digest}")
+    harness.process.finish(1)
+    event = VpnEvent(
+        "error",
+        harness.backend.snapshot(),
+        error_code=VpnErrorCode.CERTIFICATE_UNTRUSTED,
+        error_message=harness.backend.snapshot().error_message,
+        certificate=harness.backend.snapshot().presented_certificate,
+    )
+    page.show_user_error(event)
+    page.show_user_error(event)
+    assert len(prompts) == 1
 

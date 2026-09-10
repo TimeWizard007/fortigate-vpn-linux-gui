@@ -1,7 +1,7 @@
 # Znane ograniczenia
 
-Wersja v0.5.0 dodaje pomocnika polkit i jawne pinowanie certyfikatu FortiGate
-na bazie SAML/SSO.
+Wersja v0.6.0 utwardza cykl życia połączenia, oczekiwanie na zaufanie
+certyfikatu i utratę tunelu na bazie pomocnika polkit i SAML/SSO.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -14,6 +14,14 @@ na bazie SAML/SSO.
 - Certyfikaty nigdy nie są zaufane automatycznie. Walidacja TLS nigdy nie jest
   wyłączana. `--trusted-cert` dodawane jest tylko po jawnym pinie profilu.
 - Zmiana certyfikatu bramy nie jest przyjmowana automatycznie.
+- W danej chwili działa tylko jedna próba połączenia. Dodatkowe kliknięcia
+  Connect są ignorowane. Po zaufaniu certyfikatu jest jedno ponowienie, gdy
+  poprzedni proces się zakończy.
+- Nieoczekiwana utrata tunelu jest wykrywana (`VPN connection was lost.`);
+  klient **nie** ponawia połączenia automatycznie (planowane w v0.7.0).
+- Disconnect/Cancel jest bezpieczny w STARTING, WAITING_FOR_AUTH,
+  WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED. Przeglądarka nie
+  jest zamykana na siłę; listener SAML znika razem z procesem.
 - Hasła, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - Pakiety nigdy nie są instalowane automatycznie.

@@ -19,6 +19,18 @@ class ConnectionState(Enum):
     DISCONNECTING = "disconnecting"
     FAILED = "failed"
     WAITING_FOR_AUTH = "waiting_for_auth"
+    WAITING_FOR_CERTIFICATE_TRUST = "waiting_for_certificate_trust"
+
+
+class WaitReason(Enum):
+    """Why the GUI is waiting, when it is not idle."""
+
+    NONE = "none"
+    HELPER_STARTUP = "helper_startup"
+    SAML_BROWSER = "saml_browser"
+    CERTIFICATE_TRUST = "certificate_trust"
+    TUNNEL_SETUP = "tunnel_setup"
+    DISCONNECTING = "disconnecting"
 
 
 BUSY_STATES = frozenset(
@@ -28,6 +40,7 @@ BUSY_STATES = frozenset(
         ConnectionState.CONNECTED,
         ConnectionState.DISCONNECTING,
         ConnectionState.WAITING_FOR_AUTH,
+        ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
     }
 )
 
@@ -35,6 +48,15 @@ CONNECTABLE_STATES = frozenset(
     {
         ConnectionState.DISCONNECTED,
         ConnectionState.FAILED,
+    }
+)
+
+CANCELABLE_STATES = frozenset(
+    {
+        ConnectionState.WAITING_FOR_AUTH,
+        ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+        ConnectionState.CONNECTING,
+        ConnectionState.CONNECTED,
     }
 )
 
@@ -63,6 +85,10 @@ class VpnErrorCode(Enum):
     CERTIFICATE_CHANGED = "certificate_changed"
     SAML_FAILED = "saml_failed"
     VPN_PROCESS_FAILED = "vpn_process_failed"
+    CONNECTION_LOST = "connection_lost"
+    PPP_FAILED = "ppp_failed"
+    ROUTE_FAILED = "route_failed"
+    DNS_FAILED = "dns_failed"
 
 
 @dataclass(frozen=True)
@@ -104,6 +130,11 @@ class VpnSnapshot:
     certificate_issuer: str | None = None
     presented_certificate: CertificateInfo | None = None
     helper_probe: HelperProbe | None = None
+    wait_reason: str | None = None
+    attempt_id: int | None = None
+    retry_count: int | None = None
+    last_disconnect_reason: str | None = None
+    last_failure_reason: str | None = None
 
 
 def state_label(state: ConnectionState) -> str:
@@ -116,7 +147,19 @@ def state_label(state: ConnectionState) -> str:
         ConnectionState.DISCONNECTING: "Disconnecting",
         ConnectionState.FAILED: "Failed",
         ConnectionState.WAITING_FOR_AUTH: "Waiting for SSO",
+        ConnectionState.WAITING_FOR_CERTIFICATE_TRUST: "Waiting for certificate trust",
     }[state]
+
+
+def wait_reason_for(state: ConnectionState) -> WaitReason:
+    """Return the logical wait reason for *state*."""
+    return {
+        ConnectionState.STARTING: WaitReason.HELPER_STARTUP,
+        ConnectionState.WAITING_FOR_AUTH: WaitReason.SAML_BROWSER,
+        ConnectionState.WAITING_FOR_CERTIFICATE_TRUST: WaitReason.CERTIFICATE_TRUST,
+        ConnectionState.CONNECTING: WaitReason.TUNNEL_SETUP,
+        ConnectionState.DISCONNECTING: WaitReason.DISCONNECTING,
+    }.get(state, WaitReason.NONE)
 
 
 ALLOWED_TRANSITIONS: dict[ConnectionState, frozenset[ConnectionState]] = {
@@ -125,6 +168,7 @@ ALLOWED_TRANSITIONS: dict[ConnectionState, frozenset[ConnectionState]] = {
         {
             ConnectionState.CONNECTING,
             ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
             ConnectionState.FAILED,
             ConnectionState.DISCONNECTING,
         }
@@ -135,10 +179,24 @@ ALLOWED_TRANSITIONS: dict[ConnectionState, frozenset[ConnectionState]] = {
             ConnectionState.FAILED,
             ConnectionState.DISCONNECTING,
             ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
         }
     ),
     ConnectionState.WAITING_FOR_AUTH: frozenset(
-        {ConnectionState.CONNECTING, ConnectionState.FAILED, ConnectionState.DISCONNECTING}
+        {
+            ConnectionState.CONNECTING,
+            ConnectionState.FAILED,
+            ConnectionState.DISCONNECTING,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+        }
+    ),
+    ConnectionState.WAITING_FOR_CERTIFICATE_TRUST: frozenset(
+        {
+            ConnectionState.STARTING,
+            ConnectionState.DISCONNECTING,
+            ConnectionState.FAILED,
+            ConnectionState.DISCONNECTED,
+        }
     ),
     ConnectionState.CONNECTED: frozenset({ConnectionState.DISCONNECTING, ConnectionState.FAILED}),
     ConnectionState.DISCONNECTING: frozenset(

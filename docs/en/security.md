@@ -88,7 +88,7 @@ If a pin exists and openfortivpn presents a **different** fingerprint, the UI
 warns that the gateway certificate has changed. The previous pin is never
 replaced automatically.
 
-## What v0.5.x does not do
+## What v0.6.x does not do
 
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
@@ -98,3 +98,5 @@ replaced automatically.
 - Logs are in memory only; they are not persisted to disk.
 - No custom username/password login and no embedded webview.
 - No auto-trust and no TLS validation disable.
+- No auto-reconnect after unexpected tunnel loss (planned for v0.7.0).
+- No tray icon or autostart (planned for v0.7.0).

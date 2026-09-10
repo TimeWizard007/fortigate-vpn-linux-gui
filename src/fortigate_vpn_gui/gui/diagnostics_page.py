@@ -76,8 +76,18 @@ class DiagnosticsPage(QWidget):
         self._cert_issuer.setObjectName("diagCertIssuer")
         self._state = QLabel("—")
         self._state.setObjectName("diagVpnState")
+        self._wait_reason = QLabel("—")
+        self._wait_reason.setObjectName("diagWaitReason")
         self._failure = QLabel("—")
         self._failure.setObjectName("diagFailureReason")
+        self._last_failure = QLabel("—")
+        self._last_failure.setObjectName("diagLastFailureReason")
+        self._last_disconnect = QLabel("—")
+        self._last_disconnect.setObjectName("diagLastDisconnectReason")
+        self._attempt = QLabel("—")
+        self._attempt.setObjectName("diagAttemptId")
+        self._retry = QLabel("—")
+        self._retry.setObjectName("diagRetryCount")
         self._pid = QLabel("—")
         self._pid.setObjectName("diagVpnPid")
         self._profile = QLabel("—")
@@ -106,7 +116,12 @@ class DiagnosticsPage(QWidget):
             self._cert_subject,
             self._cert_issuer,
             self._state,
+            self._wait_reason,
             self._failure,
+            self._last_failure,
+            self._last_disconnect,
+            self._attempt,
+            self._retry,
             self._pid,
             self._profile,
             self._auth_mode,
@@ -139,7 +154,12 @@ class DiagnosticsPage(QWidget):
         form.addRow("Certificate subject:", self._cert_subject)
         form.addRow("Certificate issuer:", self._cert_issuer)
         form.addRow("VPN state:", self._state)
+        form.addRow("Wait reason:", self._wait_reason)
         form.addRow("Failure reason:", self._failure)
+        form.addRow("Last failure reason:", self._last_failure)
+        form.addRow("Last disconnect reason:", self._last_disconnect)
+        form.addRow("Connection attempt:", self._attempt)
+        form.addRow("Retry count:", self._retry)
         form.addRow("Process PID:", self._pid)
         form.addRow("Selected profile:", self._profile)
         form.addRow("Authentication mode:", self._auth_mode)
@@ -191,7 +211,12 @@ class DiagnosticsPage(QWidget):
         self._cert_subject.setText(data["certificate_subject"])
         self._cert_issuer.setText(data["certificate_issuer"])
         self._state.setText(data["vpn_state"])
+        self._wait_reason.setText(data["wait_reason"])
         self._failure.setText(data["failure_reason"])
+        self._last_failure.setText(data["last_failure_reason"])
+        self._last_disconnect.setText(data["last_disconnect_reason"])
+        self._attempt.setText(data["attempt_id"])
+        self._retry.setText(data["retry_count"])
         self._pid.setText(data["process_pid"])
         self._profile.setText(data["selected_profile"])
         self._auth_mode.setText(data["auth_mode"])
