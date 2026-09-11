@@ -7,8 +7,8 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v0.9.0 is a Diagnostics release on the v0.8.0 Profiles baseline. The polkit helper and
-SAML/SSO model are unchanged.
+v1.0.0 is the first packaged Ubuntu 24.04 (amd64) release. Helper protocol
+0.7.0 is unchanged.
 
 | Topic | Document |
 | ----- | -------- |

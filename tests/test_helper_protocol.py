@@ -129,3 +129,15 @@ def test_helper_argv_controlled_list() -> None:
         _VALID_SHA,
     ]
     assert all(isinstance(part, str) for part in argv)
+
+
+def test_helper_argv_accepts_package_owned_path() -> None:
+    argv = build_helper_argv(
+        executable="/usr/libexec/fortigate-vpn-linux-gui/openfortivpn",
+        gateway="vpn.example.com",
+        port=443,
+        auth_mode="saml",
+    )
+    assert argv[0] == "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
+    assert argv[1] == "vpn.example.com:443"
+    assert argv[2] == "--saml-login"

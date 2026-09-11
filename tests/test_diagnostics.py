@@ -43,7 +43,7 @@ def test_diagnostics_snapshot_values() -> None:
     assert data["executable_path"] == "/usr/local/bin/openfortivpn"
     assert data["selected_executable"] == "/usr/local/bin/openfortivpn"
     assert data["version"] == "1.24.1"
-    assert data["supports_saml"] == "No"
+    assert data["supports_saml"] == "Yes"
     assert data["vpn_state"] == "Connected"
     assert data["process_pid"] == "4242"
     assert "Office" in data["selected_profile"]

@@ -1,0 +1,46 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: FortiGate VPN Linux GUI
+Upstream-Contact: TimeWizard007 <mwi@mwatkowski.eu>
+Source: https://github.com/TimeWizard007/fortigate-vpn-linux-gui
+
+Files: *
+Copyright: 2026 TimeWizard007
+License: GPL-3.0-or-later
+Comment: The generated Ubuntu package installs a private Python environment
+ under /usr/lib/fortigate-vpn-linux-gui/venv that includes PySide6/Qt wheels
+ from PyPI. Ubuntu 24.04 does not ship python3-pyside6. Those bundled files
+ keep their upstream licenses (typically LGPL for Qt/PySide). This source
+ tree does not vendor those wheels in git.
+
+Files: usr/libexec/fortigate-vpn-linux-gui/openfortivpn
+Copyright: Adrien Vergé and openfortivpn contributors
+License: GPL-3.0-or-later
+Comment: Built at package-build time from the upstream openfortivpn 1.24.1
+ source tarball (https://github.com/adrienverge/openfortivpn/archive/refs/tags/v1.24.1.tar.gz).
+ SHA-256 of that source archive:
+ c40d33acd97b89c2e943bfd839c19b69e5a7a5997052e2fc9a595602745c0465
+ The binary is installed only under this package's libexec directory and
+ does not replace /usr/bin/openfortivpn. The git tree does not vendor a
+ prebuilt openfortivpn binary.
+
+Files: src/fortigate_vpn_gui/resources/icons/fortigate-vpn-linux-gui.svg
+Copyright: 2026 TimeWizard007
+License: GPL-3.0-or-later
+Comment: Original project artwork. Not a Fortinet or FortiGate logo.
+
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <https://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in `/usr/share/common-licenses/GPL-3'.

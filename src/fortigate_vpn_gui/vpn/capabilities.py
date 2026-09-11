@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fortigate_vpn_gui.command import OPENFORTIVPN_NAME, is_openfortivpn_executable
+from fortigate_vpn_gui.helper.protocol import APPROVED_OPENFORTIVPN_PATHS, PACKAGE_OPENFORTIVPN_PATH
 
 _VERSION_RE = re.compile(r"openfortivpn\s+([0-9][\w.+-]*)", re.IGNORECASE)
 
@@ -45,10 +46,7 @@ def default_version_runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-WELL_KNOWN_OPENFORTIVPN_PATHS: tuple[str, ...] = (
-    "/usr/local/bin/openfortivpn",
-    "/usr/bin/openfortivpn",
-)
+WELL_KNOWN_OPENFORTIVPN_PATHS: tuple[str, ...] = APPROVED_OPENFORTIVPN_PATHS
 
 PathExists = Callable[[str], bool]
 Which = Callable[[str], str | None]
@@ -116,9 +114,7 @@ def discover_openfortivpn_paths(
         _add(path_hit, "path")
     for extra in extra_paths:
         if is_executable(extra):
-            source = "usr_local" if extra.startswith("/usr/local/") else "usr_bin"
-            if extra not in {"/usr/local/bin/openfortivpn", "/usr/bin/openfortivpn"}:
-                source = "well_known"
+            source = approved_path_source(extra)
             _add(extra, source)
     return tuple(ordered)
 
@@ -181,19 +177,27 @@ def probe_openfortivpn(
     )
 
 
-def _version_key(version: str | None) -> tuple[int, ...]:
-    if not version:
-        return (0,)
-    parts = [int(part) for part in re.split(r"[^\d]+", version) if part.isdigit()]
-    return tuple(parts) if parts else (0,)
-
-
-def _path_rank(path: str) -> int:
+def approved_path_source(path: str) -> str:
+    """Label an allowlisted openfortivpn path for diagnostics and logs."""
+    if path == PACKAGE_OPENFORTIVPN_PATH or path.startswith(
+        "/usr/libexec/fortigate-vpn-linux-gui/"
+    ):
+        return "package"
     if path.startswith("/usr/local/"):
-        return 2
+        return "usr_local"
     if path.startswith("/usr/bin/"):
-        return 0
-    return 1
+        return "usr_bin"
+    return "approved"
+
+
+def format_saml_unsupported_message(version: str | None) -> str:
+    """User-facing error when the effective openfortivpn lacks ``--saml-login``."""
+    detected = version if version else "unknown"
+    return (
+        f"Installed openfortivpn does not support SAML/SSO. Version {detected} "
+        "is detected. FortiGate VPN Linux GUI requires a SAML-capable "
+        "openfortivpn build."
+    )
 
 
 def select_openfortivpn(
@@ -202,24 +206,15 @@ def select_openfortivpn(
     require_saml: bool = False,
     prefer_saml: bool = False,
 ) -> OpenfortivpnCapabilities | None:
-    """Choose an executable. Never falls back to an insecure auth method."""
+    """Choose an executable in candidate order. Never falls back to an insecure auth method."""
     if not candidates:
         return None
-    pool: Sequence[OpenfortivpnCapabilities] = candidates
-    if require_saml:
-        pool = tuple(item for item in candidates if item.supports_saml)
-        if not pool:
+    if require_saml or prefer_saml:
+        for item in candidates:
+            if item.supports_saml:
+                return item
+        if require_saml:
             return None
-        return max(
-            pool, key=lambda item: (_version_key(item.version), _path_rank(item.executable_path))
-        )
-    if prefer_saml:
-        saml = tuple(item for item in candidates if item.supports_saml)
-        if saml:
-            return max(
-                saml,
-                key=lambda item: (_version_key(item.version), _path_rank(item.executable_path)),
-            )
     return candidates[0]
 
 

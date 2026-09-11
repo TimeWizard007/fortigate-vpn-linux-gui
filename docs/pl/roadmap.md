@@ -44,10 +44,16 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Bezpieczniejszy Disconnect/Cancel we wszystkich fazach aktywnych
 - Jaśniejsza diagnostyka cyklu życia i logi dla użytkownika
 
-## v0.9.0 — diagnostyka (obecnie)
+## v0.9.0 — diagnostyka
 
 - Rozszerzona diagnostyka pomocnika, DNS, routingu i interfejsu VPN
 - Eksport ocenzurowanego raportu diagnostycznego
+
+## v1.0.0 — pakietowanie i wydanie stabilne (obecnie)
+
+- Pakiet Debian/Ubuntu `.deb` dla Ubuntu 24.04 LTS amd64
+- Launcher, ikona, spakowany pomocnik i polityka polkit
+- Wersja aplikacji 1.0.0; protokół pomocnika pozostaje 0.7.0
 
 ## v0.8.0 — Profiles UX
 
@@ -72,11 +78,5 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Opcjonalny autostart użytkownika
 - About / projekt / licencja
 - Widoczne, bezpieczne zamykanie aplikacji
-
-## v1.0.0 — pakietowanie i wydanie stabilne (planowane)
-
-- Pakiet Debian/Ubuntu `.deb`
-- Launcher i ikona pulpitu
-- Wydanie stabilne
 
 GUI nigdy nie może działać jako root.

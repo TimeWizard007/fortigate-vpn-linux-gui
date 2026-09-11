@@ -46,7 +46,9 @@ def test_service_dns_failure_does_not_abort_local_checks() -> None:
 
     def run_argv(argv, timeout=3.0):
         if argv and argv[-1] == "--version" and "openfortivpn" in argv[0]:
-            return CommandResult(returncode=0, stdout="openfortivpn 1.23.1\n")
+            return CommandResult(returncode=0, stdout="openfortivpn 1.24.1\n")
+        if argv and argv[-1] == "--help" and "openfortivpn" in argv[0]:
+            return CommandResult(returncode=0, stdout="Usage: openfortivpn [--saml-login]\n")
         if argv and argv[-1] == "--version":
             return CommandResult(returncode=0, stdout=hello + "\n")
         return CommandResult(missing=True)
@@ -57,9 +59,7 @@ def test_service_dns_failure_does_not_abort_local_checks() -> None:
             is_executable=lambda path: True,
             read_text=lambda path: f'id="{POLKIT_ACTION_ID}"',
             run_argv=run_argv,
-            detect=lambda **kw: OpenfortivpnDetection(
-                available=True, path="/usr/bin/openfortivpn", version=None
-            ),
+            detect=None,
             resolve_host=lambda *a, **k: DnsResult(error="Name or service not known"),
         )
     )

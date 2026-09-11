@@ -7,8 +7,8 @@ FortiGate SSL VPN na Linuxie.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v0.9.0 rozwija diagnostykę na bazie v0.8.0. Model pomocnika polkit i
-SAML/SSO pozostaje bez zmian.
+Wersja v1.0.0 jest pierwszym pakietem Ubuntu 24.04 (amd64). Protokół
+pomocnika 0.7.0 pozostaje bez zmian.
 
 | Temat | Dokument |
 | ----- | -------- |

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=FortiGate VPN Linux GUI
+Comment=Native Linux desktop client for FortiGate SSL VPN with SAML/SSO
+TryExec=fortigate-vpn-linux-gui
+Exec=fortigate-vpn-linux-gui
+Icon=fortigate-vpn-linux-gui
+Terminal=false
+Categories=Network;Security;
+Keywords=VPN;FortiGate;SSL;SAML;openfortivpn;
+StartupNotify=true
+StartupWMClass=fortigate-vpn-linux-gui

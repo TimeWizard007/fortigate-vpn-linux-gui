@@ -8,9 +8,13 @@ import shlex
 import sys
 from pathlib import Path
 
-from fortigate_vpn_gui.metadata import APP_NAME, PROJECT_DESCRIPTION
-
-DESKTOP_FILENAME = "fortigate-vpn-linux-gui.desktop"
+from fortigate_vpn_gui.metadata import (
+    APP_NAME,
+    DESKTOP_FILENAME,
+    ICON_NAME,
+    INSTALLED_LAUNCHER_PATH,
+    PROJECT_DESCRIPTION,
+)
 
 
 class AutostartError(RuntimeError):
@@ -36,18 +40,37 @@ def is_autostart_enabled(config_home: str | os.PathLike[str] | None = None) -> b
     return path.is_file()
 
 
-def default_exec_command(*, executable: str | None = None) -> str:
+def default_exec_command(
+    *,
+    executable: str | None = None,
+    launcher_path: str | None = None,
+) -> str:
     """Return a quoted argv suitable for a .desktop Exec= line.
 
-    Uses an absolute interpreter and ``-m fortigate_vpn_gui``. No user-supplied
-    extra arguments are interpolated.
+    Prefers the installed launcher when present. Otherwise uses an absolute
+    interpreter and ``-m fortigate_vpn_gui``. No user-supplied extra arguments
+    are interpolated.
     """
-    python = executable if executable is not None else sys.executable
+    if executable is None:
+        installed = INSTALLED_LAUNCHER_PATH if launcher_path is None else launcher_path
+        if _safe_installed_launcher(installed):
+            return installed
+        python = sys.executable
+    else:
+        python = executable
     if not python or not os.path.isabs(python):
         raise AutostartError("Cannot determine an absolute Python interpreter path.")
     if any(ch in python for ch in "\n\r"):
         raise AutostartError("Interpreter path contains illegal characters.")
     return f"{shlex.quote(python)} -m fortigate_vpn_gui"
+
+
+def _safe_installed_launcher(path: str) -> bool:
+    if not path or not os.path.isabs(path):
+        return False
+    if any(ch in path for ch in "\n\r"):
+        return False
+    return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
 def build_desktop_entry(exec_command: str) -> str:
@@ -61,8 +84,9 @@ def build_desktop_entry(exec_command: str) -> str:
         f"Name={APP_NAME}\n"
         f"Comment={comment}\n"
         f"Exec={exec_command}\n"
+        f"Icon={ICON_NAME}\n"
         "Terminal=false\n"
-        "Categories=Network;\n"
+        "Categories=Network;Security;\n"
         "X-GNOME-Autostart-enabled=true\n"
         "Hidden=false\n"
     )

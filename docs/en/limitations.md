@@ -8,9 +8,9 @@ top of the hardened connection lifecycle and polkit helper.
   helper, missing polkit, authorization denied, and version mismatch are
   reported; the GUI does not fall back to sudo or to spawning openfortivpn
   as the desktop user.
-- Ubuntu 24.04 packaged openfortivpn **1.21.0** (`/usr/bin/openfortivpn`) may
-  lack `--saml-login`. SSO needs a SAML-capable build (tested: **1.24.1** at
-  `/usr/local/bin/openfortivpn`).
+- Ubuntu 24.04 packaged openfortivpn **1.21.0** (`/usr/bin/openfortivpn`)
+  lacks `--saml-login`. The FortiGate VPN Linux GUI `.deb` ships a
+  package-owned **1.24.1** at `/usr/libexec/fortigate-vpn-linux-gui/openfortivpn`.
 - Certificates are never auto-trusted. TLS validation is never disabled.
   `--trusted-cert` is added only after an explicit per-profile pin.
 - A changed gateway certificate is not accepted automatically.
@@ -30,15 +30,15 @@ top of the hardened connection lifecycle and polkit helper.
   not force-closed; the SAML listener goes away with the process.
 - Passwords, SAML cookies, and tokens are not stored.
 - The GUI does not modify firewall rules, routes, or DNS itself.
-- Packages are never installed automatically. `.deb` packaging is planned
-  for a later release (v1.0.0).
+- Packages are never installed automatically by the GUI. Ubuntu 24.04
+  installation uses the `fortigate-vpn-linux-gui` `.deb`.
 - Logs are in-memory only and are redacted. They are not written to disk.
 - Copied diagnostic reports are sanitized and must not contain secrets. They
   are not a substitute for the Logs page.
 - The full SAML URL is not shown; copy uses origin+path only.
 - Profiles are local per-user JSON. They are not synced and not encrypted
   beyond ordinary home-directory permissions.
-- Linux only; Ubuntu is the primary supported distribution.
+- Linux only; Ubuntu 24.04 LTS amd64 is the supported release platform.
 - Documentation exists in English and Polish; other languages are not provided.
 - If `libxcb-cursor.so.0` is missing, startup shows a dialog with
   `sudo apt install libxcb-cursor0` and exits.

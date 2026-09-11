@@ -1,7 +1,14 @@
 # Scripts
 
-Maintainer and development helper scripts will live here.
+Maintainer scripts live here. This directory is not a place for VPN
+connect/disconnect wrappers, sudo helpers, or anything that changes the host
+network.
 
-This directory is not a place for VPN connect/disconnect wrappers, sudo
-helpers, or anything that changes the host network. v0.1.x has no runtime
-scripts yet.
+## Package build
+
+```bash
+./scripts/build-deb.sh
+```
+
+Builds `dist/fortigate-vpn-linux-gui_1.0.0-2_amd64.deb` from this checkout.
+Fails on errors. Does not install, publish, or modify user configuration.

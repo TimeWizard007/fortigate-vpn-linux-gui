@@ -7,10 +7,11 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.9.0 is a Diagnostics release on the v0.8.0 Profiles baseline. The GUI must never
+v1.0.0 is the first packaged Ubuntu 24.04 release. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
-auto-trust certificates or skip SAML.
+auto-trust certificates or skip SAML. Helper protocol 0.7.0 must stay
+unchanged unless a real compatibility break requires it.
 
 Please do not send pull requests that:
 

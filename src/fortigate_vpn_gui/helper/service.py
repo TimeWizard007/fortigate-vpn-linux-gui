@@ -27,7 +27,10 @@ from fortigate_vpn_gui.helper.protocol import (
     HelperProtocolError,
 )
 from fortigate_vpn_gui.helper.validation import parse_request_line
-from fortigate_vpn_gui.vpn.capabilities import OpenfortivpnCapabilities
+from fortigate_vpn_gui.vpn.capabilities import (
+    OpenfortivpnCapabilities,
+    format_saml_unsupported_message,
+)
 from fortigate_vpn_gui.vpn.classify import OutputHint, classify_output
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
 from fortigate_vpn_gui.vpn.process import ProcessFactory, VpnProcess, default_process_factory
@@ -125,11 +128,13 @@ class HelperService:
                 )
         capabilities = self._selector(request.auth_mode == "saml")
         if capabilities is None:
-            if request.auth_mode == "saml" and self._selector(False) is not None:
-                raise HelperError(
-                    "SSO_NOT_SUPPORTED",
-                    "SAML/SSO requires openfortivpn with --saml-login support.",
-                )
+            if request.auth_mode == "saml":
+                fallback = self._selector(False)
+                if fallback is not None:
+                    raise HelperError(
+                        "SSO_NOT_SUPPORTED",
+                        format_saml_unsupported_message(fallback.version),
+                    )
             raise HelperError("OPENFORTIVPN_MISSING", "openfortivpn executable was not found.")
         if not is_approved_openfortivpn_path(capabilities.executable_path):
             raise HelperProtocolError(

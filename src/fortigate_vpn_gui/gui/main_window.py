@@ -27,6 +27,7 @@ from fortigate_vpn_gui.gui.about_page import AboutPage
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
 from fortigate_vpn_gui.gui.diagnostics_page import DiagnosticsPage
 from fortigate_vpn_gui.gui.event_pump import BackendEventPump
+from fortigate_vpn_gui.gui.icons import application_icon
 from fortigate_vpn_gui.gui.logs_page import LogsPage
 from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
 from fortigate_vpn_gui.gui.settings_page import SettingsPage
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
         super().__init__(None)
         _ = parent
         self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(application_icon())
         self.setMinimumSize(640, 420)
         self.resize(960, 640)
         self._settings = settings or QSettings(
@@ -96,9 +98,7 @@ class MainWindow(QMainWindow):
         self._force_quit = False
         self._last_notified_state: ConnectionState | None = None
         self._tray: TrayController | None = None
-        self._shutdown_complete.connect(
-            self._finish_close, Qt.ConnectionType.QueuedConnection
-        )
+        self._shutdown_complete.connect(self._finish_close, Qt.ConnectionType.QueuedConnection)
 
         self._connection_page = ConnectionPage(self._profile_manager, self._vpn)
         self._profiles_page = ProfilesPage(
@@ -180,9 +180,7 @@ class MainWindow(QMainWindow):
             on_about=lambda: self.show_page("About"),
             on_quit=self.request_quit,
         )
-        self._settings_page.apply_preferences(
-            self._prefs, tray_available=self._tray.available
-        )
+        self._settings_page.apply_preferences(self._prefs, tray_available=self._tray.available)
         if self._tray.available:
             app = QApplication.instance()
             if isinstance(app, QApplication):

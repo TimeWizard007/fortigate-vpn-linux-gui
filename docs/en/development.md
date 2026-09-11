@@ -21,15 +21,13 @@ sudo apt install python3.12-venv libxcb-cursor0
   library to create desktop windows. Without it the Qt xcb platform plugin
   fails to load.
 
-To exercise VPN connectivity you also need:
+To exercise VPN connectivity from a Git checkout you also need `pkexec` and a
+SAML-capable `openfortivpn` on an approved path (`/usr/local/bin` or
+`/usr/bin`). Ubuntu's packaged **1.21.0** lacks `--saml-login`. The Ubuntu
+`.deb` ships a private **1.24.1** and does not require the distro package.
 
-```bash
-sudo apt install openfortivpn pkexec
-```
-
-Ubuntu's packaged **1.21.0** may lack `--saml-login`; SSO needs a SAML-capable
-build (tested **1.24.1**). The GUI still starts without `openfortivpn`. The
-application does **not** install system packages automatically.
+The GUI still starts without `openfortivpn`. The application does **not**
+install system packages automatically.
 
 ## Privileged helper (development)
 
@@ -118,12 +116,8 @@ is 0.
 ```bash
 ruff check src tests
 ruff format src tests
-```
-
-## Tests
-
-```bash
 python -m pytest
+./scripts/build-deb.sh
 ```
 
 Widget tests set `QT_QPA_PLATFORM=offscreen` and do not use the network.
@@ -138,7 +132,8 @@ src/fortigate_vpn_gui/   application package
   profiles/              XDG JSON storage
   system/                preflight catalog and polkit client
   diagnostics/           redacted snapshots
-packaging/               helper, polkit policy
+packaging/               helper, polkit policy, desktop entry, Debian metadata
+scripts/                 package build (`./scripts/build-deb.sh`)
 tests/                   pytest suite (mocked processes)
 docs/en/                 English documentation
 docs/pl/                 Polish documentation

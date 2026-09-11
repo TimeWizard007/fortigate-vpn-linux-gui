@@ -94,7 +94,9 @@ def test_connection_page_saml_unsupported_message(qapp, profile_manager: Profile
         error_message=harness.backend.snapshot().error_message,
     )
     assert event.error_message is not None
-    assert "SAML/SSO requires openfortivpn with --saml-login support." in event.error_message
+    assert "does not support SAML/SSO" in event.error_message
+    assert "1.21.0" in event.error_message
+    assert "SAML-capable openfortivpn" in event.error_message
 
 
 def test_connection_page_connect_disconnect_states(qapp, profile_manager: ProfileManager) -> None:

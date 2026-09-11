@@ -49,7 +49,7 @@ privileged openfortivpn execution.
 | `vpn/process.py` | `subprocess.Popen` with a list argv and `shell=False` |
 | `command.py` | Shared argv builder used by helper and GUI; no Qt/backend imports |
 | `vpn/command.py` | Profile-aware wrapper around the shared argv builder |
-| `helper/executables.py` | Approved paths `/usr/local/bin`, `/usr/bin` only |
+| `helper/executables.py` | Approved paths: package libexec, `/usr/local/bin`, `/usr/bin` |
 | `vpn/saml_parse.py` | Listener ready, auth URL, success/failure from process output |
 | `vpn/browser.py` | `xdg-open` / webbrowser after URL validation |
 | `helper/certificate.py` | Certificate validation-failure metadata |
@@ -64,10 +64,11 @@ A small helper activated with polkit action
 `com.fortigate-vpn-linux-gui.manage-vpn`. It is not a general command
 executor. Supported operations: `hello`, `connect`, `disconnect`, `status`.
 
-Install locations:
+Install locations (also installed by the Ubuntu `.deb`):
 
 ```text
 /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+/usr/libexec/fortigate-vpn-linux-gui/openfortivpn
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
 ```
 
@@ -98,10 +99,18 @@ openfortivpn <gateway>:<port> --saml-login --trusted-cert <sha256>
 `--trusted-cert` is a separate argv item and is added only after the user
 pins a validated SHA-256 fingerprint. TLS validation is never disabled.
 
-Candidate binaries for the helper are `/usr/local/bin/openfortivpn` and
-`/usr/bin/openfortivpn`. Capability is taken from `--help` (`--saml-login`),
-not from assuming a path. Ubuntu 24.04's packaged **1.21.0** typically lacks
-SAML; **1.24.1** is the tested SAML-capable build.
+Candidate binaries for the helper, in order:
+
+```text
+/usr/libexec/fortigate-vpn-linux-gui/openfortivpn
+/usr/local/bin/openfortivpn
+/usr/bin/openfortivpn
+```
+
+PATH is not searched. Capability is taken from `--help` (`--saml-login`),
+not from assuming a path. The Ubuntu 24.04 `.deb` ships a private **1.24.1**
+with SAML. Distro **1.21.0** at `/usr/bin/openfortivpn` lacks `--saml-login`
+and is not used for SSO when the package-owned binary is present.
 
 ### FortiGate SSL VPN
 
@@ -222,8 +231,9 @@ The full sign-in URL is not shown in the UI. **Copy sign-in address** copies
 only scheme+host+path (query and fragment stripped) because query values can
 carry session identifiers.
 
-If no SAML-capable binary exists, the message is:
-`SAML/SSO requires openfortivpn with --saml-login support.`
+If no SAML-capable binary exists, Connect fails before pkexec with a message
+that includes the detected version, for example:
+`Installed openfortivpn does not support SAML/SSO. Version 1.21.0 is detected.`
 
 ## Why the GUI is never run as root
 

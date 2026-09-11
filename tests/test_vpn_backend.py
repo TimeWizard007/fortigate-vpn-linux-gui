@@ -135,6 +135,18 @@ def test_sso_profile_refused_without_saml_binary() -> None:
     assert harness.process is None
     assert harness.backend.current_state() is ConnectionState.DISCONNECTED
     assert VpnErrorCode.SSO_NOT_SUPPORTED in codes
+    assert "does not support SAML/SSO" in (harness.backend.snapshot().error_message or "")
+
+
+def test_non_sso_profile_not_blocked_without_saml() -> None:
+    harness = VpnHarness(executable="/usr/bin/openfortivpn", version="1.21.0", supports_saml=False)
+    harness.backend.connect(_profile(use_sso=False))
+    assert harness.process is not None
+    assert harness.process.argv == [
+        "/usr/bin/openfortivpn",
+        "vpn.example.com:443",
+    ]
+    assert "--saml-login" not in harness.process.argv
 
 
 def test_missing_openfortivpn_does_not_start_process() -> None:

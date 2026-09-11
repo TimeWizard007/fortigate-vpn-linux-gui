@@ -31,6 +31,7 @@ def test_enable_and_disable_autostart_desktop_file(tmp_path: Path) -> None:
     assert body.startswith("[Desktop Entry]\n")
     assert f"Name={APP_NAME}" in body
     assert "Exec=/usr/bin/python3 -m fortigate_vpn_gui" in body
+    assert "Icon=fortigate-vpn-linux-gui" in body
     assert "pkexec" not in body
     assert "sudo" not in body
     assert str(path).startswith(str(config_home))
@@ -79,3 +80,13 @@ def test_autostart_path_is_user_level(tmp_path: Path) -> None:
     assert path.name == DESKTOP_FILENAME
     assert "autostart" in path.parts
     assert path.parts[0] != "/etc"
+
+
+def test_default_exec_prefers_installed_launcher(tmp_path: Path) -> None:
+    launcher = tmp_path / "fortigate-vpn-linux-gui"
+    launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+    launcher.chmod(0o755)
+    command = default_exec_command(launcher_path=str(launcher))
+    assert command == str(launcher)
+    assert "python" not in command
+    assert "pkexec" not in command

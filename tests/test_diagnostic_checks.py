@@ -46,22 +46,26 @@ def test_platform_check_is_info() -> None:
     assert "Wayland" in check.summary
 
 
-def test_openfortivpn_found_and_version_parsed() -> None:
+def test_openfortivpn_found_and_saml_supported() -> None:
     def run_command(argv, timeout=3.0):
-        assert argv == ["/usr/bin/openfortivpn", "--version"]
+        assert argv[0] == "/usr/bin/openfortivpn"
         assert timeout > 0
-        return CommandResult(returncode=0, stdout="openfortivpn 1.23.1\n")
+        if argv[1] == "--version":
+            return CommandResult(returncode=0, stdout="openfortivpn 1.24.1\n")
+        if argv[1] == "--help":
+            return CommandResult(returncode=0, stdout="Usage: openfortivpn [--saml-login]\n")
+        raise AssertionError(argv)
 
     check = check_openfortivpn(
-        which=lambda name: "/usr/bin/openfortivpn" if name == "openfortivpn" else None,
+        which=lambda name: None,
         is_executable=lambda path: path == "/usr/bin/openfortivpn",
-        extra_paths=(),
+        extra_paths=("/usr/bin/openfortivpn",),
         run_command=run_command,
         probe_version=True,
     )
     assert check.status is CheckStatus.PASS
-    assert check.summary == "Version 1.23.1"
-    assert check.detail == "/usr/bin/openfortivpn"
+    assert check.summary == "openfortivpn 1.24.1 — SAML supported"
+    assert check.detail == "Effective VPN binary: /usr/bin/openfortivpn"
 
 
 def test_openfortivpn_missing() -> None:
@@ -74,14 +78,14 @@ def test_openfortivpn_missing() -> None:
     )
     assert check.status is CheckStatus.FAIL
     assert "not found" in check.summary.lower()
-    assert "Install openfortivpn" in check.hint
+    assert "Reinstall FortiGate VPN Linux GUI" in check.hint
 
 
 def test_openfortivpn_timeout() -> None:
     check = check_openfortivpn(
-        which=lambda name: "/usr/bin/openfortivpn",
-        is_executable=lambda path: True,
-        extra_paths=(),
+        which=lambda name: None,
+        is_executable=lambda path: path == "/usr/bin/openfortivpn",
+        extra_paths=("/usr/bin/openfortivpn",),
         run_command=lambda *a, **k: CommandResult(timed_out=True),
         probe_version=True,
     )
@@ -89,16 +93,54 @@ def test_openfortivpn_timeout() -> None:
     assert "timed out" in check.summary.lower()
 
 
-def test_openfortivpn_malformed_version() -> None:
-    check = check_openfortivpn(
-        which=lambda name: "/usr/bin/openfortivpn",
-        is_executable=lambda path: True,
-        extra_paths=(),
-        run_command=lambda *a, **k: CommandResult(returncode=0, stdout="not a version"),
-        probe_version=True,
+def test_stock_openfortivpn_without_saml_is_not_pass() -> None:
+    def run_command(argv, timeout=3.0):
+        if argv[1] == "--version":
+            return CommandResult(returncode=0, stdout="openfortivpn 1.21.0\n")
+        return CommandResult(returncode=0, stdout="Usage: openfortivpn [--cookie-on-stdin]\n")
+
+    warning = check_openfortivpn(
+        is_executable=lambda path: path == "/usr/bin/openfortivpn",
+        extra_paths=("/usr/bin/openfortivpn",),
+        run_command=run_command,
+        profile=build_profile(name="Office", gateway="vpn.example.com", use_sso=False),
     )
-    assert check.status is CheckStatus.WARNING
-    assert "parse" in check.summary.lower()
+    assert warning.status is CheckStatus.WARNING
+    assert warning.summary == "openfortivpn 1.21.0 — SAML support unavailable"
+    assert warning.detail == "Effective VPN binary: /usr/bin/openfortivpn"
+
+    failed = check_openfortivpn(
+        is_executable=lambda path: path == "/usr/bin/openfortivpn",
+        extra_paths=("/usr/bin/openfortivpn",),
+        run_command=run_command,
+        profile=build_profile(name="Office", gateway="vpn.example.com", use_sso=True),
+    )
+    assert failed.status is CheckStatus.FAIL
+    assert failed.summary == "openfortivpn 1.21.0 — SAML support unavailable"
+
+
+def test_openfortivpn_diagnostics_prefers_package_owned_binary() -> None:
+    package = "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
+
+    def run_command(argv, timeout=3.0):
+        exe = argv[0]
+        if exe == package:
+            if argv[1] == "--version":
+                return CommandResult(returncode=0, stdout="openfortivpn 1.24.1\n")
+            return CommandResult(returncode=0, stdout="Usage: [--saml-login]\n")
+        if argv[1] == "--version":
+            return CommandResult(returncode=0, stdout="openfortivpn 1.21.0\n")
+        return CommandResult(returncode=0, stdout="Usage: [--cookie-on-stdin]\n")
+
+    check = check_openfortivpn(
+        is_executable=lambda path: path
+        in {package, "/usr/local/bin/openfortivpn", "/usr/bin/openfortivpn"},
+        run_command=run_command,
+        profile=build_profile(name="Office", gateway="vpn.example.com", use_sso=True),
+    )
+    assert check.status is CheckStatus.PASS
+    assert check.summary == "openfortivpn 1.24.1 — SAML supported"
+    assert check.detail == f"Effective VPN binary: {package}"
 
 
 def test_openfortivpn_missing_via_detect() -> None:

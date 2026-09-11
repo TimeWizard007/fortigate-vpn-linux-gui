@@ -37,8 +37,13 @@ from fortigate_vpn_gui.diagnostics.timeouts import (
     TCP_TIMEOUT_SECONDS,
     VERSION_TIMEOUT_SECONDS,
 )
+from fortigate_vpn_gui.helper.executables import (
+    discover_approved_openfortivpn,
+    resolve_approved_executable,
+)
 from fortigate_vpn_gui.helper.handshake import is_valid_helper_version, parse_helper_hello_output
 from fortigate_vpn_gui.helper.protocol import (
+    APPROVED_OPENFORTIVPN_PATHS,
     HELPER_VERSION,
     INSTALLED_HELPER_PATH,
     POLKIT_ACTION_ID,
@@ -47,10 +52,9 @@ from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
 from fortigate_vpn_gui.profiles.model import ConnectionProfile, auth_mode_label
 from fortigate_vpn_gui.system.polkit import POLKIT_POLICY_INSTALL_PATH
 from fortigate_vpn_gui.vpn.capabilities import (
-    WELL_KNOWN_OPENFORTIVPN_PATHS,
+    OpenfortivpnCapabilities,
+    VersionRunner,
     default_is_executable,
-    discover_openfortivpn_paths,
-    parse_openfortivpn_version,
 )
 from fortigate_vpn_gui.vpn.models import ConnectionState, VpnSnapshot, state_label
 
@@ -113,19 +117,29 @@ def check_platform(
     )
 
 
+_SAML_UNAVAILABLE_HINT = (
+    "Ubuntu 24.04's packaged openfortivpn 1.21.0 does not provide --saml-login. "
+    "Reinstall FortiGate VPN Linux GUI so the package-owned SAML-capable "
+    "openfortivpn is present, or install a build whose --help lists --saml-login."
+)
+_OPENFORTIVPN_MISSING_HINT = (
+    "Reinstall FortiGate VPN Linux GUI. The package includes a SAML-capable "
+    "openfortivpn at /usr/libexec/fortigate-vpn-linux-gui/openfortivpn."
+)
+
+
 def check_openfortivpn(
     *,
     which: Which | None = None,
     is_executable: IsExecutable = default_is_executable,
-    extra_paths: Sequence[str] = WELL_KNOWN_OPENFORTIVPN_PATHS,
+    extra_paths: Sequence[str] = APPROVED_OPENFORTIVPN_PATHS,
     run_command: RunArgv | None = None,
     probe_version: bool = True,
     detect: Callable[..., object] | None = None,
+    profile: ConnectionProfile | None = None,
 ) -> DiagnosticCheck:
-    """Locate openfortivpn and optionally query ``--version``."""
-    import shutil
-
-    path: str | None = None
+    """Report the effective helper openfortivpn and whether SAML is available."""
+    del which
     if detect is not None:
         detection = detect(include_version=False, include_capabilities=False)
         if not getattr(detection, "available", False):
@@ -134,77 +148,131 @@ def check_openfortivpn(
                 label="openfortivpn",
                 status=CheckStatus.FAIL,
                 summary="openfortivpn was not found.",
-                hint="Install openfortivpn and retry.",
+                hint=_OPENFORTIVPN_MISSING_HINT,
                 group=GROUP_VPN,
             )
-        path = getattr(detection, "path", None)
-    else:
-        locator = which or shutil.which
-        discovered = discover_openfortivpn_paths(
-            which=locator,
-            is_executable=is_executable,
-            extra_paths=extra_paths,
-        )
-        if discovered:
-            path, _source = discovered[0]
-    if not path:
+
+    discovered = discover_approved_openfortivpn(
+        is_executable=is_executable,
+        extra_paths=extra_paths,
+    )
+    if not discovered:
         return _check(
             check_id="vpn.openfortivpn",
             label="openfortivpn",
             status=CheckStatus.FAIL,
             summary="openfortivpn was not found.",
-            hint="Install openfortivpn and retry.",
+            hint=_OPENFORTIVPN_MISSING_HINT,
             group=GROUP_VPN,
         )
+
+    require_saml = bool(profile is not None and profile.use_sso)
+    runner: VersionRunner | None = None
+    if probe_version and run_command is not None:
+        first_path = discovered[0][0]
+        preview = run_command([first_path, "--version"], timeout=VERSION_TIMEOUT_SECONDS)
+        if preview.timed_out:
+            return _check(
+                check_id="vpn.openfortivpn",
+                label="openfortivpn",
+                status=CheckStatus.WARNING,
+                summary="Version check timed out.",
+                detail=first_path,
+                hint="Retry diagnostics. The binary was found but did not respond in time.",
+                group=GROUP_VPN,
+            )
+        runner = _version_runner_from_command(run_command)
+
+    selected: OpenfortivpnCapabilities | None
+    fallback: OpenfortivpnCapabilities | None = None
+    if runner is not None:
+        selected = resolve_approved_executable(
+            require_saml=require_saml,
+            runner=runner,
+            is_executable=is_executable,
+            extra_paths=extra_paths,
+        )
+        if selected is None:
+            fallback = resolve_approved_executable(
+                require_saml=False,
+                runner=runner,
+                is_executable=is_executable,
+                extra_paths=extra_paths,
+            )
+    else:
+        path, source = discovered[0]
+        selected = OpenfortivpnCapabilities(
+            executable_path=path,
+            version=None,
+            supports_saml=False,
+            supports_cookie_stdin=False,
+            source=source,
+        )
+
+    effective = selected if selected is not None else fallback
+    if effective is None:
+        return _check(
+            check_id="vpn.openfortivpn",
+            label="openfortivpn",
+            status=CheckStatus.FAIL,
+            summary="openfortivpn was not found.",
+            hint=_OPENFORTIVPN_MISSING_HINT,
+            group=GROUP_VPN,
+        )
+
+    version = effective.version or "unknown"
+    detail = f"Effective VPN binary: {effective.executable_path}"
     if not probe_version or run_command is None:
         return _check(
             check_id="vpn.openfortivpn",
             label="openfortivpn",
-            status=CheckStatus.PASS,
-            summary=f"Found at {path}",
-            detail="Run diagnostics to query the version.",
-            group=GROUP_VPN,
-        )
-    result = run_command([path, "--version"], timeout=VERSION_TIMEOUT_SECONDS)
-    if result.timed_out:
-        return _check(
-            check_id="vpn.openfortivpn",
-            label="openfortivpn",
             status=CheckStatus.WARNING,
-            summary="Version check timed out.",
-            detail=path,
-            hint="Retry diagnostics. The binary was found but did not respond in time.",
+            summary=f"openfortivpn {version} — SAML support not probed",
+            detail=detail,
+            hint="Run diagnostics to query --help for --saml-login.",
             group=GROUP_VPN,
         )
-    if result.missing:
-        return _check(
-            check_id="vpn.openfortivpn",
-            label="openfortivpn",
-            status=CheckStatus.FAIL,
-            summary="openfortivpn was not found.",
-            hint="Install openfortivpn and retry.",
-            group=GROUP_VPN,
-        )
-    output = f"{result.stdout}\n{result.stderr}"
-    version = parse_openfortivpn_version(output)
-    if version:
+
+    if effective.supports_saml:
         return _check(
             check_id="vpn.openfortivpn",
             label="openfortivpn",
             status=CheckStatus.PASS,
-            summary=f"Version {version}",
-            detail=path,
+            summary=f"openfortivpn {version} — SAML supported",
+            detail=detail,
             group=GROUP_VPN,
         )
+
+    status = CheckStatus.FAIL if require_saml else CheckStatus.WARNING
     return _check(
         check_id="vpn.openfortivpn",
         label="openfortivpn",
-        status=CheckStatus.WARNING,
-        summary="Could not parse the openfortivpn version.",
-        detail=path,
-        hint="The binary was found but --version output was not recognised.",
+        status=status,
+        summary=f"openfortivpn {version} — SAML support unavailable",
+        detail=detail,
+        hint=_SAML_UNAVAILABLE_HINT,
         group=GROUP_VPN,
     )
+
+
+def _version_runner_from_command(run_command: RunArgv) -> VersionRunner:
+    """Adapt diagnostics CommandResult to a capabilities VersionRunner."""
+    import subprocess
+
+    def runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        result = run_command(argv, timeout=VERSION_TIMEOUT_SECONDS)
+        if result.timed_out:
+            raise subprocess.TimeoutExpired(argv, VERSION_TIMEOUT_SECONDS)
+        if result.missing:
+            raise FileNotFoundError(argv[0])
+        return subprocess.CompletedProcess(
+            argv,
+            0 if result.returncode is None else result.returncode,
+            result.stdout or "",
+            result.stderr or "",
+        )
+
+    return runner
 
 
 def check_helper(

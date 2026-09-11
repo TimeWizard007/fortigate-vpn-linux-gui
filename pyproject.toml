@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fortigate-vpn-linux-gui"
-version = "0.9.0"
+version = "1.0.0"
 description = "Native Linux desktop GUI client for FortiGate SSL VPN"
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -20,7 +20,7 @@ keywords = [
     "vpn",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
@@ -50,6 +50,7 @@ Issues = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui/issues"
 Changelog = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui/blob/main/CHANGELOG.md"
 
 [project.scripts]
+fortigate-vpn-linux-gui = "fortigate_vpn_gui.app:main"
 fortigate-vpn-gui = "fortigate_vpn_gui.app:main"
 fortigate-vpn-helper = "fortigate_vpn_gui.helper.main:main"
 
@@ -60,7 +61,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-fortigate_vpn_gui = ["py.typed"]
+fortigate_vpn_gui = ["py.typed", "resources/icons/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

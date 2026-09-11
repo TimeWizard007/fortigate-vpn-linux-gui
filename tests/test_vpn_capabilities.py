@@ -8,6 +8,7 @@ import subprocess
 from fortigate_vpn_gui.vpn.capabilities import (
     detect_openfortivpn,
     discover_openfortivpn_paths,
+    format_saml_unsupported_message,
     parse_help_capabilities,
     probe_openfortivpn,
     select_openfortivpn,
@@ -88,6 +89,29 @@ def test_no_binary_discovered() -> None:
     assert detection.path is None
 
 
+def test_selects_package_owned_binary_before_usr_local() -> None:
+    runner = _runner_for(
+        {
+            "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn": "openfortivpn 1.24.1",
+            "/usr/local/bin/openfortivpn": "openfortivpn 1.24.1",
+            "/usr/bin/openfortivpn": "openfortivpn 1.21.0",
+        },
+        {
+            "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn": _HELP_SAML,
+            "/usr/local/bin/openfortivpn": _HELP_SAML,
+            "/usr/bin/openfortivpn": _HELP_OLD,
+        },
+    )
+    package = probe_openfortivpn(
+        "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn", "package", runner=runner
+    )
+    local = probe_openfortivpn("/usr/local/bin/openfortivpn", "usr_local", runner=runner)
+    distro = probe_openfortivpn("/usr/bin/openfortivpn", "usr_bin", runner=runner)
+    selected = select_openfortivpn((package, local, distro), require_saml=True)
+    assert selected is not None
+    assert selected.executable_path == "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
+
+
 def test_capability_probe_uses_list_argv() -> None:
     seen: list[list[str]] = []
 
@@ -100,3 +124,10 @@ def test_capability_probe_uses_list_argv() -> None:
     probe_openfortivpn("/usr/local/bin/openfortivpn", "usr_local", runner=runner)
     assert seen[0] == ["/usr/local/bin/openfortivpn", "--version"]
     assert seen[1] == ["/usr/local/bin/openfortivpn", "--help"]
+
+
+def test_saml_unsupported_message_includes_detected_version() -> None:
+    text = format_saml_unsupported_message("1.21.0")
+    assert "1.21.0" in text
+    assert "does not support SAML/SSO" in text
+    assert "SAML-capable openfortivpn" in text

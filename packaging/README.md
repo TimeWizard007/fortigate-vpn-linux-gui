@@ -1,51 +1,80 @@
 # Packaging
 
-Distribution packaging lives here (desktop metadata, polkit policy, and the
-privileged helper install path).
+Debian/Ubuntu packaging for Ubuntu 24.04 LTS (amd64).
 
-## Privileged helper
+The GUI is never installed setuid and never launched with pkexec. The
+privileged helper remains `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`
+and polkit action `com.fortigate-vpn-linux-gui.manage-vpn`. Helper protocol
+**0.7.0** is unchanged from v0.9.0.
 
-Install the helper as a root-owned executable:
+## Build
 
-```text
-/usr/libexec/fortigate-vpn-linux-gui/vpn-helper
-```
-
-Suggested install (from a packaging script, not from the GUI):
+From a clean checkout:
 
 ```bash
-sudo install -D -m 0755 packaging/libexec/vpn-helper \
-  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+./scripts/build-deb.sh
 ```
 
-The helper must be able to import `fortigate_vpn_gui`. Packaged installs
-should place the Python package on the system interpreter path. The GUI
-never copies this file into a world-writable location.
+The script writes `dist/fortigate-vpn-linux-gui_1.0.0-2_amd64.deb` and prints
+its path and SHA-256. It does not install the package, publish anything, or
+modify user configuration.
 
-## polkit
+Build-time tools for the bundled openfortivpn: `gcc`, `make`, `pkg-config`,
+`autoconf`, `automake`, `libssl-dev`. The script downloads the upstream
+**1.24.1** source tarball, verifies SHA-256, and compiles it. It does not
+vendor a prebuilt binary.
 
-Action id: `com.fortigate-vpn-linux-gui.manage-vpn`
+Ubuntu 24.04 does not ship `python3-pyside6`. The package therefore installs a
+**package-owned** private Python environment under
+`/usr/lib/fortigate-vpn-linux-gui/venv` with PySide6 from PyPI wheels. That
+environment is root-owned after install and is not a user venv.
 
-Install the policy file:
+## Install
+
+```bash
+sudo apt install ./dist/fortigate-vpn-linux-gui_1.0.0-2_amd64.deb
+```
+
+Launch:
+
+```bash
+fortigate-vpn-linux-gui
+```
+
+or use the GNOME application menu. Do not run the GUI as root.
+
+## Installed layout
 
 ```text
+/usr/bin/fortigate-vpn-linux-gui
+/usr/lib/fortigate-vpn-linux-gui/venv/
+/usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+/usr/libexec/fortigate-vpn-linux-gui/openfortivpn
+/usr/share/applications/fortigate-vpn-linux-gui.desktop
+/usr/share/icons/hicolor/scalable/apps/fortigate-vpn-linux-gui.svg
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
 ```
 
-```bash
-sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
-  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+The helper is not setuid. Privilege escalation stays on the existing
+polkit/pkexec path. The helper shebang uses the package-owned interpreter so
+it can import `fortigate_vpn_gui` without a Git checkout.
+
+## User data
+
+Profiles stay in:
+
+```text
+${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/
 ```
 
-The policy annotates `org.freedesktop.policykit.exec.path` so pkexec may
-start only that helper. The desktop GUI is never launched with pkexec or
-sudo.
-
-Ubuntu packages: `pkexec` (polkit). The application does not install them.
+`apt remove` and `apt purge` do not delete home-directory profiles. There are
+no maintainer scripts that walk user homes.
 
 ## What this package does not install
 
 - No sudoers rules
-- No setuid `openfortivpn`
+- No setuid `openfortivpn` (the package-owned copy is mode 0755)
+- No replacement of `/usr/bin/openfortivpn`
 - No world-writable helper directories
-- No systemd VPN service in this version
+- No systemd VPN service
+- No passwordless polkit rule

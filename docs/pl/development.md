@@ -9,14 +9,10 @@ GUI zweryfikowano na Ubuntu 24.04 z Pythonem 3.12.
 sudo apt install python3.12-venv libxcb-cursor0
 ```
 
-Do rzeczywistego tunelu:
-
-```bash
-sudo apt install openfortivpn pkexec
-```
-
-Paczka Ubuntu **1.21.0** może nie mieć `--saml-login`; SSO wymaga kompilacji
-z SAML (przetestowano **1.24.1**). Aplikacja **nie** instaluje pakietów sama.
+Do rzeczywistego tunelu z checkoutu potrzebne są `pkexec` oraz openfortivpn
+z `--saml-login` na zatwierdzonej ścieżce. Paczka Ubuntu **1.21.0** nie ma
+tej opcji. Paczka `.deb` dostarcza prywatny **1.24.1**. Aplikacja **nie**
+instaluje pakietów sama.
 
 ## Pomocnik uprzywilejowany (rozwój)
 
@@ -54,4 +50,5 @@ Nie uruchamiaj jako root.
 ```bash
 ruff check src tests
 python -m pytest
+./scripts/build-deb.sh
 ```

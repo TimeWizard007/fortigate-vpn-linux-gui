@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-11
+
+### Added
+
+- Ubuntu 24.04 LTS amd64 Debian package (`fortigate-vpn-linux-gui`)
+- `fortigate-vpn-linux-gui` launcher on PATH and a GNOME desktop entry
+- Application icon (original project artwork, not Fortinet branding)
+- Packaged privileged helper and polkit policy with the `.deb`
+- Package-owned SAML-capable openfortivpn 1.24.1 at `/usr/libexec/fortigate-vpn-linux-gui/openfortivpn`
+
+### Changed
+
+- Application version is 1.0.0; Debian revision is 1.0.0-2
+- README documents package install/remove separately from developer setup
+- Helper, Diagnostics, and Connect use the same approved openfortivpn search order
+- Diagnostics reports whether the effective openfortivpn supports SAML
+- SAML/SSO is refused before pkexec when `--saml-login` is missing
+
+### Security
+
+- privileged helper protocol version remains 0.7.0 (no protocol migration)
+- GUI still never runs as root; helper is not setuid
+- `apt remove` / `apt purge` do not delete user profiles
+- packaged reports, profiles, and credentials are not included in the `.deb`
+
 ## [0.9.0] - 2026-09-11
 
 ### Added
@@ -235,7 +260,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.0...v0.7.1

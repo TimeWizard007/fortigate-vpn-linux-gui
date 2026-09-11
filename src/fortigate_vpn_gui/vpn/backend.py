@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 
+from fortigate_vpn_gui.helper.executables import resolve_approved_executable
 from fortigate_vpn_gui.helper.protocol import (
     CertificateInfo,
     ConnectRequest,
@@ -30,7 +31,10 @@ from fortigate_vpn_gui.system.helper_client import (
     default_helper_client,
 )
 from fortigate_vpn_gui.vpn.browser import BrowserLauncher, BrowserLaunchError, SystemBrowserLauncher
-from fortigate_vpn_gui.vpn.capabilities import OpenfortivpnCapabilities, resolve_executable
+from fortigate_vpn_gui.vpn.capabilities import (
+    OpenfortivpnCapabilities,
+    format_saml_unsupported_message,
+)
 from fortigate_vpn_gui.vpn.classify import OutputHint, classify_output
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
 from fortigate_vpn_gui.vpn.log_buffer import LogBuffer, LogLevel
@@ -56,7 +60,6 @@ DEFAULT_SAML_TIMEOUT_SECONDS = 120.0
 DEFAULT_RECONNECT_DELAY_SECONDS = 5.0
 DEFAULT_RECONNECT_ATTEMPTS = 3
 
-_SAML_REQUIRED_MESSAGE = "SAML/SSO requires openfortivpn with --saml-login support."
 _MISSING_MESSAGE = (
     "VPN connectivity is unavailable because openfortivpn is not installed.\n\n"
     "Recommended Ubuntu command:\n"
@@ -268,6 +271,10 @@ class VpnBackend:
 
         self._wait_helper_idle()
 
+        capabilities = self._resolve_executable(profile)
+        if capabilities is None:
+            return
+
         probe = self._helper.probe()
         with self._lock:
             self._helper_probe = probe
@@ -284,10 +291,6 @@ class VpnBackend:
             self._fail_without_process(
                 VpnErrorCode.HELPER_VERSION_MISMATCH, _HELPER_VERSION_MESSAGE
             )
-            return
-
-        capabilities = self._resolve_executable(profile)
-        if capabilities is None:
             return
 
         try:
@@ -563,14 +566,20 @@ class VpnBackend:
             capabilities = self._selector(True)
             if capabilities is not None:
                 return capabilities
-            if self._locator() or self._selector(False):
+            fallback = self._selector(False)
+            if fallback is not None or self._locator():
+                version = fallback.version if fallback is not None else None
+                message = format_saml_unsupported_message(version)
                 self._log.append("vpn", "No SAML-capable openfortivpn (--saml-login) was found.")
-                self._fail_without_process(VpnErrorCode.SSO_NOT_SUPPORTED, _SAML_REQUIRED_MESSAGE)
+                self._fail_without_process(VpnErrorCode.SSO_NOT_SUPPORTED, message)
                 return None
             self._log.append("vpn", "openfortivpn executable was not found.")
             self._fail_without_process(VpnErrorCode.OPENFORTIVPN_MISSING, _MISSING_MESSAGE)
             return None
 
+        capabilities = self._selector(False)
+        if capabilities is not None:
+            return capabilities
         path = self._locator()
         if path:
             return OpenfortivpnCapabilities(
@@ -580,12 +589,9 @@ class VpnBackend:
                 supports_cookie_stdin=False,
                 source="locator",
             )
-        capabilities = self._selector(False)
-        if capabilities is None:
-            self._log.append("vpn", "openfortivpn executable was not found on PATH.")
-            self._fail_without_process(VpnErrorCode.OPENFORTIVPN_MISSING, _MISSING_MESSAGE)
-            return None
-        return capabilities
+        self._log.append("vpn", "openfortivpn executable was not found.")
+        self._fail_without_process(VpnErrorCode.OPENFORTIVPN_MISSING, _MISSING_MESSAGE)
+        return None
 
     def _begin_session(
         self,
@@ -1387,7 +1393,6 @@ def _helper_error_to_vpn(exc: HelperError) -> tuple[VpnErrorCode, str]:
         VpnErrorCode.HELPER_VERSION_MISMATCH: _HELPER_VERSION_MESSAGE,
         VpnErrorCode.HELPER_STARTUP_FAILED: _HELPER_STARTUP_MESSAGE,
         VpnErrorCode.PRIVILEGE_DENIED: _PRIVILEGE_DENIED_MESSAGE,
-        VpnErrorCode.SSO_NOT_SUPPORTED: _SAML_REQUIRED_MESSAGE,
         VpnErrorCode.OPENFORTIVPN_MISSING: _MISSING_MESSAGE,
         VpnErrorCode.FAILED_TO_START: _START_MESSAGE,
         VpnErrorCode.ALREADY_BUSY: _BUSY_MESSAGE,
@@ -1396,7 +1401,7 @@ def _helper_error_to_vpn(exc: HelperError) -> tuple[VpnErrorCode, str]:
 
 
 def _default_selector(require_saml: bool) -> OpenfortivpnCapabilities | None:
-    return resolve_executable(require_saml=require_saml)
+    return resolve_approved_executable(require_saml=require_saml)
 
 
 __all__ = ["DEFAULT_SAML_TIMEOUT_SECONDS", "VpnBackend", "VpnEvent"]

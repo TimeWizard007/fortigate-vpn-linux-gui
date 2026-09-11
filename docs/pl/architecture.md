@@ -44,7 +44,7 @@ właściwie uruchamia openfortivpn.
 | `helper/service.py` | Connect/disconnect/status; właściciel grupy procesów |
 | `helper/validation.py` | Brama, port, odcisk, operacja |
 | `vpn/command.py` | Lista `[openfortivpn, brama:port]` i opcjonalne flagi |
-| `helper/executables.py` | Tylko `/usr/local/bin` i `/usr/bin` |
+| `helper/executables.py` | `/usr/libexec/.../openfortivpn`, `/usr/local/bin`, `/usr/bin` |
 | `vpn/browser.py` | `xdg-open` po walidacji URL |
 | `helper/certificate.py` | Metadane nieudanej walidacji certyfikatu |
 | `vpn/log_redaction.py` | Hasła, ciasteczka, SAMLResponse, tokeny |
@@ -59,6 +59,7 @@ Lokalizacje instalacji:
 
 ```text
 /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
+/usr/libexec/fortigate-vpn-linux-gui/openfortivpn
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
 ```
 
@@ -73,9 +74,11 @@ Bez SSO: `openfortivpn <brama>:<port>`. SSO:
 `--trusted-cert <sha256>` jako osobny argument. Walidacja TLS nigdy nie jest
 wyłączana.
 
-Kandydaci pomocnika: `/usr/local/bin/openfortivpn`, `/usr/bin/openfortivpn`.
-Zdolności z `--help`. Paczka Ubuntu 24.04 (**1.21.0**) zwykle nie ma SAML;
-przetestowane SAML to **1.24.1**.
+Kandydaci pomocnika, w kolejności:
+`/usr/libexec/fortigate-vpn-linux-gui/openfortivpn`,
+`/usr/local/bin/openfortivpn`, `/usr/bin/openfortivpn`.
+Zdolności z `--help`. Paczka Ubuntu 24.04 (**1.21.0**) nie ma SAML; nasza
+paczka dostarcza prywatny **1.24.1**.
 
 ## Stany połączenia
 

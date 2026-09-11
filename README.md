@@ -1,74 +1,90 @@
 # FortiGate VPN Linux GUI
 
-A modern native Linux desktop GUI client for FortiGate SSL VPN, with
-SAML/SSO authentication using Microsoft Entra ID via the system browser.
+A native Linux desktop client for FortiGate SSL VPN. SAML/SSO uses the system
+browser (for example Microsoft Entra ID via FortiGate). The GUI never runs as
+root.
 
 **This project is independent and is not affiliated with, endorsed by, or
 sponsored by Fortinet.** Fortinet, FortiGate, and FortiClient are trademarks of
 their respective owner(s).
 
-## Status
+## Supported platform
 
-The current version is **0.9.0**. Diagnostics is a first-class troubleshooting
-page: local health status, explicit Run diagnostics for DNS/routing/TCP, and
-a copyable sanitized report. Persistent profiles remain a first-class
-workflow: list, create, edit, duplicate, delete, set default, and connect
-directly from Profiles. SAML/SSO via `--saml-login` and the system browser,
-a polkit privileged helper, and explicit FortiGate certificate pinning are
-unchanged from v0.8.0. Desktop integration adds a system tray, optional
-close-to-tray, optional user autostart, optional auto-reconnect after
-unexpected tunnel loss, and an About page with project/license information.
+Primary release target: **Ubuntu 24.04 LTS, amd64**. Other Debian-family
+distributions are untested.
 
-| Capability | Status |
-| ---------- | ------ |
-| Application window and navigation | Implemented |
-| Persistent connection profiles | Implemented |
-| Connect from Profiles | Implemented |
-| Default profile | Implemented |
-| openfortivpn process lifecycle | Implemented |
-| Connect / disconnect (non-SSO profiles) | Implemented |
-| Logs (in-memory, redacted) | Implemented |
-| Runtime openfortivpn detection | Implemented |
-| SAML / SSO (Microsoft Entra ID, system browser) | Implemented |
-| Privileged helper / polkit | Implemented |
-| Explicit gateway certificate pinning | Implemented |
-| System tray and desktop notifications | Implemented |
-| Optional auto-reconnect | Implemented (off by default) |
-| Optional user autostart | Implemented (off by default) |
-| About / project / license | Implemented |
-| Diagnostics health checks and copyable report | Implemented |
+The current version is **1.0.0**. Helper protocol remains **0.7.0**.
 
-| Capability | Status |
-| ---------- | ------ |
-| Application window and navigation | Implemented |
-| Persistent connection profiles | Implemented |
-| openfortivpn process lifecycle | Implemented |
-| Connect / disconnect (non-SSO profiles) | Implemented |
-| Logs (in-memory, redacted) | Implemented |
-| Runtime openfortivpn detection | Implemented |
-| SAML / SSO (Microsoft Entra ID, system browser) | Implemented |
-| Privileged helper / polkit | Implemented |
-| Explicit gateway certificate pinning | Implemented |
+## Features
 
-SSO profiles send a structured connect request to a minimal privileged helper.
-The helper constructs `[openfortivpn, gateway:port, --saml-login]` (list argv,
-`shell=False`) from approved paths only. The GUI stays unprivileged, receives
-the validated SAML URL, and opens it once in the system browser. FortiGate then
-redirects to Microsoft Entra ID. The local callback listener belongs to
-openfortivpn; this GUI does not bind an extra port.
+- Persistent connection profiles (create, edit, duplicate, delete, default)
+- Connect from Profiles or the Connection page
+- SAML/SSO via `openfortivpn --saml-login` and the system browser
+- Username/password profiles when SSO is not used
+- Explicit FortiGate certificate pinning (never auto-trusted)
+- Privileged helper authorized through polkit (`pkexec` starts only the helper)
+- System tray, optional close-to-tray, optional user autostart
+- Optional auto-reconnect after unexpected tunnel loss (off by default)
+- Diagnostics with DNS, routing, TCP, tunnel, helper, and polkit checks
+- Copyable sanitized diagnostic report
 
-The Ubuntu 24.04 package (`/usr/bin/openfortivpn` 1.21.0) may **not** provide
-`--saml-login`. A newer build such as **openfortivpn 1.24.1** (for example
-`/usr/local/bin/openfortivpn`) is required for SSO. The helper discovers
-approved candidates and prefers a SAML-capable executable. It does not fall
-back to insecure authentication.
+## Install (Ubuntu 24.04)
 
-The GUI never runs as root and never uses sudo. Connecting asks polkit to
-authorize the helper (`pkexec` starts only the helper, not the GUI).
-Passwords, SAML tokens, and SVPNCOOKIE are not stored and are not passed on
-the command line. Gateway certificates are never auto-trusted.
+```bash
+sudo apt install ./fortigate-vpn-linux-gui_1.0.0-2_amd64.deb
+```
 
-## Connection profiles
+`apt` resolves runtime libraries, `pkexec`, `ppp`, and `iproute2`. No virtualenv
+is required. The package includes a private SAML-capable `openfortivpn`
+**1.24.1**; it does not replace `/usr/bin/openfortivpn`.
+
+Launch from the GNOME application menu as **FortiGate VPN Linux GUI**, or:
+
+```bash
+fortigate-vpn-linux-gui
+```
+
+Do not run the GUI as root. Connecting shows a normal polkit prompt when the
+helper needs authorization. SSO then continues in the system browser.
+
+### openfortivpn and SAML
+
+SAML/SSO needs `openfortivpn --saml-login`. Ubuntu 24.04's packaged
+`openfortivpn` is **1.21.0** and does **not** provide that option. This
+application's `.deb` installs a package-owned **1.24.1** at
+`/usr/libexec/fortigate-vpn-linux-gui/openfortivpn`. The helper prefers that
+binary, then `/usr/local/bin/openfortivpn`, then `/usr/bin/openfortivpn`.
+Diagnostics reports the same effective binary. Username/password profiles can
+still use a non-SAML build if that is the only approved binary present.
+
+### Remove
+
+```bash
+sudo apt remove fortigate-vpn-linux-gui
+```
+
+User profiles in `~/.config/fortigate-vpn-linux-gui/` are preserved.
+`apt purge` also leaves those files; delete them yourself if you want them
+gone.
+
+## Usage
+
+1. Start the application.
+2. Add a profile (gateway, port, SAML/SSO or username/password).
+3. Connect. Authorize the helper in the polkit dialog if asked.
+4. For SSO, complete sign-in in the system browser.
+5. If FortiGate presents an unknown certificate, pin it explicitly for that
+   profile or cancel.
+6. Use Diagnostics if a connection fails. **Run diagnostics** then
+   **Copy report** for a sanitized text summary.
+7. Disconnect from the Connection page or the tray. Quit from the tray always
+   shuts the application down (it waits for helper/openfortivpn cleanup).
+
+Closing the window exits by default. Settings can change that to minimize to
+the tray. Autostart only launches the GUI after login; it does not connect the
+VPN.
+
+## Profiles
 
 Profiles are stored per-user as UTF-8 JSON:
 
@@ -76,48 +92,10 @@ Profiles are stored per-user as UTF-8 JSON:
 ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
-Typical Ubuntu path: `~/.config/fortigate-vpn-linux-gui/profiles.json`.
+The file does not store passwords, SAML tokens, cookies, or other secrets.
+`trusted_cert_sha256` is a public certificate pin.
 
-Each profile has a stable id, name, gateway, port (default 443), optional
-description, optional username hint, authentication mode (`use_sso`, default
-on), and an optional `trusted_cert_sha256` pin. The pin is a SHA-256
-fingerprint, not a secret. The document may also store `default_profile_id`
-(exactly one default, or none).
-
-**The profile file does not store passwords, SAML tokens, cookies, client
-secrets, or MFA data.** The application never writes those fields. Duplicate
-copies configuration metadata and the certificate pin; it does not copy
-credentials because none are stored.
-
-Add, edit, duplicate, delete, set default, and connect from the Profiles
-page. The Connection page selector uses the same profile store and selects
-the default profile when none is already chosen.
-
-## openfortivpn
-
-`openfortivpn` is a real runtime dependency for VPN connectivity. The GUI
-still starts if it is missing; the Connection page explains that VPN
-connectivity is unavailable.
-
-On Ubuntu the packaged client is often too old for SAML:
-
-```bash
-sudo apt install openfortivpn
-```
-
-That typically installs **1.21.0** at `/usr/bin/openfortivpn` without
-`--saml-login`. SSO needs a build that advertises `--saml-login` (tested:
-**1.24.1** at `/usr/local/bin/openfortivpn`). The GUI will select the
-SAML-capable binary when an SSO profile is used.
-
-The application never installs packages automatically. It never runs `sudo`
-or `apt`. Connecting uses `pkexec` only to start the privileged helper.
-
-Because `openfortivpn` needs extra rights for PPP, routes, or DNS, it runs
-through the helper after a normal Linux authentication dialog. Do not start
-this GUI as root.
-
-## Architecture (current)
+## Security model
 
 ```text
 GUI                          PySide6 widgets (unprivileged)
@@ -127,128 +105,44 @@ Privileged helper            root via polkit (pkexec)
 openfortivpn                 PPP / routes / DNS
   ↓ SAML URL event
 System browser               unprivileged desktop session
-  ↓
-FortiGate SSL VPN            gateway
 ```
 
-The helper exposes only connect, disconnect, and status. It constructs the
-openfortivpn command itself. The GUI never sends a shell string or an
-arbitrary executable path.
+`pkexec` starts only `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. There
+are no sudoers rules, no setuid helper, and no passwordless polkit policy.
+Passwords and SAML cookies are not stored and are not passed on the command
+line. Copied diagnostic reports are sanitized.
 
-When FortiGate certificate validation fails, the GUI shows a pinning dialog.
-Trust stores the SHA-256 fingerprint on that profile only. A later different
-fingerprint is a certificate-change warning and is never auto-replaced.
+## Troubleshooting
 
-## Desktop integration
+Open **Diagnostics** in the application first. It checks helper/polkit
+install, DNS, the route to the gateway, TCP reachability, and tunnel state
+without starting a VPN by itself. Opening Diagnostics does not show a polkit
+prompt.
 
-The application can use a system tray icon when the desktop provides one. The
-tray shows connection state and offers Show/Hide, Connect, Disconnect,
-Reconnect, Settings, About, and Quit. Quit always shuts the application down
-safely (it waits for helper/openfortivpn cleanup). If no tray is available,
-the main window works as before.
+If SSO fails, confirm `openfortivpn --help` lists `--saml-login`.
 
-Closing the window exits the application by default. Settings can change that
-to **Minimize to system tray**; the VPN keeps running until you Quit from the
-tray. The first time this happens, a short notification explains that the
-app is still running.
+## Development
 
-**Automatically reconnect if VPN connection is lost** is off by default. It
-only runs after an unexpected tunnel loss, not after Disconnect or Quit, and
-not after a certificate rejection. It never auto-approves certificates and
-never skips SAML. Failed authentication does not retry in a loop. Manual
-Reconnect disconnects safely, waits for cleanup, then connects the same
-profile again.
-
-**Start FortiGate VPN Linux GUI automatically after login** writes a user
-`.desktop` file under `~/.config/autostart/`. It does not require root and
-does not connect the VPN at login. Starting the app and connecting remain
-separate.
-
-## Diagnostics
-
-The Diagnostics page answers “why can’t this VPN connect?” without opening a
-terminal first. Opening it does not request administrator rights and does not
-start a VPN.
-
-Lightweight status is shown immediately (application/OS, helper and polkit
-files, selected profile, certificate pin, connection state). **Run
-diagnostics** adds bounded DNS, route, and TCP checks for the selected
-profile. **Copy report** puts a plain-text summary on the clipboard for
-tickets or GitHub issues.
-
-Copied reports are sanitized. They must not include passwords, tokens,
-cookies, SAML payloads, or helper request bodies. A successful TCP connect is
-not proof that SAML or VPN authentication will succeed.
-
-The About page shows the version, author (TimeWizard007), GPL-3.0-or-later
-license, project URL, and a Fortinet independence disclaimer. FortiGate VPN
-Linux GUI is free and open-source software.
-
-## Privileged helper install (development)
-
-```bash
-sudo install -D -m 0755 packaging/libexec/vpn-helper \
-  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
-sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
-  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
-```
-
-The helper must be able to import `fortigate_vpn_gui` (editable install into
-the system interpreter, or a packaged install). Details:
-[`packaging/README.md`](packaging/README.md).
-
-## Requirements
-
-- Linux (Ubuntu is the primary supported distribution)
-- Python 3.10 or newer
-- Qt 6 via PySide6
-- A desktop session (X11 or Wayland)
-- `openfortivpn` to actually start a tunnel (optional for launching the GUI)
-
-On Ubuntu 24.04 with Python 3.12, install the runtime and venv packages
-before creating a virtual environment:
+Developer setup is separate from the packaged application. The installed
+`fortigate-vpn-linux-gui` command must not require this checkout or `.venv`.
 
 ```bash
 sudo apt install python3.12-venv libxcb-cursor0
-```
-
-The `python3.x-venv` package name follows the installed Python version
-(`python3.12-venv` on Ubuntu 24.04, `python3.10-venv` on Ubuntu 22.04 with
-the default Python). `python3-venv` is a metapackage that pulls the matching
-version.
-
-`libxcb-cursor0` provides `libxcb-cursor.so.0`. PySide6/Qt needs it to create
-desktop windows. The application **does not** install this package (or any
-other system package) automatically. At startup it checks that the library
-can be loaded; if it is missing, it shows a dialog with a copyable
-
-`sudo apt install libxcb-cursor0`
-
-command and exits. It never runs `sudo` or `apt` to install packages. `pkexec`
-is used later only to start the VPN helper, never to launch this GUI.
-
-## Development setup
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-```
-
-Run the application (never as root):
-
-```bash
 python -m fortigate_vpn_gui
 ```
 
-Lint and test:
-
 ```bash
 ruff check src tests
-ruff format src tests
 python -m pytest
+./scripts/build-deb.sh
 ```
+
+Development helper install (not required after the `.deb` is installed):
+see [`packaging/README.md`](packaging/README.md).
 
 ## Documentation
 

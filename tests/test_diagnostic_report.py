@@ -25,7 +25,7 @@ def test_report_contains_summary_and_statuses() -> None:
                 id="vpn.openfortivpn",
                 label="openfortivpn",
                 status=CheckStatus.PASS,
-                summary="Version 1.23.1",
+                summary="openfortivpn 1.24.1 — SAML supported",
                 group="VPN Components",
             ),
             DiagnosticCheck(
@@ -69,7 +69,7 @@ def test_report_contains_summary_and_statuses() -> None:
     assert "Gateway: vpn.example.com" in text
     assert "Port: 17414" in text
     assert "Authentication: SAML / SSO" in text
-    assert "[PASS] openfortivpn: Version 1.23.1" in text
+    assert "[PASS] openfortivpn: openfortivpn 1.24.1 — SAML supported" in text
     assert "[PASS] VPN helper:" in text
     assert "[FAIL] Gateway TCP:" in text
     assert "[INFO] VPN interface:" in text

@@ -96,7 +96,8 @@ replaced automatically.
 
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
-- No automatic package installation (`.deb` packaging is planned for v1.0.0).
+- No automatic package installation from the GUI. Ubuntu 24.04 uses the
+  `fortigate-vpn-linux-gui` `.deb`.
 - No direct firewall, route, or DNS changes by the GUI.
 - No password, token, or VPN cookie storage.
 - Logs are in memory only; they are not persisted to disk.

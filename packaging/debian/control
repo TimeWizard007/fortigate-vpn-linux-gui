@@ -1,0 +1,23 @@
+Package: fortigate-vpn-linux-gui
+Version: 1.0.0-2
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: TimeWizard007 <mwi@mwatkowski.eu>
+Homepage: https://github.com/TimeWizard007/fortigate-vpn-linux-gui
+Depends: python3.12, python3, pkexec, polkitd | policykit-1, ppp, iproute2, xdg-utils, libssl3, libxcb-cursor0, libegl1, libgl1, libglib2.0-0, libdbus-1-3, libfontconfig1, libxkbcommon0, libxkbcommon-x11-0, libxcb1, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0, libxcb-xkb1, libxcb-xfixes0, libx11-6, libxext6, libxrender1, libc6, libgcc-s1, libstdc++6
+Description: Native Linux desktop GUI client for FortiGate SSL VPN
+ FortiGate VPN Linux GUI is an independent desktop client for FortiGate
+ SSL VPN on Ubuntu 24.04. It provides persistent profiles, SAML/SSO via
+ the system browser, a polkit privileged helper, certificate pinning,
+ Diagnostics, and a system tray.
+ .
+ This package includes a private SAML-capable openfortivpn 1.24.1 at
+ /usr/libexec/fortigate-vpn-linux-gui/openfortivpn. Ubuntu 24.04's
+ packaged openfortivpn 1.21.0 does not provide --saml-login and is not
+ required. The private binary does not replace /usr/bin/openfortivpn.
+ .
+ The GUI never runs as root. Privileged tunnel setup uses pkexec and
+ /usr/libexec/fortigate-vpn-linux-gui/vpn-helper only.
+ .
+ This package is not affiliated with, endorsed by, or sponsored by Fortinet.

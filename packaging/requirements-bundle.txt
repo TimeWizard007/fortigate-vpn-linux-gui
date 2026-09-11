@@ -1,0 +1,3 @@
+# Runtime wheels bundled into the Ubuntu 24.04 package-owned venv.
+# Ubuntu noble does not ship python3-pyside6. Essentials covers QtWidgets/QtGui/QtCore.
+PySide6_Essentials==6.11.2

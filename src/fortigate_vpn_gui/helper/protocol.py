@@ -15,7 +15,9 @@ HELPER_VERSION = "0.7.0"  # helper protocol; independent of GUI patch releases
 PROTOCOL_VERSION = 1
 POLKIT_ACTION_ID = "com.fortigate-vpn-linux-gui.manage-vpn"
 INSTALLED_HELPER_PATH = "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper"
+PACKAGE_OPENFORTIVPN_PATH = "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
 APPROVED_OPENFORTIVPN_PATHS: tuple[str, ...] = (
+    PACKAGE_OPENFORTIVPN_PATH,
     "/usr/local/bin/openfortivpn",
     "/usr/bin/openfortivpn",
 )

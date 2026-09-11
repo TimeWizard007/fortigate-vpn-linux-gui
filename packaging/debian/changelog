@@ -1,0 +1,11 @@
+fortigate-vpn-linux-gui (1.0.0-2) noble; urgency=medium
+
+  * Ship a package-owned SAML-capable openfortivpn 1.24.1 for Ubuntu 24.04.
+
+ -- TimeWizard007 <mwi@mwatkowski.eu>  Fri, 11 Sep 2026 14:00:00 +0200
+
+fortigate-vpn-linux-gui (1.0.0-1) noble; urgency=medium
+
+  * Initial Ubuntu 24.04 package: desktop launcher, polkit helper, Diagnostics.
+
+ -- TimeWizard007 <mwi@mwatkowski.eu>  Fri, 11 Sep 2026 13:00:00 +0200

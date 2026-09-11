@@ -96,6 +96,17 @@ vgcore.*
 *.log
 logs/
 
+# Debian / packaging output (binaries are published via GitHub Releases)
+*.deb
+*.ddeb
+*.buildinfo
+*.changes
+*.dsc
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+
 # Secrets and local machine configuration
 .env
 .env.*

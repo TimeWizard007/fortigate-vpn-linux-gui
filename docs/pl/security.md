@@ -56,7 +56,8 @@ automatycznie.
 
 - Brak sudo i sudoers.
 - Brak dowolnego wykonywania poleceń root przez pomocnika.
-- Brak automatycznej instalacji pakietów (`.deb` planowane w v1.0.0).
+- Brak automatycznej instalacji pakietów z GUI. Ubuntu 24.04 używa pakietu
+  `.deb` `fortigate-vpn-linux-gui`.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - Brak przechowywania haseł, tokenów i ciasteczek VPN.
 - Logi są tylko w pamięci; nie są zapisywane na dysk.

@@ -155,8 +155,9 @@ class DiagnosticService:
                             which=self._deps.which,
                             is_executable=self._deps.is_executable or default_is_executable,
                             run_command=self._deps.run_argv,
-                            probe_version=request.include_network,
+                            probe_version=True,
                             detect=self._deps.detect,
+                            profile=request.profile,
                         ),
                     )
                 ),

@@ -48,10 +48,16 @@ Dates are not committed. Order may change as design work proceeds.
 - Safer Disconnect/Cancel during all active phases
 - Clearer lifecycle diagnostics and user-facing logs
 
-## v0.9.0 — Diagnostics (current)
+## v0.9.0 — Diagnostics
 
 - Expanded diagnostics for helper, DNS, routing, and VPN interface
 - Diagnostic report export (sanitized, copyable)
+
+## v1.0.0 — packaging and stable release (current)
+
+- Debian/Ubuntu `.deb` for Ubuntu 24.04 LTS amd64
+- Desktop launcher, icon, packaged helper and polkit policy
+- Application version 1.0.0; helper protocol remains 0.7.0
 
 ## v0.8.0 — Profiles UX
 
@@ -76,11 +82,5 @@ Dates are not committed. Order may change as design work proceeds.
 - Optional user-level autostart
 - About / project / license information
 - Graceful shutdown UI
-
-## v1.0.0 — packaging and stable release (planned)
-
-- Debian/Ubuntu `.deb` packaging
-- Desktop launcher/icon packaging
-- Stable release
 
 The GUI must never run as root.

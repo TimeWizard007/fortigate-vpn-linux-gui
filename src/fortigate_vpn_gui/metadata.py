@@ -10,13 +10,16 @@ from __future__ import annotations
 from fortigate_vpn_gui import APP_NAME, __version__
 
 PROJECT_URL = "https://github.com/TimeWizard007/fortigate-vpn-linux-gui"
+LAUNCHER_NAME = "fortigate-vpn-linux-gui"
+INSTALLED_LAUNCHER_PATH = "/usr/bin/fortigate-vpn-linux-gui"
+ICON_NAME = "fortigate-vpn-linux-gui"
+DESKTOP_FILENAME = "fortigate-vpn-linux-gui.desktop"
 AUTHOR = "TimeWizard007"
 LICENSE_SPDX = "GPL-3.0-or-later"
 LICENSE_NAME = "GNU General Public License v3.0 or later"
 LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
 PROJECT_DESCRIPTION = (
-    "A native Linux desktop client for FortiGate SSL VPN with SAML/SSO "
-    "via the system browser."
+    "A native Linux desktop client for FortiGate SSL VPN with SAML/SSO via the system browser."
 )
 ABOUT_LICENSE_TEXT = (
     "FortiGate VPN Linux GUI is free and open-source software licensed under the "
@@ -33,8 +36,7 @@ HOW_IT_WORKS_TEXT = (
     "as root. Sign-in URL query parameters are never shown in the GUI."
 )
 CONNECTION_SSO_NOTICE = (
-    "SSO profiles open your web browser to sign in. See the About page for how "
-    "this works."
+    "SSO profiles open your web browser to sign in. See the About page for how this works."
 )
 FORTINET_DISCLAIMER = (
     "This project is independent and is not affiliated with, sponsored by, or "
@@ -47,8 +49,12 @@ __all__ = [
     "APP_NAME",
     "AUTHOR",
     "CONNECTION_SSO_NOTICE",
+    "DESKTOP_FILENAME",
     "FORTINET_DISCLAIMER",
     "HOW_IT_WORKS_TEXT",
+    "ICON_NAME",
+    "INSTALLED_LAUNCHER_PATH",
+    "LAUNCHER_NAME",
     "LICENSE_NAME",
     "LICENSE_SPDX",
     "LICENSE_URL",

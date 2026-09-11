@@ -14,7 +14,9 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from fortigate_vpn_gui import APP_NAME, __version__
 from fortigate_vpn_gui.gui.dependency_dialog import show_missing_dependency_dialog
+from fortigate_vpn_gui.gui.icons import application_icon
 from fortigate_vpn_gui.gui.main_window import MainWindow
+from fortigate_vpn_gui.metadata import DESKTOP_FILENAME
 from fortigate_vpn_gui.runtime import detach_from_launcher_window, is_running_as_root
 from fortigate_vpn_gui.system.dependencies import (
     PreflightReport,
@@ -122,6 +124,8 @@ def _configure_application(app: QApplication) -> None:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName("fortigate-vpn-linux-gui")
+    app.setDesktopFileName(DESKTOP_FILENAME.removesuffix(".desktop"))
+    app.setWindowIcon(application_icon())
     app.setStyle("Fusion")
 
 
