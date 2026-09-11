@@ -31,7 +31,7 @@ top of the hardened connection lifecycle and polkit helper.
 - Passwords, SAML cookies, and tokens are not stored.
 - The GUI does not modify firewall rules, routes, or DNS itself.
 - Packages are never installed automatically. `.deb` packaging is planned
-  for v0.8.0.
+  for a later release (v1.0.0).
 - Logs are in-memory only and are redacted. They are not written to disk.
 - The full SAML URL is not shown; copy uses origin+path only.
 - Profiles are local per-user JSON. They are not synced and not encrypted

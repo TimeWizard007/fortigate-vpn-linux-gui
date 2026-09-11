@@ -3,6 +3,11 @@
 
 This module belongs to the application layer. Qt widgets must call it rather
 than reading or writing JSON themselves.
+
+There is exactly one optional default profile. Deleting it clears the default
+instead of silently choosing another profile. Duplicate copies safe metadata
+(including the certificate pin) and never copies passwords or tokens — those
+fields are not stored.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from fortigate_vpn_gui.profiles.model import (
     ProfileValidationError,
     build_profile,
     new_profile_id,
+    unique_copy_name,
 )
 from fortigate_vpn_gui.profiles.storage import ProfileStore
 
@@ -23,7 +29,7 @@ _UNSET = object()
 
 
 class ProfileManager:
-    """List, add, update, and delete connection profiles."""
+    """List, add, update, duplicate, and delete connection profiles."""
 
     def __init__(
         self,
@@ -37,6 +43,7 @@ class ProfileManager:
         else:
             self._store = ProfileStore(path=path, config_dir=config_dir)
         self._profiles: list[ConnectionProfile] = []
+        self._default_profile_id: str | None = None
         self._listeners: list[Callable[[], None]] = []
         self.load()
 
@@ -58,13 +65,30 @@ class ProfileManager:
                 return profile
         return None
 
+    def default_profile_id(self) -> str | None:
+        """Return the id of the explicit default profile, if any."""
+        return self._default_profile_id
+
+    def default_profile(self) -> ConnectionProfile | None:
+        if self._default_profile_id is None:
+            return None
+        return self.get(self._default_profile_id)
+
+    def is_default(self, profile_id: str) -> bool:
+        return self._default_profile_id == profile_id
+
     def load(self) -> None:
         """Reload from disk. Invalid files become an empty list."""
-        self._profiles = list(self._store.load())
+        document = self._store.load()
+        self._profiles = list(document.profiles)
+        default_id = document.default_profile_id
+        if default_id is not None and self.get(default_id) is None:
+            default_id = None
+        self._default_profile_id = default_id
 
     def save(self) -> None:
         """Persist the current list. Creates the config directory if needed."""
-        self._store.save(self._profiles)
+        self._store.save(self._profiles, default_profile_id=self._default_profile_id)
 
     def add(
         self,
@@ -77,8 +101,7 @@ class ProfileManager:
         use_sso: object = True,
         trusted_cert_sha256: object = None,
     ) -> ConnectionProfile:
-        profile = build_profile(
-            profile_id=new_profile_id(),
+        profile = self._validated_profile(
             name=name,
             gateway=gateway,
             port=port,
@@ -87,7 +110,6 @@ class ProfileManager:
             use_sso=use_sso,
             trusted_cert_sha256=trusted_cert_sha256,
         )
-        self._ensure_unique_name(profile.name)
         self._profiles.append(profile)
         self._persist_and_notify()
         return profile
@@ -108,7 +130,7 @@ class ProfileManager:
         if existing is None:
             raise ProfileNotFoundError(profile_id)
         pin = existing.trusted_cert_sha256 if trusted_cert_sha256 is _UNSET else trusted_cert_sha256
-        profile = build_profile(
+        profile = self._validated_profile(
             profile_id=profile_id,
             name=name,
             gateway=gateway,
@@ -117,11 +139,50 @@ class ProfileManager:
             username_hint=username_hint,
             use_sso=use_sso,
             trusted_cert_sha256=pin,
+            ignore_id=profile_id,
         )
-        self._ensure_unique_name(profile.name, ignore_id=profile_id)
         self._profiles = [profile if item.id == profile_id else item for item in self._profiles]
         self._persist_and_notify()
         return profile
+
+    def duplicate(self, profile_id: str) -> ConnectionProfile:
+        """Copy safe non-secret metadata into a new profile with a unique name.
+
+        The certificate pin is copied because it is a public fingerprint, not a
+        credential. Passwords and tokens are not stored, so they are not copied.
+        Default status is not copied.
+        """
+        existing = self.get(profile_id)
+        if existing is None:
+            raise ProfileNotFoundError(profile_id)
+        name = unique_copy_name(existing.name, (item.name for item in self._profiles))
+        return self.add(
+            name=name,
+            gateway=existing.gateway,
+            port=existing.port,
+            description=existing.description,
+            username_hint=existing.username_hint,
+            use_sso=existing.use_sso,
+            trusted_cert_sha256=existing.trusted_cert_sha256,
+        )
+
+    def set_default(self, profile_id: str) -> ConnectionProfile:
+        """Mark *profile_id* as the only default profile."""
+        existing = self.get(profile_id)
+        if existing is None:
+            raise ProfileNotFoundError(profile_id)
+        if self._default_profile_id == profile_id:
+            return existing
+        self._default_profile_id = profile_id
+        self._persist_and_notify()
+        return existing
+
+    def clear_default(self) -> None:
+        """Clear the default selection without choosing a replacement."""
+        if self._default_profile_id is None:
+            return
+        self._default_profile_id = None
+        self._persist_and_notify()
 
     def set_trusted_certificate(self, profile_id: str, fingerprint: object) -> ConnectionProfile:
         """Pin a SHA-256 fingerprint on an existing profile."""
@@ -144,13 +205,60 @@ class ProfileManager:
         return self.set_trusted_certificate(profile_id, None)
 
     def delete(self, profile_id: str) -> bool:
-        """Remove a profile. Returns False if the id was not present."""
+        """Remove a profile. Returns False if the id was not present.
+
+        Deleting the default profile clears the default. An active VPN session
+        is not disconnected by this method.
+        """
         remaining = [item for item in self._profiles if item.id != profile_id]
         if len(remaining) == len(self._profiles):
             return False
         self._profiles = remaining
+        if self._default_profile_id == profile_id:
+            self._default_profile_id = None
         self._persist_and_notify()
         return True
+
+    def _validated_profile(
+        self,
+        *,
+        profile_id: str | None = None,
+        name: object,
+        gateway: object,
+        port: object = 443,
+        description: object = "",
+        username_hint: object = "",
+        use_sso: object = True,
+        trusted_cert_sha256: object = None,
+        ignore_id: str | None = None,
+    ) -> ConnectionProfile:
+        errors: list[str] = []
+        field_errors: dict[str, str] = {}
+        profile: ConnectionProfile | None = None
+        try:
+            profile = build_profile(
+                profile_id=profile_id if profile_id is not None else new_profile_id(),
+                name=name,
+                gateway=gateway,
+                port=port,
+                description=description,
+                username_hint=username_hint,
+                use_sso=use_sso,
+                trusted_cert_sha256=trusted_cert_sha256,
+            )
+        except ProfileValidationError as exc:
+            errors.extend(exc.errors)
+            field_errors.update(exc.field_errors)
+        candidate_name = profile.name if profile is not None else str(name or "").strip()
+        if candidate_name:
+            try:
+                self._ensure_unique_name(candidate_name, ignore_id=ignore_id)
+            except ProfileValidationError as exc:
+                errors.extend(exc.errors)
+                field_errors.update(exc.field_errors)
+        if errors or profile is None:
+            raise ProfileValidationError(errors, field_errors=field_errors)
+        return profile
 
     def _ensure_unique_name(self, name: str, *, ignore_id: str | None = None) -> None:
         needle = name.casefold()
@@ -158,7 +266,8 @@ class ProfileManager:
             if ignore_id is not None and item.id == ignore_id:
                 continue
             if item.name.casefold() == needle:
-                raise ProfileValidationError([f'A profile named "{item.name}" already exists.'])
+                message = "A profile with this name already exists."
+                raise ProfileValidationError([message], field_errors={"name": message})
 
     def _persist_and_notify(self) -> None:
         self.save()

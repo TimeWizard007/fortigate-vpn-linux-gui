@@ -59,8 +59,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
 Stored fields: `id`, `name`, `gateway`, `port`, `description`,
-`username_hint`, `use_sso`, optional `trusted_cert_sha256`. Passwords, SAML
-tokens, cookies, and other secrets are never written.
+`username_hint`, `use_sso`, optional `trusted_cert_sha256`, and document-level
+`default_profile_id`. Passwords, SAML tokens, cookies, and other secrets are
+never written. Duplicate copies metadata and the certificate pin only.
 
 Pytest uses a temporary `XDG_CONFIG_HOME` so tests never modify the real
 `~/.config`.

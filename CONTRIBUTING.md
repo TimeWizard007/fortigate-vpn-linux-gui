@@ -7,7 +7,7 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.7.1 is a UI/UX polish of the v0.7.0 desktop baseline. The GUI must never
+v0.8.0 is a Profiles UX release on the v0.7.1 desktop baseline. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
 auto-trust certificates or skip SAML.

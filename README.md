@@ -9,17 +9,20 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.7.1**. Persistent profiles, SAML/SSO via
-`--saml-login` and the system browser, a polkit privileged helper, and
-explicit FortiGate certificate pinning are implemented. Connection lifecycle
-is hardened. Desktop integration adds a system tray, optional close-to-tray,
-optional user autostart, optional auto-reconnect after unexpected tunnel
-loss, and an About page with project/license information.
+The current version is **0.8.0**. Persistent profiles are a first-class
+workflow: list, create, edit, duplicate, delete, set default, and connect
+directly from Profiles. SAML/SSO via `--saml-login` and the system browser,
+a polkit privileged helper, and explicit FortiGate certificate pinning are
+unchanged from v0.7.1. Desktop integration adds a system tray, optional
+close-to-tray, optional user autostart, optional auto-reconnect after
+unexpected tunnel loss, and an About page with project/license information.
 
 | Capability | Status |
 | ---------- | ------ |
 | Application window and navigation | Implemented |
 | Persistent connection profiles | Implemented |
+| Connect from Profiles | Implemented |
+| Default profile | Implemented |
 | openfortivpn process lifecycle | Implemented |
 | Connect / disconnect (non-SSO profiles) | Implemented |
 | Logs (in-memory, redacted) | Implemented |
@@ -73,16 +76,19 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 Typical Ubuntu path: `~/.config/fortigate-vpn-linux-gui/profiles.json`.
 
 Each profile has a stable id, name, gateway, port (default 443), optional
-description, optional username hint, a Use SSO flag (default on), and an
-optional `trusted_cert_sha256` pin. The pin is a SHA-256 fingerprint, not a
-secret.
+description, optional username hint, authentication mode (`use_sso`, default
+on), and an optional `trusted_cert_sha256` pin. The pin is a SHA-256
+fingerprint, not a secret. The document may also store `default_profile_id`
+(exactly one default, or none).
 
 **The profile file does not store passwords, SAML tokens, cookies, client
-secrets, or MFA data.** The application never writes those fields.
+secrets, or MFA data.** The application never writes those fields. Duplicate
+copies configuration metadata and the certificate pin; it does not copy
+credentials because none are stored.
 
-Add, edit, and delete profiles on the Profiles page. The Connection page
-selector updates immediately. The Settings and Diagnostics pages show the
-configuration path as read-only.
+Add, edit, duplicate, delete, set default, and connect from the Profiles
+page. The Connection page selector uses the same profile store and selects
+the default profile when none is already chosen.
 
 ## openfortivpn
 

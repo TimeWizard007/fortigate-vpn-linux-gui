@@ -31,7 +31,7 @@ def test_connection_page_with_sso_profile(qapp, profile_manager: ProfileManager)
     )
     assert page.connect_enabled() is True
     assert page.action_text() == "Connect with SSO"
-    assert page.sso_text() == "Enabled"
+    assert page.sso_text() == "SAML / SSO"
     page._on_action_clicked()
     page.apply_snapshot(harness.backend.snapshot())
     assert harness.process is not None

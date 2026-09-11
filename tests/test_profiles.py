@@ -16,8 +16,10 @@ from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import (
     FORBIDDEN_SECRET_KEYS,
     STORED_FIELDS,
+    ProfileNotFoundError,
     ProfileValidationError,
     build_profile,
+    unique_copy_name,
 )
 from fortigate_vpn_gui.profiles.storage import (
     ProfileStore,
@@ -40,25 +42,52 @@ def test_valid_profile() -> None:
     assert profile.port == 443
     assert profile.use_sso is True
     assert profile.id
+    assert profile.auth_label() == "SAML / SSO"
+
+
+def test_valid_ip_gateway() -> None:
+    profile = build_profile(name="Lab", gateway="192.0.2.10")
+    assert profile.gateway == "192.0.2.10"
+
+
+def test_gateway_strips_whitespace() -> None:
+    profile = build_profile(name="Office", gateway="  vpn.example.com  ")
+    assert profile.gateway == "vpn.example.com"
 
 
 def test_invalid_empty_name() -> None:
-    with pytest.raises(ProfileValidationError, match="name cannot be empty") as exc:
+    with pytest.raises(ProfileValidationError, match="Profile name is required") as exc:
         build_profile(name="  ", gateway="vpn.example.com")
+    assert exc.value.field_errors["name"] == "Profile name is required."
     assert any("name" in error.lower() for error in exc.value.errors)
 
 
 def test_invalid_empty_gateway() -> None:
-    with pytest.raises(ProfileValidationError, match="Gateway cannot be empty"):
+    with pytest.raises(ProfileValidationError, match="Gateway is required") as exc:
         build_profile(name="Office", gateway="")
+    assert exc.value.field_errors["gateway"] == "Gateway is required."
 
 
-def test_invalid_port() -> None:
-    with pytest.raises(ProfileValidationError, match="Port must be an integer"):
+def test_invalid_gateway_url() -> None:
+    with pytest.raises(ProfileValidationError, match="Enter a valid gateway") as exc:
+        build_profile(name="Office", gateway="https://vpn.example.com")
+    assert exc.value.field_errors["gateway"] == "Enter a valid gateway."
+
+
+def test_invalid_gateway_with_path() -> None:
+    with pytest.raises(ProfileValidationError, match="Enter a valid gateway"):
+        build_profile(name="Office", gateway="vpn.example.com/ssl")
+
+
+def test_port_bounds() -> None:
+    assert build_profile(name="Office", gateway="vpn.example.com", port=1).port == 1
+    assert build_profile(name="Office", gateway="vpn.example.com", port=65535).port == 65535
+    with pytest.raises(ProfileValidationError, match="Port must be between 1 and 65535") as exc:
         build_profile(name="Office", gateway="vpn.example.com", port=0)
-    with pytest.raises(ProfileValidationError, match="Port must be an integer"):
+    assert exc.value.field_errors["port"] == "Port must be between 1 and 65535."
+    with pytest.raises(ProfileValidationError, match="Port must be between 1 and 65535"):
         build_profile(name="Office", gateway="vpn.example.com", port=65536)
-    with pytest.raises(ProfileValidationError, match="Port must be an integer"):
+    with pytest.raises(ProfileValidationError, match="Port must be between 1 and 65535"):
         build_profile(name="Office", gateway="vpn.example.com", port=True)
 
 
@@ -89,7 +118,8 @@ def test_malformed_json_does_not_crash(tmp_path: Path) -> None:
     path = tmp_path / "profiles.json"
     path.write_text("{not-json", encoding="utf-8")
     store = ProfileStore(path)
-    assert store.load() == []
+    assert store.load().profiles == []
+    assert store.load().default_profile_id is None
 
 
 def test_duplicate_ids_keep_first(tmp_path: Path) -> None:
@@ -114,7 +144,7 @@ def test_duplicate_ids_keep_first(tmp_path: Path) -> None:
         ],
     }
     path.write_text(json.dumps(document), encoding="utf-8")
-    profiles = ProfileStore(path).load()
+    profiles = ProfileStore(path).load().profiles
     assert len(profiles) == 1
     assert profiles[0].name == "First"
 
@@ -136,7 +166,7 @@ def test_unknown_fields_are_ignored(tmp_path: Path) -> None:
         ],
     }
     path.write_text(json.dumps(document), encoding="utf-8")
-    profiles = ProfileStore(path).load()
+    profiles = ProfileStore(path).load().profiles
     assert len(profiles) == 1
     dumped = profiles[0].to_json()
     assert "password" not in dumped
@@ -160,8 +190,20 @@ def test_add_update_delete(tmp_path: Path) -> None:
 def test_duplicate_name_rejected(tmp_path: Path) -> None:
     manager = ProfileManager(config_dir=tmp_path / "cfg")
     manager.add(name="Office", gateway="vpn.example.com")
-    with pytest.raises(ProfileValidationError, match="already exists"):
+    with pytest.raises(ProfileValidationError, match="already exists") as exc:
         manager.add(name="office", gateway="other.example")
+    assert exc.value.field_errors["name"] == "A profile with this name already exists."
+
+
+def test_update_to_duplicate_name_rejected(tmp_path: Path) -> None:
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    first = manager.add(name="Office", gateway="vpn.example.com")
+    second = manager.add(name="Home", gateway="home.example")
+    with pytest.raises(ProfileValidationError, match="already exists"):
+        manager.update(second.id, name="office", gateway="home.example")
+    still = manager.get(first.id)
+    assert still is not None
+    assert still.name == "Office"
 
 
 def test_no_secret_fields_stored(tmp_path: Path) -> None:
@@ -192,9 +234,121 @@ def test_old_schema_loads_without_trusted_cert(tmp_path: Path) -> None:
         ],
     }
     path.write_text(json.dumps(document), encoding="utf-8")
-    profiles = ProfileStore(path).load()
-    assert len(profiles) == 1
-    assert profiles[0].trusted_cert_sha256 is None
+    loaded = ProfileStore(path).load()
+    assert len(loaded.profiles) == 1
+    assert loaded.profiles[0].trusted_cert_sha256 is None
+    assert loaded.default_profile_id is None
+
+
+def test_v071_config_migration_preserves_profiles(tmp_path: Path) -> None:
+    path = tmp_path / "cfg" / "profiles.json"
+    path.parent.mkdir()
+    document = {
+        "version": 1,
+        "profiles": [
+            {
+                "id": "legacy-office",
+                "name": "Office",
+                "gateway": "vpn.example.com",
+                "port": 443,
+                "description": "HQ",
+                "username_hint": "ada",
+                "use_sso": True,
+            },
+            {
+                "id": "legacy-lab",
+                "name": "Lab",
+                "gateway": "192.0.2.10",
+                "port": 10443,
+                "use_sso": False,
+            },
+        ],
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    manager = ProfileManager(path=path)
+    assert [item.name for item in manager.list_profiles()] == ["Office", "Lab"]
+    assert manager.default_profile_id() is None
+    office = manager.get("legacy-office")
+    assert office is not None
+    manager.set_default(office.id)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["version"] == 1
+    assert raw["default_profile_id"] == "legacy-office"
+    assert raw["profiles"][0]["name"] == "Office"
+    assert raw["profiles"][1]["gateway"] == "192.0.2.10"
+    assert "password" not in json.dumps(raw)
+
+
+def test_default_profile_persistence(tmp_path: Path) -> None:
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    first = manager.add(name="Office", gateway="vpn.example.com")
+    second = manager.add(name="Home", gateway="home.example")
+    manager.set_default(second.id)
+    assert manager.default_profile_id() == second.id
+    manager.set_default(first.id)
+    assert manager.default_profile_id() == first.id
+    reloaded = ProfileManager(config_dir=tmp_path / "cfg")
+    assert reloaded.default_profile_id() == first.id
+    assert reloaded.is_default(first.id) is True
+    assert reloaded.is_default(second.id) is False
+
+
+def test_deleting_default_clears_default(tmp_path: Path) -> None:
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    first = manager.add(name="Office", gateway="vpn.example.com")
+    second = manager.add(name="Home", gateway="home.example")
+    manager.set_default(first.id)
+    assert manager.delete(first.id) is True
+    assert manager.default_profile_id() is None
+    assert manager.get(second.id) is not None
+    reloaded = ProfileManager(config_dir=tmp_path / "cfg")
+    assert reloaded.default_profile_id() is None
+    assert len(reloaded.list_profiles()) == 1
+
+
+def test_set_default_unknown_id(tmp_path: Path) -> None:
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    with pytest.raises(ProfileNotFoundError):
+        manager.set_default("missing")
+
+
+def test_unique_copy_name_collision() -> None:
+    names = ["Office", "Office (copy)"]
+    assert unique_copy_name("Office", names) == "Office (copy 2)"
+    assert unique_copy_name("Office", ["Lab"]) == "Office (copy)"
+
+
+def test_duplicate_copies_safe_metadata_only(tmp_path: Path) -> None:
+    digest = "ab" * 32
+    manager = ProfileManager(config_dir=tmp_path / "cfg")
+    original = manager.add(
+        name="Customer ABC",
+        gateway="vpn.example.com",
+        port=10443,
+        description="Prod",
+        username_hint="ada",
+        use_sso=False,
+        trusted_cert_sha256=digest,
+    )
+    manager.set_default(original.id)
+    copy = manager.duplicate(original.id)
+    assert copy.id != original.id
+    assert copy.name == "Customer ABC (copy)"
+    assert copy.gateway == original.gateway
+    assert copy.port == original.port
+    assert copy.description == original.description
+    assert copy.username_hint == original.username_hint
+    assert copy.use_sso is False
+    assert copy.trusted_cert_sha256 == digest
+    assert manager.is_default(copy.id) is False
+    second = manager.duplicate(original.id)
+    assert second.name == "Customer ABC (copy 2)"
+    raw = json.loads(manager.storage_path.read_text(encoding="utf-8"))
+    payload = json.dumps(raw)
+    assert "password" not in payload
+    assert "token" not in payload
+    for record in raw["profiles"]:
+        assert "password" not in record
 
 
 def test_trusted_cert_round_trip(tmp_path: Path) -> None:
@@ -240,6 +394,6 @@ def test_malformed_fingerprint_on_load_is_dropped(tmp_path: Path) -> None:
         ],
     }
     path.write_text(json.dumps(document), encoding="utf-8")
-    profiles = ProfileStore(path).load()
+    profiles = ProfileStore(path).load().profiles
     assert len(profiles) == 1
     assert profiles[0].trusted_cert_sha256 is None

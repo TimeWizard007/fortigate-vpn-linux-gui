@@ -117,9 +117,12 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
 Schemat (wersja 1): `id`, `name`, `gateway`, `port`, `description`,
-`username_hint`, `use_sso`, opcjonalne `trusted_cert_sha256`.
+`username_hint`, `use_sso`, opcjonalne `trusted_cert_sha256`. Dokument może
+zawierać `default_profile_id` (dokładnie jeden profil domyślny albo żaden).
+Pliki v0.7.1 bez tego klucza wczytują się bez profilu domyślnego.
 
-Hasła, tokeny SAML, ciasteczka i dane MFA nie są przechowywane.
+Hasła, tokeny SAML, ciasteczka i dane MFA nie są przechowywane. Duplikowanie
+kopiuje bezpieczne metadane i pin certyfikatu, nie poświadczenia.
 
 ## Cenzura logów
 

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-11
+
+### Added
+
+- Profiles list shows name, gateway:port, authentication type, default marker, and Connect
+- Connect from the Profiles page using the existing VPN/SAML/certificate-trust flow
+- Duplicate profile with deterministic unique names (`(copy)`, `(copy 2)`, …)
+- Explicit default profile (exactly one; deleting it clears the default)
+- Empty state on the Profiles page when no profiles exist
+- Field-level validation for profile name, gateway, and port
+
+### Changed
+
+- Profile editor uses explicit SAML / SSO vs Username / Password authentication
+- Connection page selector follows the Profiles store, including the default profile
+- Duplicate copies safe metadata and the certificate pin; passwords and tokens are not stored
+
+### Security
+
+- privileged helper protocol version remains 0.7.0 (no helper reinstall required)
+- profile JSON still contains no passwords, SAML tokens, cookies, or other secrets
+
 ## [0.7.1] - 2026-09-11
 
 ### Changed
@@ -194,7 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.5.0...v0.6.0

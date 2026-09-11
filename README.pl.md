@@ -9,18 +9,22 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.7.1**. Trwałe profile, SAML/SSO przez `--saml-login`
-i systemową przeglądarkę, pomocnik uprzywilejowany polkit oraz jawne
-przypinanie certyfikatu FortiGate są zaimplementowane. Cykl życia połączenia
-jest utwardzony. Integracja z pulpitem dodaje zasobnik systemowy, opcjonalne
-zamykanie do zasobnika, opcjonalny autostart użytkownika, opcjonalne
-ponawianie połączenia po nieoczekiwanej utracie tunelu oraz stronę About
-z informacją o projekcie i licencji.
+Aktualna wersja to **0.8.0**. Profile są pełnym przepływem pracy: lista,
+tworzenie, edycja, duplikowanie, usuwanie, ustawianie domyślnego i łączenie
+bezpośrednio ze strony Profiles. SAML/SSO przez `--saml-login` i
+systemową przeglądarkę, pomocnik uprzywilejowany polkit oraz jawne
+przypinanie certyfikatu FortiGate pozostają bez zmian względem v0.7.1.
+Integracja z pulpitem dodaje zasobnik systemowy, opcjonalne zamykanie do
+zasobnika, opcjonalny autostart użytkownika, opcjonalne ponawianie
+połączenia po nieoczekiwanej utracie tunelu oraz stronę About z informacją
+o projekcie i licencji.
 
 | Funkcja | Status |
 | ------- | ------ |
 | Okno aplikacji i nawigacja | Zaimplementowane |
 | Trwałe profile połączeń | Zaimplementowane |
+| Łączenie ze strony Profiles | Zaimplementowane |
+| Profil domyślny | Zaimplementowany |
 | Cykl życia procesu openfortivpn | Zaimplementowany |
 | Połączenie / rozłączenie (profile bez SSO) | Zaimplementowane |
 | Logi (w pamięci, ocenzurowane) | Zaimplementowane |
@@ -75,16 +79,19 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 Typowa ścieżka na Ubuntu: `~/.config/fortigate-vpn-linux-gui/profiles.json`.
 
 Każdy profil ma stały identyfikator, nazwę, bramę, port (domyślnie 443),
-opcjonalny opis, opcjonalną podpowiedź nazwy użytkownika, flagę Use SSO
-(domyślnie włączona) oraz opcjonalny pin `trusted_cert_sha256`. Pin to
-odcisk SHA-256, nie sekret.
+opcjonalny opis, opcjonalną podpowiedź nazwy użytkownika, tryb
+uwierzytelniania (`use_sso`, domyślnie włączone) oraz opcjonalny pin
+`trusted_cert_sha256`. Pin to odcisk SHA-256, nie sekret. Dokument może też
+przechowywać `default_profile_id` (dokładnie jeden profil domyślny albo żaden).
 
 **Plik profili nie przechowuje haseł, tokenów SAML, ciasteczek, sekretów
-klienta ani danych MFA.** Aplikacja nigdy nie zapisuje tych pól.
+klienta ani danych MFA.** Aplikacja nigdy nie zapisuje tych pól. Duplikowanie
+kopiuje metadane konfiguracji i pin certyfikatu; nie kopiuje poświadczeń,
+bo żadne nie są przechowywane.
 
-Dodawanie, edycja i usuwanie są na stronie Profiles. Selektor na stronie
-Connection odświeża się od razu. Strony Settings i Diagnostics pokazują ścieżkę
-pliku konfiguracyjnego tylko do odczytu.
+Dodawanie, edycja, duplikowanie, usuwanie, ustawianie domyślnego i łączenie
+są na stronie Profiles. Selektor na stronie Connection korzysta z tego
+samego magazynu i wybiera profil domyślny, gdy żaden nie jest już wybrany.
 
 ## openfortivpn
 

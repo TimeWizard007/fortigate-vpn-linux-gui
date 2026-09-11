@@ -44,7 +44,14 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Bezpieczniejszy Disconnect/Cancel we wszystkich fazach aktywnych
 - Jaśniejsza diagnostyka cyklu życia i logi dla użytkownika
 
-## v0.7.1 — dopracowanie UI/UX (obecnie)
+## v0.8.0 — Profiles UX (obecnie)
+
+- Zarządzanie profilami dla wielu bram FortiGate
+- Łączenie z listy profili przez istniejący kontroler VPN
+- Duplikowanie, profil domyślny, pusty stan, walidacja pól
+- Unikalne nazwy (bez rozróżniania wielkości liter); konfiguracja v0.7.1 nadal się wczytuje
+
+## v0.7.1 — dopracowanie UI/UX
 
 - Krótszy opis SSO na stronie Connection
 - Hierarchia przycisków Disconnect / Reconnect
@@ -61,21 +68,15 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - About / projekt / licencja
 - Widoczne, bezpieczne zamykanie aplikacji
 
-## v0.8.0 — pakietowanie (planowane)
+## v0.9.0 — diagnostyka (planowane)
+
+- Rozszerzona diagnostyka pomocnika, DNS, routingu i interfejsu VPN
+- Eksport raportu diagnostycznego
+
+## v1.0.0 — pakietowanie i wydanie stabilne (planowane)
 
 - Pakiet Debian/Ubuntu `.deb`
-- Instalacja GUI, pomocnika, polkit i plików pulpitu
-- Zachowanie przy odinstalowaniu i aktualizacji
 - Launcher i ikona pulpitu
-
-## v0.9.0 — utwardzanie (planowane)
-
-- Utwardzanie bezpieczeństwa
-- Szersze testy
-- Walidacja wydania
-
-## v1.0.0 — wydanie stabilne (planowane)
-
 - Wydanie stabilne
 
 GUI nigdy nie może działać jako root.

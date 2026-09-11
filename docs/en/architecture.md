@@ -182,14 +182,18 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 
 JSON schema (version 1): `id`, `name`, `gateway`, `port` (default 443),
 `description`, `username_hint`, `use_sso` (default true), optional
-`trusted_cert_sha256`.
+`trusted_cert_sha256`. The document may include `default_profile_id`
+(exactly one default, or none). v0.7.1 files without that key load with no
+default.
 
 Passwords, SAML tokens, cookies, client secrets, and MFA data are not stored.
 Unknown JSON fields are ignored. Malformed files do not crash the application.
-A malformed pin is dropped so the rest of the profile still loads.
+A malformed pin is dropped so the rest of the profile still loads. Duplicate
+copies safe metadata and the certificate pin; it does not copy credentials.
 
-`ProfileManager` notifies listeners after add/update/delete so the Connection
-page refreshes without restarting.
+`ProfileManager` notifies listeners after add/update/delete/duplicate/default
+changes so the Connection page refreshes without restarting. Connect from
+Profiles calls the same `VpnBackend.connect` as the Connection page.
 
 ## Log redaction
 

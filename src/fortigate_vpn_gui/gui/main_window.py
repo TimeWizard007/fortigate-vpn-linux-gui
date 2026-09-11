@@ -101,7 +101,12 @@ class MainWindow(QMainWindow):
         )
 
         self._connection_page = ConnectionPage(self._profile_manager, self._vpn)
-        self._profiles_page = ProfilesPage(self._profile_manager)
+        self._profiles_page = ProfilesPage(
+            self._profile_manager,
+            self._vpn,
+            on_connect=lambda: self.show_page("Connection"),
+            select_profile=self._connection_page.select_profile,
+        )
         self._diagnostics_page = DiagnosticsPage(
             self._profile_manager,
             self._vpn,
@@ -373,6 +378,7 @@ class MainWindow(QMainWindow):
 
     def _on_vpn_snapshot(self, snapshot: VpnSnapshot) -> None:
         self._connection_page.apply_snapshot(snapshot)
+        self._profiles_page.apply_snapshot(snapshot)
         if snapshot.manual_reconnect:
             self.statusBar().showMessage("Reconnecting...")
         else:
@@ -437,6 +443,20 @@ class MainWindow(QMainWindow):
                 font-size: 14px;
                 min-height: 36px;
                 padding: 8px 16px;
+            }
+            QFrame#profileCard {
+                border: 1px solid palette(mid);
+                border-radius: 6px;
+            }
+            QLabel#profileCardName {
+                font-size: 16px;
+                font-weight: 600;
+            }
+            QLabel#profileDefaultBadge {
+                font-weight: 600;
+            }
+            QLabel#profileConnectFeedback {
+                font-weight: 600;
             }
             """
         )

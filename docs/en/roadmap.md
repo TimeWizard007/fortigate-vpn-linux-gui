@@ -48,7 +48,14 @@ Dates are not committed. Order may change as design work proceeds.
 - Safer Disconnect/Cancel during all active phases
 - Clearer lifecycle diagnostics and user-facing logs
 
-## v0.7.1 — UI/UX polish (current)
+## v0.8.0 — Profiles UX (current)
+
+- First-class Profiles management for many FortiGate gateways
+- Connect from the profile list using the existing VPN controller
+- Duplicate, default profile, empty state, field-level validation
+- Unique profile names (case-insensitive); v0.7.1 config remains loadable
+
+## v0.7.1 — UI/UX polish
 
 - Connection-page copy and button hierarchy
 - About-page helper/SAML explanation
@@ -65,21 +72,15 @@ Dates are not committed. Order may change as design work proceeds.
 - About / project / license information
 - Graceful shutdown UI
 
-## v0.8.0 — packaging (planned)
+## v0.9.0 — Diagnostics (planned)
+
+- Expanded diagnostics for helper, DNS, routing, and VPN interface
+- Diagnostic report export
+
+## v1.0.0 — packaging and stable release (planned)
 
 - Debian/Ubuntu `.deb` packaging
-- Proper installation of GUI, helper, polkit, and desktop files
-- Uninstall/upgrade behavior
 - Desktop launcher/icon packaging
-
-## v0.9.0 — hardening (planned)
-
-- Security hardening
-- Broader test coverage
-- Release validation
-
-## v1.0.0 — stable release (planned)
-
 - Stable release
 
 The GUI must never run as root.

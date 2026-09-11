@@ -25,7 +25,7 @@ from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.helper.protocol import CertificateInfo
 from fortigate_vpn_gui.metadata import CONNECTION_SSO_NOTICE
 from fortigate_vpn_gui.profiles.manager import ProfileManager
-from fortigate_vpn_gui.profiles.model import ConnectionProfile
+from fortigate_vpn_gui.profiles.model import ConnectionProfile, auth_mode_label
 from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
@@ -91,7 +91,7 @@ class ConnectionPage(QWidget):
         form.addRow("Status:", self._status_label)
         form.addRow("Gateway:", self._gateway_label)
         form.addRow("Port:", self._port_label)
-        form.addRow("SSO:", self._sso_label)
+        form.addRow("Authentication:", self._sso_label)
 
         form_frame = QFrame()
         form_frame.setLayout(form)
@@ -259,6 +259,14 @@ class ConnectionPage(QWidget):
             return None
         return self._manager.get(str(profile_id))
 
+    def select_profile(self, profile_id: str) -> bool:
+        """Select *profile_id* in the combo. Returns False if it is not listed."""
+        for index in range(self._profile_combo.count()):
+            if self._profile_combo.itemData(index) == profile_id:
+                self._profile_combo.setCurrentIndex(index)
+                return True
+        return False
+
     def refresh_profiles(self) -> None:
         previous = self._profile_combo.currentData()
         self._profile_combo.blockSignals(True)
@@ -271,11 +279,22 @@ class ConnectionPage(QWidget):
             self.apply_snapshot(self._vpn.snapshot())
             return
 
+        default_id = self._manager.default_profile_id()
         selected_index = 0
+        previous_index: int | None = None
+        default_index: int | None = None
         for index, profile in enumerate(profiles):
-            self._profile_combo.addItem(profile.name, profile.id)
+            label = profile.name
+            if profile.id == default_id:
+                label = f"{profile.name} (default)"
+                default_index = index
+            self._profile_combo.addItem(label, profile.id)
             if previous and profile.id == previous:
-                selected_index = index
+                previous_index = index
+        if previous_index is not None:
+            selected_index = previous_index
+        elif default_index is not None:
+            selected_index = default_index
         self._profile_combo.setCurrentIndex(selected_index)
         self._profile_combo.blockSignals(False)
         self._show_profile(profiles[selected_index])
@@ -435,7 +454,7 @@ class ConnectionPage(QWidget):
             return
         self._gateway_label.setText(profile.gateway)
         self._port_label.setText(str(profile.port))
-        self._sso_label.setText("Enabled" if profile.use_sso else "Disabled")
+        self._sso_label.setText(auth_mode_label(profile.use_sso))
 
     def _on_action_clicked(self) -> None:
         snapshot = self._vpn.snapshot()

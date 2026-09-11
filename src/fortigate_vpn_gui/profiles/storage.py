@@ -3,6 +3,7 @@
 
 This module never stores secrets. Unknown JSON fields are ignored. Malformed
 files yield an empty profile list instead of crashing the application.
+v0.7.1 documents without ``default_profile_id`` load with no default.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import json
 import os
 import tempfile
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from fortigate_vpn_gui.profiles.model import (
@@ -23,6 +25,14 @@ from fortigate_vpn_gui.profiles.model import (
 
 APP_CONFIG_DIRNAME = "fortigate-vpn-linux-gui"
 PROFILES_FILENAME = "profiles.json"
+
+
+@dataclass(frozen=True)
+class ProfilesDocument:
+    """Loaded profiles.json contents, including the optional default marker."""
+
+    profiles: list[ConnectionProfile]
+    default_profile_id: str | None = None
 
 
 def default_config_dir(
@@ -72,33 +82,41 @@ class ProfileStore:
     def path(self) -> Path:
         return self._path
 
-    def load(self) -> list[ConnectionProfile]:
-        """Read profiles. Missing or invalid files return an empty list."""
+    def load(self) -> ProfilesDocument:
+        """Read profiles. Missing or invalid files return an empty document."""
         try:
             text = self._path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            return []
+            return ProfilesDocument(profiles=[])
         except OSError:
-            return []
+            return ProfilesDocument(profiles=[])
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
-            return []
+            return ProfilesDocument(profiles=[])
         return parse_profiles_document(payload)
 
-    def save(self, profiles: list[ConnectionProfile]) -> None:
+    def save(
+        self,
+        profiles: list[ConnectionProfile],
+        *,
+        default_profile_id: str | None = None,
+    ) -> None:
         """Atomically write profiles as UTF-8 JSON. Creates the directory if needed."""
+        known_ids = {profile.id for profile in profiles}
+        default_id = default_profile_id if default_profile_id in known_ids else None
         document = {
             "version": SCHEMA_VERSION,
+            "default_profile_id": default_id,
             "profiles": [profile.to_json() for profile in profiles],
         }
         text = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
         atomic_write_text(self._path, text)
 
 
-def parse_profiles_document(payload: object) -> list[ConnectionProfile]:
+def parse_profiles_document(payload: object) -> ProfilesDocument:
     """Parse a JSON document into profiles, skipping invalid or duplicate ids."""
-    records = _extract_records(payload)
+    records, default_profile_id = _extract_document(payload)
     profiles: list[ConnectionProfile] = []
     seen_ids: set[str] = set()
     for record in records:
@@ -111,16 +129,24 @@ def parse_profiles_document(payload: object) -> list[ConnectionProfile]:
             continue
         seen_ids.add(profile.id)
         profiles.append(profile)
-    return profiles
+    if default_profile_id not in seen_ids:
+        default_profile_id = None
+    return ProfilesDocument(profiles=profiles, default_profile_id=default_profile_id)
 
 
-def _extract_records(payload: object) -> list[object]:
+def _extract_document(payload: object) -> tuple[list[object], str | None]:
     if isinstance(payload, list):
-        return payload
+        return payload, None
     if isinstance(payload, dict):
         records = payload.get("profiles", [])
-        return records if isinstance(records, list) else []
-    return []
+        if not isinstance(records, list):
+            records = []
+        raw_default = payload.get("default_profile_id")
+        default_id = raw_default.strip() if isinstance(raw_default, str) else None
+        if not default_id:
+            default_id = None
+        return records, default_id
+    return [], None
 
 
 def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None:

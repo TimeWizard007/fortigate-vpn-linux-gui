@@ -98,6 +98,7 @@ def test_pages_use_scroll_areas(qapp, profile_manager: ProfileManager, tmp_path)
     qapp.processEvents()
     for page in (
         window.connection_page,
+        window.profiles_page,
         window.diagnostics_page,
         window.settings_page,
         window.about_page,

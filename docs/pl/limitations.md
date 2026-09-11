@@ -32,7 +32,7 @@ połączenia na bazie utwardzonego cyklu życia i pomocnika polkit.
 - Hasła, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - Pakiety nigdy nie są instalowane automatycznie. Pakiet `.deb` jest
-  planowany w v0.8.0.
+  planowany w późniejszym wydaniu (v1.0.0).
 - Logi są tylko w pamięci i są ocenzurowane.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.
 - Profile to lokalny JSON per-użytkownik.
