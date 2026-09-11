@@ -50,12 +50,16 @@ FortiGate wymaga jawnego **Zaufaj temu certyfikatowi dla tego profilu VPN**.
 Anuluj nie zapisuje pinu. Zmiana odcisku nigdy nie jest przyjmowana
 automatycznie.
 
-## Czego v0.6.x nie robi
+## Czego v0.7.0 nie robi
 
 - Brak sudo i sudoers.
 - Brak dowolnego wykonywania poleceń root przez pomocnika.
-- Brak automatycznej instalacji pakietów.
+- Brak automatycznej instalacji pakietów (`.deb` planowane w v0.8.0).
 - GUI samo nie zmienia zapory, tras ani DNS.
+- Brak przechowywania haseł, tokenów i ciasteczek VPN.
+- Logi są tylko w pamięci; nie są zapisywane na dysk.
 - Brak automatycznego zaufania i wyłączania TLS.
-- Brak automatycznego ponawiania połączenia po utracie tunelu (v0.7.0).
-- Brak ikony zasobnika i autostartu (v0.7.0).
+- Auto-ponawianie nigdy nie pomija SAML ani walidacji certyfikatu.
+- Autostart jest tylko na poziomie użytkownika (`~/.config/autostart/`);
+  brak autostartu systemowego i brak automatycznego łączenia VPN przy
+  logowaniu.

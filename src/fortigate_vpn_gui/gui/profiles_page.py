@@ -35,7 +35,7 @@ class ProfilesPage(QWidget):
         self._manager.add_change_listener(self.refresh)
 
         title = QLabel("Profiles")
-        title.setStyleSheet("font-size: 20px; font-weight: 600;")
+        title.setObjectName("pageTitle")
 
         intro = QLabel(
             "Profiles are stored on this computer only. They do not contain "

@@ -42,7 +42,7 @@ privileged openfortivpn execution.
 
 | Module | Role |
 | ------ | ---- |
-| `vpn/backend.py` | `connect`, `disconnect`, SAML timeout/cancel, snapshots |
+| `vpn/backend.py` | `connect`, `disconnect`, reconnect, shutdown, SAML timeout/cancel, snapshots |
 | `system/helper_client.py` | Unprivileged JSON-lines client; pkexec for the helper |
 | `helper/service.py` | Connect/disconnect/status; owns the process group |
 | `helper/validation.py` | Gateway, port, fingerprint, operation checks |
@@ -153,7 +153,10 @@ Cancel does not store a pin and does not retry. A changed pin is never
 overwritten automatically.
 
 Unexpected tunnel loss leaves CONNECTED, shows `VPN connection was lost.`,
-cleans PID/state, and does **not** auto-reconnect (planned for v0.7.0).
+and optionally schedules auto-reconnect when that setting is enabled (off
+by default). Explicit Disconnect, Quit, and certificate rejection do not
+auto-reconnect. Any new SAML or certificate-trust step uses the existing
+browser and pinning flows.
 
 Disconnect/Cancel terminates the owned privileged process during STARTING,
 WAITING_FOR_AUTH, WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED.
@@ -230,7 +233,8 @@ desktop process.
 | Package | Role |
 | ------- | ---- |
 | `fortigate_vpn_gui.command` | Shared openfortivpn argv construction (no Qt) |
-| `fortigate_vpn_gui.gui` | Qt windows and pages |
+| `fortigate_vpn_gui.gui` | Qt windows, pages, and system tray |
+| `fortigate_vpn_gui.desktop` | User autostart and desktop preferences |
 | `fortigate_vpn_gui.runtime` | Process checks (the GUI refuses to run as root) |
 | `fortigate_vpn_gui.vpn` | GUI-side VPN state, SAML, browser, redacted logs |
 | `fortigate_vpn_gui.helper` | Privileged protocol, validation, process owner |

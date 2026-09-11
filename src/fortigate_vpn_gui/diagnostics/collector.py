@@ -19,6 +19,7 @@ def build_diagnostics_snapshot(
     config_path: str,
     *,
     detect: Callable[..., OpenfortivpnDetection] = detect_openfortivpn,
+    desktop: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return a redacted diagnostics mapping. Does not contact the network."""
     detection = detect(include_version=True, include_capabilities=True)
@@ -58,7 +59,7 @@ def build_diagnostics_snapshot(
         wait_display = wait_reason
     attempt = "—" if snapshot.attempt_id in (None, 0) else str(snapshot.attempt_id)
     retry = "—" if snapshot.retry_count is None else str(snapshot.retry_count)
-    return {
+    data = {
         "helper_installed": "Yes" if probe.installed else "No",
         "helper_version": helper_version,
         "authorization_mechanism": probe.authorization_mechanism or "polkit",
@@ -100,7 +101,15 @@ def build_diagnostics_snapshot(
         "waiting_for_auth": "Yes" if waiting else "No",
         "browser_waiting": "Yes" if waiting else "No",
         "config_path": config_path,
+        "auto_reconnect_enabled": "Yes" if snapshot.auto_reconnect_enabled else "No",
+        "reconnect_attempt": str(snapshot.reconnect_attempt),
+        "reconnect_limit": str(snapshot.reconnect_limit),
+        "reconnect_pending": "Yes" if snapshot.reconnect_pending else "No",
+        "shutdown_in_progress": "Yes" if snapshot.shutdown_in_progress else "No",
     }
+    if desktop:
+        data.update(desktop)
+    return data
 
 
 def _yes_no(value: bool | None) -> str:

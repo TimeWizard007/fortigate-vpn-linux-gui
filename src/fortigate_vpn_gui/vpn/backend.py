@@ -42,6 +42,7 @@ from fortigate_vpn_gui.vpn.models import (
     ProcessInfo,
     VpnErrorCode,
     VpnSnapshot,
+    WaitReason,
     wait_reason_for,
 )
 from fortigate_vpn_gui.vpn.timeout import TimeoutScheduler, threaded_timeout_scheduler
@@ -52,6 +53,8 @@ Selector = Callable[[bool], OpenfortivpnCapabilities | None]
 VpnListener = Callable[["VpnEvent"], None]
 
 DEFAULT_SAML_TIMEOUT_SECONDS = 120.0
+DEFAULT_RECONNECT_DELAY_SECONDS = 5.0
+DEFAULT_RECONNECT_ATTEMPTS = 3
 
 _SAML_REQUIRED_MESSAGE = "SAML/SSO requires openfortivpn with --saml-login support."
 _MISSING_MESSAGE = (
@@ -148,6 +151,9 @@ class VpnBackend:
         schedule_timeout: TimeoutScheduler = threaded_timeout_scheduler,
         grace_seconds: float = 5.0,
         saml_timeout_seconds: float = DEFAULT_SAML_TIMEOUT_SECONDS,
+        auto_reconnect: bool = False,
+        reconnect_delay_seconds: float = DEFAULT_RECONNECT_DELAY_SECONDS,
+        reconnect_max_attempts: int = DEFAULT_RECONNECT_ATTEMPTS,
     ) -> None:
         self._log = log_buffer if log_buffer is not None else LogBuffer()
         self._locator = locator
@@ -196,6 +202,23 @@ class VpnBackend:
         self._last_failure_reason: str | None = None
         self._failing = False
         self._saml_waiting_logged = False
+        self._last_profile: ConnectionProfile | None = None
+        self._shutting_down = False
+        self._shutdown_finished = False
+        self._shutdown_complete_callback: Callable[[], None] | None = None
+        self._closing_logged = False
+        self._auto_reconnect_enabled = bool(auto_reconnect)
+        self._reconnect_delay_seconds = float(reconnect_delay_seconds)
+        self._reconnect_max_attempts = int(reconnect_max_attempts)
+        self._reconnect_attempt = 0
+        self._reconnect_pending = False
+        self._reconnect_cancel: Callable[[], None] | None = None
+        self._user_disconnect = False
+        self._was_reconnect = False
+        self._manual_reconnect = False
+        self._manual_reconnect_profile: ConnectionProfile | None = None
+        self._skip_start_connection_log = False
+        self._shutdown_cancel: Callable[[], None] | None = None
 
     def subscribe(self, callback: VpnListener) -> None:
         self._listeners.append(callback)
@@ -229,6 +252,9 @@ class VpnBackend:
             self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
             return
         with self._lock:
+            if self._shutting_down or self._state is ConnectionState.CLOSING:
+                self._log.append("vpn", "Ignoring connect; application is closing.")
+                return
             if after_trust:
                 allowed = self._state in {
                     ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
@@ -278,14 +304,32 @@ class VpnBackend:
 
         self._begin_session(profile, capabilities, request, after_trust=after_trust)
 
-    def disconnect(self, *, wait: bool = False, grace_seconds: float | None = None) -> None:
+    def disconnect(
+        self,
+        *,
+        wait: bool = False,
+        grace_seconds: float | None = None,
+        for_reconnect: bool = False,
+    ) -> None:
         """Ask the helper to stop the owned process. No-op when already idle."""
         self._cancel_saml_timeout()
+        self._cancel_reconnect(user_cancel=True)
+        if not for_reconnect:
+            cancelled = False
+            with self._lock:
+                cancelled = self._manual_reconnect
+                self._clear_manual_reconnect_locked()
+            if cancelled:
+                self._app_log("Reconnect cancelled.")
         grace = self._grace_seconds if grace_seconds is None else grace_seconds
         with self._lock:
-            if self._state in {ConnectionState.DISCONNECTED}:
+            self._user_disconnect = True
+            if self._state is ConnectionState.DISCONNECTED:
                 snapshot = None
                 running = False
+            elif self._state is ConnectionState.CLOSING:
+                snapshot = None
+                running = self._helper.is_running()
             elif self._state is ConnectionState.FAILED:
                 self._transition(ConnectionState.DISCONNECTED)
                 snapshot = self._snapshot_locked()
@@ -321,15 +365,198 @@ class VpnBackend:
             self._notify(VpnEvent("state", snapshot))
         if not running:
             return
-        if not self._disconnect_logged:
+        if for_reconnect:
+            self._log.append(
+                "vpn",
+                "Helper disconnect started for reconnect.",
+                severity=LogLevel.DEBUG,
+            )
+        elif not self._disconnect_logged:
             self._disconnect_logged = True
             self._app_log("Disconnect requested.")
         self._helper.disconnect(wait=wait, grace_seconds=grace)
 
+    def set_auto_reconnect(self, enabled: bool) -> None:
+        """Enable or disable automatic reconnect after unexpected tunnel loss."""
+        pending = False
+        with self._lock:
+            self._auto_reconnect_enabled = bool(enabled)
+            if not self._auto_reconnect_enabled:
+                pending = self._reconnect_pending
+                self._cancel_reconnect_locked()
+        if pending:
+            self._app_log("Automatic reconnect cancelled.")
+
+    def reconnect(self, profile: ConnectionProfile | None = None) -> None:
+        """Disconnect if needed, then start the normal Connect workflow once."""
+        target = profile if profile is not None else self._last_profile
+        if target is None:
+            self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
+            return
+        with self._lock:
+            if self._shutting_down or self._state is ConnectionState.CLOSING:
+                self._log.append(
+                    "vpn",
+                    "Ignoring reconnect; application is closing.",
+                    severity=LogLevel.DEBUG,
+                )
+                return
+            if self._manual_reconnect or (
+                self._was_reconnect
+                and self._state
+                in {
+                    ConnectionState.STARTING,
+                    ConnectionState.CONNECTING,
+                    ConnectionState.WAITING_FOR_AUTH,
+                    ConnectionState.DISCONNECTING,
+                }
+            ):
+                self._log.append(
+                    "vpn",
+                    "Ignoring repeated reconnect; reconnection is already in progress.",
+                    severity=LogLevel.DEBUG,
+                )
+                return
+            self._cancel_reconnect_locked()
+            self._manual_reconnect = True
+            self._manual_reconnect_profile = target
+            self._was_reconnect = True
+            snapshot = self._snapshot_locked()
+            running = self._helper.is_running()
+            state = self._state
+        self._notify(VpnEvent("state", snapshot))
+        self._app_log("Reconnect requested.")
+        needs_stop = running or state in {
+            ConnectionState.STARTING,
+            ConnectionState.CONNECTING,
+            ConnectionState.CONNECTED,
+            ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+            ConnectionState.DISCONNECTING,
+        }
+        if needs_stop:
+            self._app_log("Disconnecting current VPN session for reconnect.")
+            self.disconnect(wait=False, for_reconnect=True)
+            if self.is_running():
+                self._log.append(
+                    "vpn",
+                    "Waiting for previous VPN session to stop.",
+                    severity=LogLevel.DEBUG,
+                )
+                return
+            self._log.append(
+                "vpn",
+                "Previous session already stopped after disconnect.",
+                severity=LogLevel.DEBUG,
+            )
+        self._start_pending_reconnect(previous_stopped=needs_stop)
+
+    def begin_shutdown(
+        self,
+        *,
+        timeout: float | None = None,
+        on_complete: Callable[[], None] | None = None,
+    ) -> None:
+        """Start non-blocking cleanup. Idempotent. Calls *on_complete* when idle."""
+        grace = self._grace_seconds if timeout is None else timeout
+        with self._lock:
+            if not self._shutting_down:
+                self._shutting_down = True
+                if on_complete is not None:
+                    self._shutdown_complete_callback = on_complete
+                self._cancel_reconnect_locked()
+                self._clear_manual_reconnect_locked()
+                self._user_disconnect = True
+                if self._state is not ConnectionState.CLOSING:
+                    self._transition(ConnectionState.CLOSING)
+                snapshot = self._snapshot_locked()
+                running = self._helper.is_running()
+                already = False
+                callback = None
+            else:
+                already = True
+                if self._shutdown_finished:
+                    callback = None
+                elif not self._helper.is_running():
+                    callback = self._shutdown_complete_callback
+                    self._shutdown_complete_callback = None
+                else:
+                    callback = None
+        if already:
+            if callback is not None:
+                callback()
+            return
+        self._notify(VpnEvent("state", snapshot))
+        if not self._closing_logged:
+            self._closing_logged = True
+            self._app_log("Application closing.")
+        if not running:
+            self._finish_shutdown()
+            return
+        self._app_log("Waiting for VPN cleanup before exit.")
+        self._helper.disconnect(wait=False, grace_seconds=grace)
+        self._arm_shutdown_timeout(grace)
+
+    def _arm_shutdown_timeout(self, grace: float) -> None:
+        with self._lock:
+            if self._shutdown_finished:
+                return
+        cancel = self._schedule_timeout(grace, self._on_shutdown_timeout)
+        with self._lock:
+            if self._shutdown_finished:
+                try:
+                    cancel()
+                except Exception:
+                    pass
+                return
+            self._shutdown_cancel = cancel
+
+    def _on_shutdown_timeout(self) -> None:
+        with self._lock:
+            if self._shutdown_finished or not self._shutting_down:
+                return
+        if not self._helper.is_running():
+            self._finish_shutdown()
+            return
+        # Timer thread: blocking wait is acceptable here; the Qt loop stays free.
+        self._helper.disconnect(wait=True, grace_seconds=2.0)
+        self._finish_shutdown()
+
+    def _finish_shutdown(self) -> None:
+        with self._lock:
+            cancel = self._shutdown_cancel
+            self._shutdown_cancel = None
+            callback = self._shutdown_complete_callback
+            self._shutdown_complete_callback = None
+            already = self._shutdown_finished
+            self._shutdown_finished = True
+            snapshot = self._snapshot_locked()
+        if cancel is not None:
+            try:
+                cancel()
+            except Exception:
+                pass
+        if already:
+            return
+        self._notify(VpnEvent("state", snapshot))
+        if callback is not None:
+            # May run on the GUI thread (idle shutdown) or on a helper/timeout
+            # worker thread (process EXIT / shutdown timer). Callers must marshal
+            # to the Qt main thread; do not assume Qt affinity here.
+            callback()
+
     def shutdown(self, timeout: float = 5.0) -> None:
         """Stop any helper-owned process before the application exits."""
-        self.disconnect(wait=True, grace_seconds=timeout)
+        self.begin_shutdown(timeout=timeout)
+        if self._helper.is_running():
+            self._helper.disconnect(wait=True, grace_seconds=timeout)
         self._helper.close()
+        with self._lock:
+            self._shutting_down = True
+            if self._state is ConnectionState.CLOSING:
+                self._transition(ConnectionState.DISCONNECTED)
+            elif self._state not in {ConnectionState.DISCONNECTED, ConnectionState.FAILED}:
+                self._transition(ConnectionState.DISCONNECTED)
 
     def _resolve_executable(self, profile: ConnectionProfile) -> OpenfortivpnCapabilities | None:
         if profile.use_sso:
@@ -387,6 +614,8 @@ class VpnBackend:
                 self._retry_count = 0
                 name = None
             self._profile = profile
+            self._last_profile = profile
+            self._user_disconnect = False
             self._capabilities = capabilities
             self._use_sso = profile.use_sso
             self._error_code = None
@@ -413,12 +642,18 @@ class VpnBackend:
         if after_trust and name is not None:
             self._app_log(f'Certificate trusted for profile "{name}".')
             self._app_log("Retrying VPN connection.")
-        self._app_log("Starting VPN connection.")
+        skip_start_log = False
+        with self._lock:
+            skip_start_log = self._skip_start_connection_log
+            self._skip_start_connection_log = False
+        if not skip_start_log:
+            self._app_log("Starting VPN connection.")
         mode = "SAML/SSO" if profile.use_sso else "standard"
         self._log.append(
             "vpn",
             f"Starting privileged openfortivpn for {profile.name} "
             f"({profile.gateway}:{profile.port}) mode={mode}.",
+            severity=LogLevel.DEBUG,
         )
         try:
             self._helper.connect(request, self._on_helper_event)
@@ -613,6 +848,12 @@ class VpnBackend:
             if not self._tunnel_established_logged:
                 self._tunnel_established_logged = True
                 self._app_log("VPN tunnel established.")
+                reconnected = self._reconnect_attempt > 0 or self._was_reconnect
+                self._reconnect_attempt = 0
+                self._reconnect_pending = False
+                self._was_reconnect = False
+                if reconnected:
+                    self._app_log("VPN reconnected successfully.")
         return snapshots
 
     def _maybe_open_browser(self, raw_url: str) -> None:
@@ -640,7 +881,11 @@ class VpnBackend:
             self._app_log("Waiting for SAML authentication.")
         self._arm_saml_timeout()
         self._app_log("Opening browser for SAML sign-in.")
-        self._log.append("vpn", f"Opening system browser for SAML sign-in at {safe}.")
+        self._log.append(
+            "vpn",
+            f"Opening system browser for SAML sign-in at {safe}.",
+            severity=LogLevel.DEBUG,
+        )
         try:
             self._browser.open(validated)
         except BrowserLaunchError as exc:
@@ -673,6 +918,129 @@ class VpnBackend:
             except Exception:
                 pass
 
+    def _cancel_reconnect(self, *, user_cancel: bool) -> None:
+        pending = False
+        with self._lock:
+            pending = self._reconnect_pending
+            self._cancel_reconnect_locked()
+        if user_cancel and pending:
+            self._app_log("Automatic reconnect cancelled.")
+
+    def _cancel_reconnect_locked(self) -> None:
+        cancel = self._reconnect_cancel
+        self._reconnect_cancel = None
+        self._reconnect_pending = False
+        if cancel is not None:
+            try:
+                cancel()
+            except Exception:
+                pass
+
+    def _clear_manual_reconnect_locked(self) -> None:
+        self._manual_reconnect = False
+        self._manual_reconnect_profile = None
+
+    def _start_pending_reconnect(self, *, previous_stopped: bool) -> None:
+        with self._lock:
+            if self._shutting_down or not self._manual_reconnect:
+                return
+            if self._helper.is_running():
+                self._log.append(
+                    "vpn",
+                    "Reconnect is waiting for the previous VPN session to stop.",
+                    severity=LogLevel.DEBUG,
+                )
+                return
+            profile = self._manual_reconnect_profile or self._last_profile
+            state = self._state
+        if profile is None:
+            with self._lock:
+                self._clear_manual_reconnect_locked()
+                snapshot = self._snapshot_locked()
+            self._notify(VpnEvent("state", snapshot))
+            self._app_log("Reconnect failed: no profile is selected.", severity=LogLevel.ERROR)
+            return
+        if state not in CONNECTABLE_STATES:
+            self._log.append(
+                "vpn",
+                f"Reconnect deferred until idle; state is {state.value}.",
+                severity=LogLevel.DEBUG,
+            )
+            return
+        if previous_stopped:
+            self._app_log("Previous VPN session stopped.")
+        self._app_log("Starting VPN reconnection.")
+        with self._lock:
+            self._manual_reconnect = False
+            self._was_reconnect = True
+            self._skip_start_connection_log = True
+        self.connect(profile)
+        if self.current_state() not in {
+            ConnectionState.STARTING,
+            ConnectionState.CONNECTING,
+            ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+            ConnectionState.CONNECTED,
+        }:
+            with self._lock:
+                self._clear_manual_reconnect_locked()
+                self._was_reconnect = False
+                snapshot = self._snapshot_locked()
+            self._notify(VpnEvent("state", snapshot))
+            self._app_log(
+                "Reconnect failed to start a new VPN session.",
+                severity=LogLevel.ERROR,
+            )
+
+    def _maybe_schedule_reconnect(self) -> None:
+        with self._lock:
+            if (
+                self._shutting_down
+                or self._user_disconnect
+                or not self._auto_reconnect_enabled
+                or self._last_profile is None
+                or self._reconnect_pending
+                or self._state is not ConnectionState.FAILED
+            ):
+                return
+            if self._error_code is not VpnErrorCode.CONNECTION_LOST:
+                return
+            if self._reconnect_attempt >= self._reconnect_max_attempts:
+                limit = self._reconnect_max_attempts
+                stop = True
+            else:
+                self._reconnect_attempt += 1
+                attempt = self._reconnect_attempt
+                limit = self._reconnect_max_attempts
+                delay = self._reconnect_delay_seconds
+                self._reconnect_pending = True
+                stop = False
+        if stop:
+            self._app_log(f"Automatic reconnect stopped after {limit} attempts.")
+            return
+        delay_display = int(delay) if delay == int(delay) else delay
+        self._app_log(f"Automatic reconnect scheduled in {delay_display} seconds.")
+        self._app_log(f"Reconnect attempt {attempt} of {limit}.")
+        with self._lock:
+            snapshot = self._snapshot_locked()
+        self._notify(VpnEvent("state", snapshot))
+        self._reconnect_cancel = self._schedule_timeout(delay, self._on_reconnect_timer)
+
+    def _on_reconnect_timer(self) -> None:
+        with self._lock:
+            if (
+                self._shutting_down
+                or not self._auto_reconnect_enabled
+                or not self._reconnect_pending
+            ):
+                return
+            self._reconnect_pending = False
+            profile = self._last_profile
+            self._was_reconnect = True
+        if profile is None:
+            return
+        self.connect(profile)
+
     def _on_saml_timeout(self) -> None:
         with self._lock:
             if self._state is not ConnectionState.WAITING_FOR_AUTH:
@@ -690,6 +1058,7 @@ class VpnBackend:
                 ConnectionState.DISCONNECTED,
                 ConnectionState.DISCONNECTING,
                 ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+                ConnectionState.CLOSING,
             }:
                 return
             self._failing = True
@@ -729,12 +1098,23 @@ class VpnBackend:
                 self._transition(ConnectionState.DISCONNECTED)
                 error = None
                 disconnected = True
+                lost = False
+                closing = False
+            elif previous is ConnectionState.CLOSING:
+                error = None
+                disconnected = False
+                lost = False
+                closing = True
             elif previous is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST:
                 error = None
                 disconnected = False
+                lost = False
+                closing = False
             elif previous is ConnectionState.FAILED:
                 error = None
                 disconnected = False
+                lost = False
+                closing = False
             elif previous is ConnectionState.CONNECTED:
                 error_code, message = (
                     VpnErrorCode.CONNECTION_LOST,
@@ -747,6 +1127,8 @@ class VpnBackend:
                 self._transition(ConnectionState.FAILED)
                 error = (error_code, message)
                 disconnected = False
+                lost = not self._user_disconnect and not self._shutting_down
+                closing = False
             elif previous in {
                 ConnectionState.STARTING,
                 ConnectionState.CONNECTING,
@@ -770,14 +1152,19 @@ class VpnBackend:
                     self._transition(ConnectionState.FAILED)
                     error = (error_code, message)
                 disconnected = False
+                lost = False
+                closing = False
             else:
                 error = None
                 disconnected = False
+                lost = False
+                closing = False
+            reconnecting = self._manual_reconnect
             snapshot = self._snapshot_locked()
-        if disconnected:
+        if disconnected and not reconnecting:
             self._app_log("VPN disconnected.")
-        if previous is ConnectionState.CONNECTED and error is not None:
-            self._app_log("VPN connection lost unexpectedly.", severity=LogLevel.ERROR)
+        if lost:
+            self._app_log("VPN connection lost.", severity=LogLevel.ERROR)
         self._notify(VpnEvent("state", snapshot, certificate=snapshot.presented_certificate))
         if error is not None:
             self._notify(
@@ -789,6 +1176,14 @@ class VpnBackend:
                     certificate=snapshot.presented_certificate,
                 )
             )
+        if closing:
+            self._finish_shutdown()
+            return
+        if lost:
+            self._maybe_schedule_reconnect()
+            return
+        if disconnected:
+            self._start_pending_reconnect(previous_stopped=True)
 
     def _exit_error(
         self,
@@ -878,11 +1273,11 @@ class VpnBackend:
 
     def _snapshot_locked(self) -> VpnSnapshot:
         process = self._process_info_locked()
-        profile = self._profile
+        profile = self._profile if self._profile is not None else self._last_profile
         capabilities = self._capabilities
         auth_mode = None
         if profile is not None:
-            auth_mode = "SAML/SSO" if self._use_sso else "non-SSO"
+            auth_mode = "SAML/SSO" if profile.use_sso else "non-SSO"
         elif self._use_sso:
             auth_mode = "SAML/SSO"
         selected = None
@@ -903,6 +1298,8 @@ class VpnBackend:
         presented = self._presented_certificate
         failure = None if self._error_code is None else self._error_code.value
         wait = wait_reason_for(self._state)
+        if self._reconnect_pending or self._manual_reconnect:
+            wait = WaitReason.RECONNECTING
         return VpnSnapshot(
             state=self._state,
             profile_id=None if profile is None else profile.id,
@@ -943,6 +1340,13 @@ class VpnBackend:
             retry_count=self._retry_count,
             last_disconnect_reason=self._last_disconnect_reason,
             last_failure_reason=self._last_failure_reason or failure,
+            shutdown_in_progress=self._shutting_down,
+            auto_reconnect_enabled=self._auto_reconnect_enabled,
+            reconnect_pending=self._reconnect_pending,
+            reconnect_attempt=self._reconnect_attempt,
+            reconnect_limit=self._reconnect_max_attempts,
+            reconnect_delay_seconds=self._reconnect_delay_seconds,
+            manual_reconnect=self._manual_reconnect,
         )
 
     def _notify(self, event: VpnEvent) -> None:

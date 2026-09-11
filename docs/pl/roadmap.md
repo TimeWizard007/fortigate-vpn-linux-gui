@@ -35,24 +35,47 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Ostrzeżenie o zmianie certyfikatu
 - Diagnostyka pomocnika
 
-## v0.6.x — niezawodność połączenia (obecnie)
+## v0.6.x — niezawodność połączenia
 
 - Jawny stan `WAITING_FOR_CERTIFICATE_TRUST`
 - Jedna aktywna próba połączenia; ponowienie czeka na sprzątanie
 - Deduplikacja zdarzeń/okien certyfikatu
-- Wykrywanie nieoczekiwanej utraty tunelu (bez auto-reconnect)
+- Wykrywanie nieoczekiwanej utraty tunelu (bez auto-reconnect w 0.6.x)
 - Bezpieczniejszy Disconnect/Cancel we wszystkich fazach aktywnych
 - Jaśniejsza diagnostyka cyklu życia i logi dla użytkownika
 
-## v0.7.0 — UX pulpitu (planowane)
+## v0.7.1 — dopracowanie UI/UX (obecnie)
 
-- Ikona zasobnika
-- Automatyczne ponowienie po utracie tunelu
-- Autostart / odtworzenie sesji
+- Krótszy opis SSO na stronie Connection
+- Hierarchia przycisków Disconnect / Reconnect
+- Cichsze logi reconnect
+- Komunikat błędu na stronie Connection
 
-## Później (planowane, niezrealizowane)
+## v0.7.0 — UX pulpitu
 
-- Pakiet Ubuntu (`.deb` i wpis pulpitu)
-- Szersze pakietowanie dystrybucyjne
+- Integracja z zasobnikiem
+- UX pulpitu (zamykanie do zasobnika, komunikat „Closing...”)
+- Opcjonalne automatyczne ponawianie po nieoczekiwanej utracie tunelu
+- Ręczne Reconnect
+- Opcjonalny autostart użytkownika
+- About / projekt / licencja
+- Widoczne, bezpieczne zamykanie aplikacji
+
+## v0.8.0 — pakietowanie (planowane)
+
+- Pakiet Debian/Ubuntu `.deb`
+- Instalacja GUI, pomocnika, polkit i plików pulpitu
+- Zachowanie przy odinstalowaniu i aktualizacji
+- Launcher i ikona pulpitu
+
+## v0.9.0 — utwardzanie (planowane)
+
+- Utwardzanie bezpieczeństwa
+- Szersze testy
+- Walidacja wydania
+
+## v1.0.0 — wydanie stabilne (planowane)
+
+- Wydanie stabilne
 
 GUI nigdy nie może działać jako root.

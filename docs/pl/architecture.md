@@ -93,7 +93,9 @@ Certyfikat: `STARTING` / `WAITING_FOR_AUTH` / `CONNECTING` →
 `WAITING_FOR_CERTIFICATE_TRUST` nie jest stanem Connected. Anulowanie nie
 zapisuje pinu. Zmiana odcisku nigdy nie nadpisuje pinu automatycznie.
 Nieoczekiwane wyjście procesu w `CONNECTED` przechodzi do `FAILED`
-(`VPN connection was lost.`) **bez** automatycznego ponowienia (v0.7.0).
+(`VPN connection was lost.`). Opcjonalne auto-ponawianie (domyślnie
+wyłączone) dotyczy tylko tej utraty, nie Disconnect, Quit ani odrzucenia
+certyfikatu.
 
 Disconnect/Cancel kończy własny proces uprzywilejowany w fazach STARTING,
 WAITING_FOR_AUTH, WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED.
@@ -140,7 +142,8 @@ pomocnika.
 
 | Pakiet | Rola |
 | ------ | ---- |
-| `fortigate_vpn_gui.gui` | Okna i strony Qt |
+| `fortigate_vpn_gui.gui` | Okna, strony Qt i zasobnik |
+| `fortigate_vpn_gui.desktop` | Autostart użytkownika i preferencje pulpitu |
 | `fortigate_vpn_gui.runtime` | GUI odmawia startu jako root |
 | `fortigate_vpn_gui.vpn` | Stan VPN po stronie GUI, SAML, przeglądarka |
 | `fortigate_vpn_gui.helper` | Protokół uprzywilejowany i właściciel procesu |

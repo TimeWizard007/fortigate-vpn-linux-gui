@@ -52,6 +52,9 @@ def test_diagnostics_snapshot_values() -> None:
     assert data["last_disconnect_reason"] == "—"
     assert data["last_failure_reason"] == "—"
     assert data["config_path"] == "/tmp/profiles.json"
+    assert data["auto_reconnect_enabled"] == "No"
+    assert data["reconnect_pending"] == "No"
+    assert data["shutdown_in_progress"] == "No"
     assert "should-not-leak" not in str(data.values())
     assert data["helper_installed"] == "Yes"
     assert data["authorization_mechanism"] == "polkit"
@@ -107,3 +110,32 @@ def test_diagnostics_page_missing_binary(qapp, profile_manager: ProfileManager) 
     assert page._state.text() == "Disconnected"
     assert page._saml.text() == "—"
     assert page._waiting.text() == "No"
+    assert page._auto_reconnect.text() == "No"
+    assert page._shutdown.text() == "No"
+
+
+def test_diagnostics_desktop_overlay() -> None:
+    harness = VpnHarness()
+
+    def detect(**kwargs):
+        return OpenfortivpnDetection(available=False, path=None, version=None)
+
+    data = build_diagnostics_snapshot(
+        harness.backend,
+        None,
+        "/tmp/profiles.json",
+        detect=detect,
+        desktop={
+            "tray_available": "Yes",
+            "tray_active": "No",
+            "close_behavior": "Exit application",
+            "autostart_enabled": "No",
+        },
+    )
+    assert data["tray_available"] == "Yes"
+    assert data["tray_active"] == "No"
+    assert data["close_behavior"] == "Exit application"
+    assert data["autostart_enabled"] == "No"
+    assert data["auto_reconnect_enabled"] == "No"
+    assert data["reconnect_pending"] == "No"
+    assert data["shutdown_in_progress"] == "No"

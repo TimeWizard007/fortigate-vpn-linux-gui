@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-HELPER_VERSION = "0.6.0"
+HELPER_VERSION = "0.7.0"  # helper protocol; independent of GUI patch releases
 PROTOCOL_VERSION = 1
 POLKIT_ACTION_ID = "com.fortigate-vpn-linux-gui.manage-vpn"
 INSTALLED_HELPER_PATH = "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper"

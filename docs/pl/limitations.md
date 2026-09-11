@@ -1,7 +1,7 @@
 # Znane ograniczenia
 
-Wersja v0.6.0 utwardza cykl życia połączenia, oczekiwanie na zaufanie
-certyfikatu i utratę tunelu na bazie pomocnika polkit i SAML/SSO.
+Wersja v0.7.0 dodaje zasobnik, opcjonalny autostart i opcjonalne ponawianie
+połączenia na bazie utwardzonego cyklu życia i pomocnika polkit.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -14,17 +14,25 @@ certyfikatu i utratę tunelu na bazie pomocnika polkit i SAML/SSO.
 - Certyfikaty nigdy nie są zaufane automatycznie. Walidacja TLS nigdy nie jest
   wyłączana. `--trusted-cert` dodawane jest tylko po jawnym pinie profilu.
 - Zmiana certyfikatu bramy nie jest przyjmowana automatycznie.
+- Auto-ponawianie jest **domyślnie wyłączone**. Działa tylko po nieoczekiwanej
+  utracie tunelu, nie po Disconnect ani Quit, nie po odrzuceniu certyfikatu
+  i nigdy bez SAML/przeglądarki ani bez jawnego zaufania certyfikatu, gdy
+  są wymagane. Szybkie błędy uwierzytelniania nie są ponawiane w pętli.
+- Autostart tylko uruchamia GUI po zalogowaniu. Nie łączy VPN. Plik
+  `.desktop` jest na poziomie użytkownika (`~/.config/autostart/`) i nie
+  wymaga root.
+- Zamykanie do zasobnika wymaga działającego zasobnika. Bez niego zamknięcie
+  okna nadal kończy aplikację.
 - W danej chwili działa tylko jedna próba połączenia. Dodatkowe kliknięcia
   Connect są ignorowane. Po zaufaniu certyfikatu jest jedno ponowienie, gdy
   poprzedni proces się zakończy.
-- Nieoczekiwana utrata tunelu jest wykrywana (`VPN connection was lost.`);
-  klient **nie** ponawia połączenia automatycznie (planowane w v0.7.0).
 - Disconnect/Cancel jest bezpieczny w STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED. Przeglądarka nie
   jest zamykana na siłę; listener SAML znika razem z procesem.
 - Hasła, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
-- Pakiety nigdy nie są instalowane automatycznie.
+- Pakiety nigdy nie są instalowane automatycznie. Pakiet `.deb` jest
+  planowany w v0.8.0.
 - Logi są tylko w pamięci i są ocenzurowane.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.
 - Profile to lokalny JSON per-użytkownik.

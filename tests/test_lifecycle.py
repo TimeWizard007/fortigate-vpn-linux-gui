@@ -114,8 +114,8 @@ def test_unexpected_loss_path() -> None:
     assert snapshot.error_code is VpnErrorCode.CONNECTION_LOST
     assert snapshot.error_message == "VPN connection was lost."
     assert snapshot.privileged_pid is None
-    assert "VPN connection lost unexpectedly." in _vpn_messages(harness)
-    assert _vpn_messages(harness).count("VPN connection lost unexpectedly.") == 1
+    assert "VPN connection lost." in _vpn_messages(harness)
+    assert _vpn_messages(harness).count("VPN connection lost.") == 1
 
 
 def test_repeated_connect_clicks_do_not_start_second_process() -> None:

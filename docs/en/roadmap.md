@@ -39,24 +39,47 @@ Dates are not committed. Order may change as design work proceeds.
 - Certificate-change warning
 - Helper diagnostics
 
-## v0.6.x — connection reliability (current)
+## v0.6.x — connection reliability
 
 - Explicit `WAITING_FOR_CERTIFICATE_TRUST` wait
 - One active connection attempt; retry waits for cleanup
 - Certificate event/dialog deduplication
-- Unexpected tunnel-loss detection (no auto-reconnect)
+- Unexpected tunnel-loss detection (no auto-reconnect in 0.6.x)
 - Safer Disconnect/Cancel during all active phases
 - Clearer lifecycle diagnostics and user-facing logs
 
-## v0.7.0 — desktop UX (planned)
+## v0.7.1 — UI/UX polish (current)
 
-- Tray icon
-- Auto-reconnect after unexpected tunnel loss
-- Autostart / session restore
+- Connection-page copy and button hierarchy
+- About-page helper/SAML explanation
+- reconnect log noise reduction
+- failed-state on-page hint
 
-## Later (planned, not implemented)
+## v0.7.0 — desktop UX
 
-- Ubuntu packaging (`.deb` and a desktop entry)
-- Broader distribution packaging
+- Tray integration
+- Desktop UX (close-to-tray, shutdown “Closing...” feedback)
+- Optional automatic reconnect after unexpected tunnel loss
+- Manual reconnect
+- Optional user-level autostart
+- About / project / license information
+- Graceful shutdown UI
+
+## v0.8.0 — packaging (planned)
+
+- Debian/Ubuntu `.deb` packaging
+- Proper installation of GUI, helper, polkit, and desktop files
+- Uninstall/upgrade behavior
+- Desktop launcher/icon packaging
+
+## v0.9.0 — hardening (planned)
+
+- Security hardening
+- Broader test coverage
+- Release validation
+
+## v1.0.0 — stable release (planned)
+
+- Stable release
 
 The GUI must never run as root.

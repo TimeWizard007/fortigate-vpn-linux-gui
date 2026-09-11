@@ -50,6 +50,35 @@ def test_connection_page_with_sso_profile(qapp, profile_manager: ProfileManager)
     page.apply_snapshot(harness.backend.snapshot())
     assert page.action_text() == "Disconnect"
     assert page.status_text() == "Connected"
+    assert page.reconnect_button_visible() is True
+
+
+def test_connection_page_sso_notice_is_short(qapp, profile_manager: ProfileManager) -> None:
+    profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
+    harness = VpnHarness()
+    page = ConnectionPage(
+        profile_manager, harness.backend, locator=lambda: "/usr/local/bin/openfortivpn"
+    )
+    assert "web browser" in page.notice_text()
+    assert "About" in page.notice_text()
+    assert "--saml-login" not in page.notice_text()
+    assert "polkit" not in page.notice_text()
+
+
+def test_connection_page_failed_state_is_usable(qapp, profile_manager: ProfileManager) -> None:
+    profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
+    harness = VpnHarness()
+    page = ConnectionPage(profile_manager, harness.backend, locator=lambda: "/usr/bin/openfortivpn")
+    page._on_action_clicked()
+    harness.process.emit("INFO:   Tunnel is up and running.")
+    harness.process.finish(1)
+    page.apply_snapshot(harness.backend.snapshot())
+    assert page.status_text() == "Failed"
+    assert page.action_text() == "Connect again"
+    assert page.connect_enabled() is True
+    assert page.reconnect_button_visible() is False
+    assert page.failure_hint_visible() is True
+    assert "lost" in page.failure_hint_text().lower()
 
 
 def test_connection_page_saml_unsupported_message(qapp, profile_manager: ProfileManager) -> None:
@@ -290,4 +319,30 @@ def test_connection_page_same_fingerprint_opens_one_dialog(
     page.show_user_error(event)
     page.show_user_error(event)
     assert len(prompts) == 1
+
+
+def test_reconnect_button_is_wired_and_starts_reconnect(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
+    harness = VpnHarness()
+    page = ConnectionPage(profile_manager, harness.backend, locator=lambda: "/usr/bin/openfortivpn")
+    page._on_action_clicked()
+    harness.process.emit("INFO:   Tunnel is up and running.")
+    page.apply_snapshot(harness.backend.snapshot())
+    assert page.reconnect_button_visible() is True
+    assert page._reconnect_button.isEnabled() is True
+    harness.process.exit_on_terminate = False
+    page._reconnect_button.click()
+    page.apply_snapshot(harness.backend.snapshot())
+    assert "Reconnect requested." in [
+        record.message for record in harness.log.records() if record.source == "vpn"
+    ]
+    assert page.status_text() == "Reconnecting..."
+    assert page.action_text() == "Reconnecting..."
+    assert page.reconnect_button_visible() is False
+    assert page.connect_enabled() is False
+    harness.process.finish(0)
+    page.apply_snapshot(harness.backend.snapshot())
+    assert page.status_text() == "Connecting"
 

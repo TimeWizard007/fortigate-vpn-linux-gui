@@ -28,15 +28,17 @@ class DiagnosticsPage(QWidget):
         parent: QWidget | None = None,
         *,
         detect=detect_openfortivpn,
+        desktop_info: Callable[[], dict[str, str]] | None = None,
     ) -> None:
         super().__init__(parent)
         self._manager = manager
         self._vpn = vpn
         self._selected_profile = selected_profile
         self._detect = detect
+        self._desktop_info = desktop_info
 
         title = QLabel("Diagnostics")
-        title.setStyleSheet("font-size: 20px; font-weight: 600;")
+        title.setObjectName("pageTitle")
         intro = QLabel(
             "Read-only runtime information for troubleshooting. Passwords, "
             "SAML tokens, cookies, and sign-in URL query values are never shown. "
@@ -98,6 +100,22 @@ class DiagnosticsPage(QWidget):
         self._browser.setObjectName("diagBrowserStatus")
         self._waiting = QLabel("—")
         self._waiting.setObjectName("diagWaitingForAuth")
+        self._tray_available = QLabel("—")
+        self._tray_available.setObjectName("diagTrayAvailable")
+        self._tray_active = QLabel("—")
+        self._tray_active.setObjectName("diagTrayActive")
+        self._close_behavior = QLabel("—")
+        self._close_behavior.setObjectName("diagCloseBehavior")
+        self._autostart = QLabel("—")
+        self._autostart.setObjectName("diagAutostart")
+        self._auto_reconnect = QLabel("—")
+        self._auto_reconnect.setObjectName("diagAutoReconnect")
+        self._reconnect_attempt = QLabel("—")
+        self._reconnect_attempt.setObjectName("diagReconnectAttempt")
+        self._reconnect_pending = QLabel("—")
+        self._reconnect_pending.setObjectName("diagReconnectPending")
+        self._shutdown = QLabel("—")
+        self._shutdown.setObjectName("diagShutdownInProgress")
 
         value_labels = (
             self._helper_installed,
@@ -127,6 +145,14 @@ class DiagnosticsPage(QWidget):
             self._auth_mode,
             self._browser,
             self._waiting,
+            self._tray_available,
+            self._tray_active,
+            self._close_behavior,
+            self._autostart,
+            self._auto_reconnect,
+            self._reconnect_attempt,
+            self._reconnect_pending,
+            self._shutdown,
         )
         for label in value_labels:
             label.setWordWrap(True)
@@ -165,6 +191,14 @@ class DiagnosticsPage(QWidget):
         form.addRow("Authentication mode:", self._auth_mode)
         form.addRow("Browser launch status:", self._browser)
         form.addRow("Waiting for authentication:", self._waiting)
+        form.addRow("Tray available:", self._tray_available)
+        form.addRow("Tray active:", self._tray_active)
+        form.addRow("Close behavior:", self._close_behavior)
+        form.addRow("Autostart enabled:", self._autostart)
+        form.addRow("Auto-reconnect enabled:", self._auto_reconnect)
+        form.addRow("Reconnect attempt / limit:", self._reconnect_attempt)
+        form.addRow("Reconnect pending:", self._reconnect_pending)
+        form.addRow("Shutdown in progress:", self._shutdown)
 
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
@@ -183,6 +217,8 @@ class DiagnosticsPage(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802 — Qt API
         super().showEvent(event)
+        if getattr(self, "_vpn", None) is None:
+            return
         self.refresh(include_version=True)
 
     def refresh(self, *, include_version: bool = True) -> None:
@@ -194,6 +230,7 @@ class DiagnosticsPage(QWidget):
                 include_version=include_version,
                 include_capabilities=include_version,
             ),
+            desktop=self._desktop_info() if self._desktop_info is not None else None,
         )
         self._helper_installed.setText(data["helper_installed"])
         self._helper_version.setText(data["helper_version"])
@@ -222,3 +259,13 @@ class DiagnosticsPage(QWidget):
         self._auth_mode.setText(data["auth_mode"])
         self._browser.setText(data["browser_status"])
         self._waiting.setText(data["waiting_for_auth"])
+        self._tray_available.setText(data.get("tray_available", "—"))
+        self._tray_active.setText(data.get("tray_active", "—"))
+        self._close_behavior.setText(data.get("close_behavior", "—"))
+        self._autostart.setText(data.get("autostart_enabled", "—"))
+        self._auto_reconnect.setText(data["auto_reconnect_enabled"])
+        self._reconnect_attempt.setText(
+            f"{data['reconnect_attempt']} / {data['reconnect_limit']}"
+        )
+        self._reconnect_pending.setText(data["reconnect_pending"])
+        self._shutdown.setText(data["shutdown_in_progress"])

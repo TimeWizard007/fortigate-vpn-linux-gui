@@ -23,6 +23,7 @@ from fortigate_vpn_gui.gui.certificate_dialog import CertificateTrustDialog
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.helper.protocol import CertificateInfo
+from fortigate_vpn_gui.metadata import CONNECTION_SSO_NOTICE
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
@@ -64,7 +65,6 @@ class ConnectionPage(QWidget):
 
         title = QLabel("Connection")
         title.setObjectName("pageTitle")
-        title.setStyleSheet("font-size: 20px; font-weight: 600;")
 
         self._profile_combo = QComboBox()
         self._profile_combo.setObjectName("profileSelector")
@@ -101,6 +101,13 @@ class ConnectionPage(QWidget):
         self._action_button.setDefault(True)
         self._action_button.clicked.connect(self._on_action_clicked)
 
+        self._reconnect_button = QPushButton("Reconnect")
+        self._reconnect_button.setObjectName("reconnectButton")
+        self._reconnect_button.setVisible(False)
+        self._reconnect_button.setAutoDefault(False)
+        self._reconnect_button.setDefault(False)
+        self._reconnect_button.clicked.connect(self._on_reconnect_clicked)
+
         self._copy_url_button = QPushButton("Copy sign-in address")
         self._copy_url_button.setObjectName("copySignInUrlButton")
         self._copy_url_button.setVisible(False)
@@ -134,39 +141,52 @@ class ConnectionPage(QWidget):
         self._cert_hint.setObjectName("certificateTrustHint")
         self._cert_hint.setVisible(False)
 
+        self._closing_hint = QLabel(
+            "Closing...\nCleaning up VPN connection and background processes."
+        )
+        self._closing_hint.setWordWrap(True)
+        self._closing_hint.setObjectName("closingHint")
+        self._closing_hint.setVisible(False)
+
+        self._reconnect_hint = QLabel("")
+        self._reconnect_hint.setWordWrap(True)
+        self._reconnect_hint.setObjectName("reconnectHint")
+        self._reconnect_hint.setVisible(False)
+
         self._helper_hint = QLabel(
-            "The privileged VPN helper is not installed. Install the helper "
-            "and polkit policy documented in packaging/README.md. The GUI will "
-            "not run as root, will not call sudo, and will not start "
-            "openfortivpn without the helper."
+            "The privileged VPN helper is not installed, so the VPN cannot start. "
+            "See the About page for how the helper works."
         )
         self._helper_hint.setWordWrap(True)
         self._helper_hint.setObjectName("missingHelperHint")
         self._helper_hint.setVisible(False)
 
-        self._notice = QLabel(
-            "SSO profiles use openfortivpn --saml-login and the system browser "
-            "(Microsoft Entra ID via FortiGate SAML). Connect with SSO asks "
-            "polkit to authorize the privileged helper. The helper starts "
-            "openfortivpn; this GUI stays unprivileged and opens the browser "
-            "in your desktop session. Query parameters are never shown."
-        )
+        self._failure_hint = QLabel("")
+        self._failure_hint.setWordWrap(True)
+        self._failure_hint.setObjectName("connectionFailureHint")
+        self._failure_hint.setVisible(False)
+
+        self._notice = QLabel(CONNECTION_SSO_NOTICE)
         self._notice.setWordWrap(True)
         self._notice.setObjectName("placeholderNotice")
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(16, 12, 24, 16)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
         layout.addWidget(title)
         layout.addWidget(form_frame)
         layout.addWidget(self._action_button)
+        layout.addWidget(self._reconnect_button)
         layout.addWidget(self._copy_url_button)
         layout.addWidget(self._empty_hint)
         layout.addWidget(self._missing_hint)
         layout.addWidget(self._helper_hint)
+        layout.addWidget(self._failure_hint)
         layout.addWidget(self._sso_hint)
         layout.addWidget(self._cert_hint)
+        layout.addWidget(self._closing_hint)
+        layout.addWidget(self._reconnect_hint)
         layout.addWidget(self._notice)
         layout.addStretch(1)
 
@@ -212,6 +232,24 @@ class ConnectionPage(QWidget):
     def missing_helper_visible(self) -> bool:
         return not self._helper_hint.isHidden()
 
+    def closing_hint_visible(self) -> bool:
+        return not self._closing_hint.isHidden()
+
+    def reconnect_hint_visible(self) -> bool:
+        return not self._reconnect_hint.isHidden()
+
+    def reconnect_button_visible(self) -> bool:
+        return not self._reconnect_button.isHidden()
+
+    def failure_hint_visible(self) -> bool:
+        return not self._failure_hint.isHidden()
+
+    def failure_hint_text(self) -> str:
+        return self._failure_hint.text()
+
+    def notice_text(self) -> str:
+        return self._notice.text()
+
     def last_trust_decision(self) -> bool | None:
         return self._last_trust_decision
 
@@ -245,22 +283,46 @@ class ConnectionPage(QWidget):
 
     def apply_snapshot(self, snapshot: VpnSnapshot) -> None:
         """Update status and buttons from a backend snapshot."""
-        self._status_label.setText(state_label(snapshot.state))
         self._safe_auth_url = snapshot.safe_auth_url
-        busy = snapshot.state in BUSY_STATES
+        busy = snapshot.state in BUSY_STATES or snapshot.manual_reconnect
         has_profile = self.selected_profile() is not None
         missing = self._openfortivpn_path is None
         waiting = snapshot.state is ConnectionState.WAITING_FOR_AUTH
         waiting_cert = snapshot.state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
+        closing = snapshot.shutdown_in_progress or snapshot.state is ConnectionState.CLOSING
+        if snapshot.manual_reconnect and not closing:
+            self._status_label.setText("Reconnecting...")
+        else:
+            self._status_label.setText(state_label(snapshot.state))
         helper_missing = snapshot.helper_installed is False or snapshot.helper_status == "missing"
-        self._missing_hint.setVisible(missing)
-        self._helper_hint.setVisible(helper_missing)
-        self._empty_hint.setVisible(not has_profile)
-        self._sso_hint.setVisible(waiting)
-        self._cert_hint.setVisible(waiting_cert)
-        self._copy_url_button.setVisible(waiting and bool(snapshot.safe_auth_url))
+        self._missing_hint.setVisible(missing and not closing)
+        self._helper_hint.setVisible(helper_missing and not closing)
+        self._empty_hint.setVisible(not has_profile and not closing)
+        self._sso_hint.setVisible(waiting and not closing)
+        self._cert_hint.setVisible(waiting_cert and not closing)
+        self._closing_hint.setVisible(closing)
+        failed = snapshot.state is ConnectionState.FAILED and not closing
+        if failed and snapshot.error_message:
+            self._failure_hint.setText(snapshot.error_message)
+            self._failure_hint.setVisible(True)
+        else:
+            self._failure_hint.setVisible(False)
+        if snapshot.reconnect_pending and not closing:
+            delay = snapshot.reconnect_delay_seconds
+            delay_display = int(delay) if delay == int(delay) else delay
+            self._reconnect_hint.setText(
+                f"Reconnecting in {delay_display} seconds... "
+                f"(attempt {snapshot.reconnect_attempt} of {snapshot.reconnect_limit})"
+            )
+            self._reconnect_hint.setVisible(True)
+        elif snapshot.manual_reconnect and not closing:
+            self._reconnect_hint.setText("Reconnecting...")
+            self._reconnect_hint.setVisible(True)
+        else:
+            self._reconnect_hint.setVisible(False)
+        self._copy_url_button.setVisible(waiting and bool(snapshot.safe_auth_url) and not closing)
         self._profile_combo.setEnabled(has_profile and not busy)
-        self._sync_button(snapshot.state, has_profile)
+        self._sync_button(snapshot, has_profile)
         if snapshot.state in {ConnectionState.DISCONNECTED, ConnectionState.STARTING}:
             self._shown_cert_sha = None
 
@@ -302,8 +364,26 @@ class ConnectionPage(QWidget):
         updated = self._manager.get(profile.id)
         self._vpn.connect(updated, after_trust=True)
 
-    def _sync_button(self, state: ConnectionState, has_profile: bool) -> None:
+    def _sync_button(self, snapshot: VpnSnapshot, has_profile: bool) -> None:
         profile = self.selected_profile()
+        state = snapshot.state
+        closing = snapshot.shutdown_in_progress or state is ConnectionState.CLOSING
+        self._reconnect_button.setVisible(state is ConnectionState.CONNECTED and not closing)
+        self._reconnect_button.setEnabled(state is ConnectionState.CONNECTED and not closing)
+        if closing:
+            self._action_button.setText("Closing...")
+            self._action_button.setEnabled(False)
+            return
+        if snapshot.manual_reconnect:
+            self._reconnect_button.setVisible(False)
+            self._reconnect_button.setEnabled(False)
+            self._action_button.setText("Reconnecting...")
+            self._action_button.setEnabled(False)
+            return
+        if snapshot.reconnect_pending:
+            self._action_button.setText("Cancel reconnect")
+            self._action_button.setEnabled(True)
+            return
         if state is ConnectionState.STARTING:
             self._action_button.setText("Starting...")
             self._action_button.setEnabled(False)
@@ -338,6 +418,11 @@ class ConnectionPage(QWidget):
             self._action_button.setText("Connect")
         self._action_button.setEnabled(has_profile)
 
+    def _on_reconnect_clicked(self) -> None:
+        if self._vpn.snapshot().shutdown_in_progress:
+            return
+        self._vpn.reconnect(self.selected_profile())
+
     def _on_profile_changed(self, _index: int) -> None:
         self._show_profile(self.selected_profile())
         self.apply_snapshot(self._vpn.snapshot())
@@ -353,7 +438,15 @@ class ConnectionPage(QWidget):
         self._sso_label.setText("Enabled" if profile.use_sso else "Disabled")
 
     def _on_action_clicked(self) -> None:
-        state = self._vpn.current_state()
+        snapshot = self._vpn.snapshot()
+        if snapshot.shutdown_in_progress or snapshot.state is ConnectionState.CLOSING:
+            return
+        if snapshot.manual_reconnect:
+            return
+        if snapshot.reconnect_pending:
+            self._vpn.disconnect()
+            return
+        state = snapshot.state
         if state in CANCELABLE_STATES:
             self._vpn.disconnect()
             return

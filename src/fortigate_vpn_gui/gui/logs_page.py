@@ -25,7 +25,7 @@ class LogsPage(QWidget):
         self._buffer = log_buffer
 
         title = QLabel("Logs")
-        title.setStyleSheet("font-size: 20px; font-weight: 600;")
+        title.setObjectName("pageTitle")
         intro = QLabel(
             "Application and openfortivpn output. Secrets are redacted. "
             "Logs stay in memory for this session and are not saved to disk."

@@ -5,7 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.1] - 2026-09-11
+
+### Changed
+
+- shorter Connection-page SSO explanation; technical helper/SAML details moved to About
+- Disconnect remains the primary connected action; Reconnect is visually secondary
+- failed connections show a short on-page message and keep Connect again available
+- reconnect logging no longer duplicates Disconnect/start messages
+- SAML sign-in URL details are DEBUG; openfortivpn errors stay in Logs
+
+### Fixed
+
+- Connection page helper-missing copy was overly technical for a first-run screen
+- page titles and button sizing were inconsistent across main pages
+
+### Security
+
+- privileged helper protocol version remains 0.7.0 (no helper reinstall required)
+
+## [0.7.0] - 2026-09-10
+
+### Added
+
+- system tray integration
+- tray connection controls
+- optional automatic reconnect
+- manual reconnect
+- optional user autostart
+- About/project/license information
+- desktop notifications
+
+### Changed
+
+- improved desktop state synchronization
+- improved shutdown UX
+- expanded Settings and Diagnostics
+
+### Fixed
+
+- application appearing unresponsive during multi-second shutdown
+- reconnect races
+- duplicate tray actions/state inconsistencies
+
+### Security
+
+- autostart remains user-level only
+- no new privilege path
+- certificate trust remains explicit
+- reconnect never bypasses SAML or certificate validation
 
 ## [0.6.0] - 2026-09-09
 
@@ -146,7 +194,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.3.0...v0.4.0

@@ -13,9 +13,10 @@ Ten projekt ma dać jasne, nowoczesne GUI, które:
 - pozostaje niezależne od Fortinet
 
 Aplikacja używa [openfortivpn](https://github.com/adrienverge/openfortivpn)
-jako zaplecza VPN. v0.6.x nadal uruchamia go przez minimalny pomocnik
-uprzywilejowany. GUI pozostaje nieuprzywilejowane, otwiera systemową
-przeglądarkę dla SAML i nie ponawia połączenia automatycznie po utracie tunelu.
+jako zaplecza VPN. v0.7.0 nadal uruchamia go przez minimalny pomocnik
+uprzywilejowany. GUI pozostaje nieuprzywilejowane i otwiera systemową
+przeglądarkę dla SAML. Opcjonalne ponawianie po utracie tunelu jest
+domyślnie wyłączone i nigdy nie pomija zatwierdzenia certyfikatu ani SAML.
 
 Ten projekt **nie** jest powiązany, wspierany ani sponsorowany przez Fortinet.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich

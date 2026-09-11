@@ -7,10 +7,10 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v0.6.x hardens connection lifecycle, certificate-trust waiting, and unexpected
-tunnel-loss handling on top of the polkit helper and SAML/SSO. The GUI must
-never run as root and must never call `sudo`. Privileged VPN work belongs only
-in the project helper.
+v0.7.1 is a UI/UX polish of the v0.7.0 desktop baseline. The GUI must never
+run as root and must never call `sudo`. Privileged VPN work belongs only in
+the project helper. Autostart must stay user-level. Reconnect must not
+auto-trust certificates or skip SAML.
 
 Please do not send pull requests that:
 

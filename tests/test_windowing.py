@@ -28,6 +28,7 @@ def _window(qapp, profile_manager: ProfileManager, tmp_path) -> MainWindow:
         vpn_backend=harness.backend,
         detect=_no_openfortivpn,
         settings=settings,
+        tray_available=False,
     )
 
 
@@ -99,6 +100,7 @@ def test_pages_use_scroll_areas(qapp, profile_manager: ProfileManager, tmp_path)
         window.connection_page,
         window.diagnostics_page,
         window.settings_page,
+        window.about_page,
     ):
         area = page.findChild(QScrollArea, "pageScrollArea")
         assert area is not None

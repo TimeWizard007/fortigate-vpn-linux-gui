@@ -9,11 +9,28 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.6.0**. Persistent profiles, SAML/SSO via
+The current version is **0.7.1**. Persistent profiles, SAML/SSO via
 `--saml-login` and the system browser, a polkit privileged helper, and
-explicit FortiGate certificate pinning are implemented. Connection lifecycle,
-certificate-trust waiting, and unexpected tunnel-loss handling are hardened;
-the GUI still does not auto-reconnect.
+explicit FortiGate certificate pinning are implemented. Connection lifecycle
+is hardened. Desktop integration adds a system tray, optional close-to-tray,
+optional user autostart, optional auto-reconnect after unexpected tunnel
+loss, and an About page with project/license information.
+
+| Capability | Status |
+| ---------- | ------ |
+| Application window and navigation | Implemented |
+| Persistent connection profiles | Implemented |
+| openfortivpn process lifecycle | Implemented |
+| Connect / disconnect (non-SSO profiles) | Implemented |
+| Logs (in-memory, redacted) | Implemented |
+| Runtime openfortivpn detection | Implemented |
+| SAML / SSO (Microsoft Entra ID, system browser) | Implemented |
+| Privileged helper / polkit | Implemented |
+| Explicit gateway certificate pinning | Implemented |
+| System tray and desktop notifications | Implemented |
+| Optional auto-reconnect | Implemented (off by default) |
+| Optional user autostart | Implemented (off by default) |
+| About / project / license | Implemented |
 
 | Capability | Status |
 | ---------- | ------ |
@@ -112,6 +129,35 @@ arbitrary executable path.
 When FortiGate certificate validation fails, the GUI shows a pinning dialog.
 Trust stores the SHA-256 fingerprint on that profile only. A later different
 fingerprint is a certificate-change warning and is never auto-replaced.
+
+## Desktop integration
+
+The application can use a system tray icon when the desktop provides one. The
+tray shows connection state and offers Show/Hide, Connect, Disconnect,
+Reconnect, Settings, About, and Quit. Quit always shuts the application down
+safely (it waits for helper/openfortivpn cleanup). If no tray is available,
+the main window works as before.
+
+Closing the window exits the application by default. Settings can change that
+to **Minimize to system tray**; the VPN keeps running until you Quit from the
+tray. The first time this happens, a short notification explains that the
+app is still running.
+
+**Automatically reconnect if VPN connection is lost** is off by default. It
+only runs after an unexpected tunnel loss, not after Disconnect or Quit, and
+not after a certificate rejection. It never auto-approves certificates and
+never skips SAML. Failed authentication does not retry in a loop. Manual
+Reconnect disconnects safely, waits for cleanup, then connects the same
+profile again.
+
+**Start FortiGate VPN Linux GUI automatically after login** writes a user
+`.desktop` file under `~/.config/autostart/`. It does not require root and
+does not connect the VPN at login. Starting the app and connecting remain
+separate.
+
+The About page shows the version, author (TimeWizard007), GPL-3.0-or-later
+license, project URL, and a Fortinet independence disclaimer. FortiGate VPN
+Linux GUI is free and open-source software.
 
 ## Privileged helper install (development)
 

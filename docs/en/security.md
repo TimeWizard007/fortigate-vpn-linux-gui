@@ -88,15 +88,16 @@ If a pin exists and openfortivpn presents a **different** fingerprint, the UI
 warns that the gateway certificate has changed. The previous pin is never
 replaced automatically.
 
-## What v0.6.x does not do
+## What v0.7.0 does not do
 
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
-- No automatic package installation.
+- No automatic package installation (`.deb` packaging is planned for v0.8.0).
 - No direct firewall, route, or DNS changes by the GUI.
 - No password, token, or VPN cookie storage.
 - Logs are in memory only; they are not persisted to disk.
 - No custom username/password login and no embedded webview.
 - No auto-trust and no TLS validation disable.
-- No auto-reconnect after unexpected tunnel loss (planned for v0.7.0).
-- No tray icon or autostart (planned for v0.7.0).
+- Auto-reconnect never bypasses SAML or certificate validation.
+- Autostart is user-level only (`~/.config/autostart/`); no system-wide
+  autostart and no automatic VPN connect at login.

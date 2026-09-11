@@ -7,12 +7,12 @@ from __future__ import annotations
 def test_package_imports() -> None:
     import fortigate_vpn_gui
 
-    assert fortigate_vpn_gui.__version__ == "0.6.0"
+    assert fortigate_vpn_gui.__version__ == "0.7.1"
     assert fortigate_vpn_gui.APP_NAME == "FortiGate VPN Linux GUI"
 
 
 def test_placeholder_packages_import() -> None:
-    from fortigate_vpn_gui import diagnostics, profiles, runtime, system, vpn
+    from fortigate_vpn_gui import desktop, diagnostics, metadata, profiles, runtime, system, vpn
     from fortigate_vpn_gui.diagnostics import collector
     from fortigate_vpn_gui.helper import main as helper_main
     from fortigate_vpn_gui.profiles import manager
@@ -29,4 +29,7 @@ def test_placeholder_packages_import() -> None:
     assert privileges.__doc__
     assert dependencies.__doc__
     assert diagnostics.__doc__
+    assert metadata.PROJECT_URL.startswith("https://github.com/")
+    assert metadata.LICENSE_SPDX == "GPL-3.0-or-later"
+    assert desktop.__doc__
     assert collector.__doc__

@@ -16,7 +16,9 @@ def _no_openfortivpn(**kwargs) -> OpenfortivpnDetection:
     return OpenfortivpnDetection(available=False, path=None, version=None)
 
 
-def _make_window(profile_manager: ProfileManager, tmp_path, harness=None) -> MainWindow:
+def _make_window(
+    profile_manager: ProfileManager, tmp_path, harness=None, *, tray_available: bool = False
+) -> MainWindow:
     settings = QSettings(str(tmp_path / "ui.ini"), QSettings.Format.IniFormat)
     vpn = harness.backend if harness is not None else VpnHarness().backend
     return MainWindow(
@@ -24,6 +26,7 @@ def _make_window(profile_manager: ProfileManager, tmp_path, harness=None) -> Mai
         vpn_backend=vpn,
         detect=_no_openfortivpn,
         settings=settings,
+        tray_available=tray_available,
     )
 
 
@@ -32,6 +35,7 @@ def test_main_window_can_be_instantiated(qapp, profile_manager: ProfileManager, 
     assert window.windowTitle() == APP_NAME
     assert window.connection_status() == "Disconnected"
     window.close()
+    qapp.processEvents()
 
 
 def test_main_window_shows_profile_config_path(
@@ -56,3 +60,17 @@ def test_main_window_shutdown_stops_process(
     assert harness.process is not None
     window.close()
     assert harness.process.terminate_called
+    qapp.processEvents()
+    assert window.close_finalized() is True
+
+
+def test_main_window_tray_has_icon_before_show(
+    qapp, profile_manager: ProfileManager, tmp_path
+) -> None:
+    window = _make_window(profile_manager, tmp_path, tray_available=True)
+    assert window.tray.available is True
+    assert window.tray.icon_assigned is True
+    assert window.tray.shown_before_icon is False
+    window.close()
+    qapp.processEvents()
+    assert window.close_finalized() is True

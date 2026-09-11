@@ -9,11 +9,29 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.6.0**. Trwałe profile, SAML/SSO przez `--saml-login`
+Aktualna wersja to **0.7.1**. Trwałe profile, SAML/SSO przez `--saml-login`
 i systemową przeglądarkę, pomocnik uprzywilejowany polkit oraz jawne
-przypinanie certyfikatu FortiGate są zaimplementowane. Cykl życia połączenia,
-oczekiwanie na zaufanie certyfikatu i utrata tunelu są utwardzone; GUI nadal
-nie ponawia połączenia automatycznie.
+przypinanie certyfikatu FortiGate są zaimplementowane. Cykl życia połączenia
+jest utwardzony. Integracja z pulpitem dodaje zasobnik systemowy, opcjonalne
+zamykanie do zasobnika, opcjonalny autostart użytkownika, opcjonalne
+ponawianie połączenia po nieoczekiwanej utracie tunelu oraz stronę About
+z informacją o projekcie i licencji.
+
+| Funkcja | Status |
+| ------- | ------ |
+| Okno aplikacji i nawigacja | Zaimplementowane |
+| Trwałe profile połączeń | Zaimplementowane |
+| Cykl życia procesu openfortivpn | Zaimplementowany |
+| Połączenie / rozłączenie (profile bez SSO) | Zaimplementowane |
+| Logi (w pamięci, ocenzurowane) | Zaimplementowane |
+| Wykrywanie openfortivpn w czasie działania | Zaimplementowane |
+| SAML / SSO (Microsoft Entra ID, przeglądarka systemowa) | Zaimplementowane |
+| Pomocnik uprzywilejowany / polkit | Zaimplementowany |
+| Jawne przypinanie certyfikatu bramy | Zaimplementowane |
+| Zasobnik systemowy i powiadomienia | Zaimplementowane |
+| Opcjonalne auto-ponawianie połączenia | Zaimplementowane (domyślnie wyłączone) |
+| Opcjonalny autostart użytkownika | Zaimplementowany (domyślnie wyłączony) |
+| About / projekt / licencja | Zaimplementowane |
 
 | Funkcja | Status |
 | ------- | ------ |
@@ -112,6 +130,41 @@ wykonywalnej.
 Gdy walidacja certyfikatu FortiGate zawiedzie, GUI pokazuje okno pinowania.
 Zaufanie zapisuje odcisk SHA-256 tylko w tym profilu. Późniejszy inny odcisk
 to ostrzeżenie o zmianie certyfikatu i nigdy nie jest przyjmowany sam.
+
+## Integracja z pulpitem
+
+Aplikacja może używać ikony zasobnika, gdy pulpit ją udostępnia. Zasobnik
+pokazuje stan połączenia oraz Show/Hide, Connect, Disconnect, Reconnect,
+Settings, About i Quit. Quit zawsze kończy aplikację bezpiecznie (czeka na
+sprzątanie pomocnika/openfortivpn). Bez zasobnika główne okno działa jak
+dotychczas.
+
+Zamknięcie okna domyślnie kończy aplikację. W Ustawieniach można wybrać
+**Minimalizuj do zasobnika**; VPN działa dalej aż do Quit z zasobnika.
+Przy pierwszym takim zamknięciu pojawia się krótkie powiadomienie.
+
+**Automatycznie ponów połączenie, jeśli VPN zostanie utracone** jest
+domyślnie wyłączone. Działa tylko po nieoczekiwanej utracie tunelu, nie po
+Disconnect ani Quit i nie po odrzuceniu certyfikatu. Nie zatwierdza
+certyfikatów samo i nie pomija SAML. Nieudane uwierzytelnianie nie jest
+ponawiane w pętli. Ręczne Reconnect rozłącza bezpiecznie, czeka na
+sprzątanie i łączy ten sam profil ponownie.
+
+**Uruchom FortiGate VPN Linux GUI automatycznie po zalogowaniu** zapisuje
+plik `.desktop` użytkownika w `~/.config/autostart/`. Nie wymaga root i nie
+łączy VPN przy logowaniu. Start aplikacji i połączenie to osobne funkcje.
+
+Strona About pokazuje wersję, autora (TimeWizard007), licencję
+GPL-3.0-or-later, adres projektu i zastrzeżenie niezależności od Fortinet.
+
+FortiGate VPN Linux GUI jest darmowym i otwartoźródłowym oprogramowaniem
+udostępnianym na licencji GNU General Public License v3.0 lub nowszej.
+
+Możesz używać, analizować, modyfikować i rozpowszechniać program zgodnie
+z warunkami licencji.
+
+Projekt jest niezależny i nie jest powiązany, sponsorowany ani zatwierdzony
+przez Fortinet.
 
 ## Instalacja pomocnika (rozwój)
 
