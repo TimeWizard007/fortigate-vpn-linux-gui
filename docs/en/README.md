@@ -7,7 +7,7 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v0.8.0 is a Profiles UX release on the v0.7.1 desktop baseline. The polkit helper and
+v0.9.0 is a Diagnostics release on the v0.8.0 Profiles baseline. The polkit helper and
 SAML/SSO model are unchanged.
 
 | Topic | Document |

@@ -73,9 +73,7 @@ def build_diagnostics_snapshot(
         "supports_saml": _yes_no(saml),
         "supports_cookie_stdin": _yes_no(cookie),
         "certificate_pinned": _yes_no(bool(pinned) if pinned is not None else None),
-        "certificate_fingerprint": (
-            format_sha256_fingerprint(fingerprint) if fingerprint else "—"
-        ),
+        "certificate_fingerprint": (format_sha256_fingerprint(fingerprint) if fingerprint else "—"),
         "certificate_subject": (
             snapshot.certificate_subject
             or (presented.subject if presented is not None else None)

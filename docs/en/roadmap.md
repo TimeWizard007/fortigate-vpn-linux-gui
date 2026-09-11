@@ -48,7 +48,12 @@ Dates are not committed. Order may change as design work proceeds.
 - Safer Disconnect/Cancel during all active phases
 - Clearer lifecycle diagnostics and user-facing logs
 
-## v0.8.0 — Profiles UX (current)
+## v0.9.0 — Diagnostics (current)
+
+- Expanded diagnostics for helper, DNS, routing, and VPN interface
+- Diagnostic report export (sanitized, copyable)
+
+## v0.8.0 — Profiles UX
 
 - First-class Profiles management for many FortiGate gateways
 - Connect from the profile list using the existing VPN controller
@@ -71,11 +76,6 @@ Dates are not committed. Order may change as design work proceeds.
 - Optional user-level autostart
 - About / project / license information
 - Graceful shutdown UI
-
-## v0.9.0 — Diagnostics (planned)
-
-- Expanded diagnostics for helper, DNS, routing, and VPN interface
-- Diagnostic report export
 
 ## v1.0.0 — packaging and stable release (planned)
 

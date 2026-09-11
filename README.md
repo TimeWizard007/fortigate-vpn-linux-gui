@@ -9,11 +9,13 @@ their respective owner(s).
 
 ## Status
 
-The current version is **0.8.0**. Persistent profiles are a first-class
+The current version is **0.9.0**. Diagnostics is a first-class troubleshooting
+page: local health status, explicit Run diagnostics for DNS/routing/TCP, and
+a copyable sanitized report. Persistent profiles remain a first-class
 workflow: list, create, edit, duplicate, delete, set default, and connect
 directly from Profiles. SAML/SSO via `--saml-login` and the system browser,
 a polkit privileged helper, and explicit FortiGate certificate pinning are
-unchanged from v0.7.1. Desktop integration adds a system tray, optional
+unchanged from v0.8.0. Desktop integration adds a system tray, optional
 close-to-tray, optional user autostart, optional auto-reconnect after
 unexpected tunnel loss, and an About page with project/license information.
 
@@ -34,6 +36,7 @@ unexpected tunnel loss, and an About page with project/license information.
 | Optional auto-reconnect | Implemented (off by default) |
 | Optional user autostart | Implemented (off by default) |
 | About / project / license | Implemented |
+| Diagnostics health checks and copyable report | Implemented |
 
 | Capability | Status |
 | ---------- | ------ |
@@ -160,6 +163,22 @@ profile again.
 `.desktop` file under `~/.config/autostart/`. It does not require root and
 does not connect the VPN at login. Starting the app and connecting remain
 separate.
+
+## Diagnostics
+
+The Diagnostics page answers “why can’t this VPN connect?” without opening a
+terminal first. Opening it does not request administrator rights and does not
+start a VPN.
+
+Lightweight status is shown immediately (application/OS, helper and polkit
+files, selected profile, certificate pin, connection state). **Run
+diagnostics** adds bounded DNS, route, and TCP checks for the selected
+profile. **Copy report** puts a plain-text summary on the clipboard for
+tickets or GitHub issues.
+
+Copied reports are sanitized. They must not include passwords, tokens,
+cookies, SAML payloads, or helper request bodies. A successful TCP connect is
+not proof that SAML or VPN authentication will succeed.
 
 The About page shows the version, author (TimeWizard007), GPL-3.0-or-later
 license, project URL, and a Fortinet independence disclaimer. FortiGate VPN

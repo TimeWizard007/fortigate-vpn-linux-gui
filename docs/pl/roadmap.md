@@ -44,7 +44,12 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Bezpieczniejszy Disconnect/Cancel we wszystkich fazach aktywnych
 - Jaśniejsza diagnostyka cyklu życia i logi dla użytkownika
 
-## v0.8.0 — Profiles UX (obecnie)
+## v0.9.0 — diagnostyka (obecnie)
+
+- Rozszerzona diagnostyka pomocnika, DNS, routingu i interfejsu VPN
+- Eksport ocenzurowanego raportu diagnostycznego
+
+## v0.8.0 — Profiles UX
 
 - Zarządzanie profilami dla wielu bram FortiGate
 - Łączenie z listy profili przez istniejący kontroler VPN
@@ -67,11 +72,6 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Opcjonalny autostart użytkownika
 - About / projekt / licencja
 - Widoczne, bezpieczne zamykanie aplikacji
-
-## v0.9.0 — diagnostyka (planowane)
-
-- Rozszerzona diagnostyka pomocnika, DNS, routingu i interfejsu VPN
-- Eksport raportu diagnostycznego
 
 ## v1.0.0 — pakietowanie i wydanie stabilne (planowane)
 

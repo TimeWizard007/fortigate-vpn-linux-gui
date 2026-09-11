@@ -33,6 +33,8 @@ top of the hardened connection lifecycle and polkit helper.
 - Packages are never installed automatically. `.deb` packaging is planned
   for a later release (v1.0.0).
 - Logs are in-memory only and are redacted. They are not written to disk.
+- Copied diagnostic reports are sanitized and must not contain secrets. They
+  are not a substitute for the Logs page.
 - The full SAML URL is not shown; copy uses origin+path only.
 - Profiles are local per-user JSON. They are not synced and not encrypted
   beyond ordinary home-directory permissions.

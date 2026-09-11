@@ -40,8 +40,10 @@ zweryfikowane zdarzenie URL SAML. Nieuprzywilejowane GUI otwiera przeglądarkę.
 
 ## Sekrety
 
-Hasła VPN, tokeny SAML i SVPNCOOKIE nie są przechowywane. `trusted_cert_sha256`
-to publiczny pin certyfikatu, nie hasło.
+Hasła VPN, tokeny SAML i SVPNCOOKIE nie są przechowywane. Skopiowane raporty
+diagnostyczne są ocenzurowane i nie mogą zawierać haseł, tokenów, ciasteczek
+ani ładunków SAML. Otwarcie Diagnostics nie uruchamia pkexec.
+`trusted_cert_sha256` to publiczny pin certyfikatu, nie hasło.
 
 ## Zaufanie
 

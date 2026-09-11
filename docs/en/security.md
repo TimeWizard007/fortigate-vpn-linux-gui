@@ -75,6 +75,10 @@ because query strings can carry session identifiers.
   profile files, diagnostics, or exceptions.
 - Every backend log line passes through `redact_log_line` (case-insensitive)
   before it is shown.
+- Copied diagnostic reports are sanitized the same way. They must not include
+  passwords, tokens, cookies, SAML payloads, or helper request bodies.
+- Opening Diagnostics does not launch pkexec and does not request interactive
+  authorization.
 - Connection profile files contain **no authentication secrets**.
   `trusted_cert_sha256` is a public certificate pin, not a password.
 

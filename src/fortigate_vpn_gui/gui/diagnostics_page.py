@@ -1,24 +1,82 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Diagnostics page: helper, openfortivpn, certificate, and VPN status."""
+"""Diagnostics page: grouped health checks and a copyable report."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFormLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
-from fortigate_vpn_gui.diagnostics.collector import build_diagnostics_snapshot
+from fortigate_vpn_gui import __version__ as APP_VERSION
+from fortigate_vpn_gui.diagnostics.model import (
+    GROUP_ORDER,
+    STATUS_LABEL,
+    CheckStatus,
+    DiagnosticCheck,
+    DiagnosticRun,
+)
+from fortigate_vpn_gui.diagnostics.platform_info import (
+    architecture,
+    desktop_session_type,
+    kernel_release,
+    read_os_pretty_name,
+)
+from fortigate_vpn_gui.diagnostics.report import format_diagnostic_report
+from fortigate_vpn_gui.diagnostics.service import (
+    DiagnosticDeps,
+    DiagnosticRequest,
+    DiagnosticService,
+)
+from fortigate_vpn_gui.diagnostics.viewmodel import DiagnosticsViewModel
 from fortigate_vpn_gui.gui.config_path_widget import ProfileConfigPathWidget
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
+from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.vpn.backend import VpnBackend
 from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
 
+_STATUS_COLORS = {
+    CheckStatus.PASS: "#2e7d32",
+    CheckStatus.WARNING: "#ef6c00",
+    CheckStatus.FAIL: "#c62828",
+    CheckStatus.INFO: "#546e7a",
+    CheckStatus.NOT_TESTED: "#9e9e9e",
+}
+
+
+class _DiagnosticsWorker(QThread):
+    """Run diagnostics off the GUI thread."""
+
+    completed = Signal(object)
+
+    def __init__(
+        self,
+        viewmodel: DiagnosticsViewModel,
+        request: DiagnosticRequest,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._viewmodel = viewmodel
+        self._request = request
+
+    def run(self) -> None:
+        result = self._viewmodel.execute(self._request)
+        self.completed.emit(result)
+
 
 class DiagnosticsPage(QWidget):
-    """Safe-to-share runtime details. No secrets are shown."""
+    """Health overview and copyable diagnostic report. No secrets are shown."""
 
     def __init__(
         self,
@@ -29,176 +87,69 @@ class DiagnosticsPage(QWidget):
         *,
         detect=detect_openfortivpn,
         desktop_info: Callable[[], dict[str, str]] | None = None,
+        service: DiagnosticService | None = None,
+        viewmodel: DiagnosticsViewModel | None = None,
+        execute_in_thread: bool = True,
     ) -> None:
         super().__init__(parent)
         self._manager = manager
         self._vpn = vpn
         self._selected_profile = selected_profile
-        self._detect = detect
         self._desktop_info = desktop_info
+        self._execute_in_thread = execute_in_thread
+        self._worker: _DiagnosticsWorker | None = None
+        self._displayed_run: DiagnosticRun | None = None
+        self._row_widgets: dict[str, QWidget] = {}
+        self._full_run_done = False
+
+        self._service = service or DiagnosticService(DiagnosticDeps(detect=detect))
+        self._viewmodel = viewmodel or DiagnosticsViewModel(self._service)
 
         title = QLabel("Diagnostics")
         title.setObjectName("pageTitle")
         intro = QLabel(
-            "Read-only runtime information for troubleshooting. Passwords, "
-            "SAML tokens, cookies, and sign-in URL query values are never shown. "
-            "Certificate fingerprints are not secrets and may be displayed."
+            "Troubleshooting checks for why a VPN connection may fail. "
+            "Opening this page does not request administrator rights. "
+            "Copied reports never include passwords, tokens, cookies, or SAML payloads."
         )
         intro.setWordWrap(True)
 
-        self._helper_installed = QLabel("—")
-        self._helper_installed.setObjectName("diagHelperInstalled")
-        self._helper_version = QLabel("—")
-        self._helper_version.setObjectName("diagHelperVersion")
-        self._helper_auth = QLabel("—")
-        self._helper_auth.setObjectName("diagHelperAuth")
-        self._helper_status = QLabel("—")
-        self._helper_status.setObjectName("diagHelperStatus")
-        self._helper_startup = QLabel("—")
-        self._helper_startup.setObjectName("diagHelperStartupDetail")
-        self._helper_pid = QLabel("—")
-        self._helper_pid.setObjectName("diagHelperPid")
-        self._detected = QLabel("—")
-        self._detected.setObjectName("diagOpenfortivpnDetected")
-        self._path = QLabel("—")
-        self._path.setObjectName("diagOpenfortivpnPath")
-        self._version = QLabel("—")
-        self._version.setObjectName("diagOpenfortivpnVersion")
-        self._saml = QLabel("—")
-        self._saml.setObjectName("diagOpenfortivpnSaml")
-        self._cookie_stdin = QLabel("—")
-        self._cookie_stdin.setObjectName("diagOpenfortivpnCookieStdin")
-        self._cert_pinned = QLabel("—")
-        self._cert_pinned.setObjectName("diagCertPinned")
-        self._cert_fingerprint = QLabel("—")
-        self._cert_fingerprint.setObjectName("diagCertFingerprint")
-        self._cert_subject = QLabel("—")
-        self._cert_subject.setObjectName("diagCertSubject")
-        self._cert_issuer = QLabel("—")
-        self._cert_issuer.setObjectName("diagCertIssuer")
-        self._state = QLabel("—")
-        self._state.setObjectName("diagVpnState")
-        self._wait_reason = QLabel("—")
-        self._wait_reason.setObjectName("diagWaitReason")
-        self._failure = QLabel("—")
-        self._failure.setObjectName("diagFailureReason")
-        self._last_failure = QLabel("—")
-        self._last_failure.setObjectName("diagLastFailureReason")
-        self._last_disconnect = QLabel("—")
-        self._last_disconnect.setObjectName("diagLastDisconnectReason")
-        self._attempt = QLabel("—")
-        self._attempt.setObjectName("diagAttemptId")
-        self._retry = QLabel("—")
-        self._retry.setObjectName("diagRetryCount")
-        self._pid = QLabel("—")
-        self._pid.setObjectName("diagVpnPid")
-        self._profile = QLabel("—")
-        self._profile.setObjectName("diagSelectedProfile")
-        self._auth_mode = QLabel("—")
-        self._auth_mode.setObjectName("diagAuthMode")
-        self._browser = QLabel("—")
-        self._browser.setObjectName("diagBrowserStatus")
-        self._waiting = QLabel("—")
-        self._waiting.setObjectName("diagWaitingForAuth")
-        self._tray_available = QLabel("—")
-        self._tray_available.setObjectName("diagTrayAvailable")
-        self._tray_active = QLabel("—")
-        self._tray_active.setObjectName("diagTrayActive")
-        self._close_behavior = QLabel("—")
-        self._close_behavior.setObjectName("diagCloseBehavior")
-        self._autostart = QLabel("—")
-        self._autostart.setObjectName("diagAutostart")
-        self._auto_reconnect = QLabel("—")
-        self._auto_reconnect.setObjectName("diagAutoReconnect")
-        self._reconnect_attempt = QLabel("—")
-        self._reconnect_attempt.setObjectName("diagReconnectAttempt")
-        self._reconnect_pending = QLabel("—")
-        self._reconnect_pending.setObjectName("diagReconnectPending")
-        self._shutdown = QLabel("—")
-        self._shutdown.setObjectName("diagShutdownInProgress")
+        self._profile_combo = QComboBox()
+        self._profile_combo.setObjectName("diagnosticsProfileSelector")
+        self._profile_combo.setMinimumWidth(280)
+        self._profile_combo.currentIndexChanged.connect(self._on_profile_changed)
 
-        value_labels = (
-            self._helper_installed,
-            self._helper_version,
-            self._helper_auth,
-            self._helper_status,
-            self._helper_startup,
-            self._helper_pid,
-            self._detected,
-            self._path,
-            self._version,
-            self._saml,
-            self._cookie_stdin,
-            self._cert_pinned,
-            self._cert_fingerprint,
-            self._cert_subject,
-            self._cert_issuer,
-            self._state,
-            self._wait_reason,
-            self._failure,
-            self._last_failure,
-            self._last_disconnect,
-            self._attempt,
-            self._retry,
-            self._pid,
-            self._profile,
-            self._auth_mode,
-            self._browser,
-            self._waiting,
-            self._tray_available,
-            self._tray_active,
-            self._close_behavior,
-            self._autostart,
-            self._auto_reconnect,
-            self._reconnect_attempt,
-            self._reconnect_pending,
-            self._shutdown,
-        )
-        for label in value_labels:
-            label.setWordWrap(True)
-            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._run_button = QPushButton("Run diagnostics")
+        self._run_button.setObjectName("runDiagnosticsButton")
+        self._run_button.clicked.connect(self.start_run)
 
-        form = QFormLayout()
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(8)
-        form.addRow("Privileged helper installed:", self._helper_installed)
-        form.addRow("Helper version:", self._helper_version)
-        form.addRow("Authorization mechanism:", self._helper_auth)
-        form.addRow("Helper status:", self._helper_status)
-        form.addRow("Helper startup detail:", self._helper_startup)
-        form.addRow("Privileged process PID:", self._helper_pid)
-        form.addRow("openfortivpn detected:", self._detected)
-        form.addRow("Selected executable:", self._path)
-        form.addRow("Version:", self._version)
-        form.addRow("SAML support:", self._saml)
-        form.addRow("Cookie-on-stdin support:", self._cookie_stdin)
-        form.addRow("Certificate pinned:", self._cert_pinned)
-        form.addRow("Certificate fingerprint:", self._cert_fingerprint)
-        form.addRow("Certificate subject:", self._cert_subject)
-        form.addRow("Certificate issuer:", self._cert_issuer)
-        form.addRow("VPN state:", self._state)
-        form.addRow("Wait reason:", self._wait_reason)
-        form.addRow("Failure reason:", self._failure)
-        form.addRow("Last failure reason:", self._last_failure)
-        form.addRow("Last disconnect reason:", self._last_disconnect)
-        form.addRow("Connection attempt:", self._attempt)
-        form.addRow("Retry count:", self._retry)
-        form.addRow("Process PID:", self._pid)
-        form.addRow("Selected profile:", self._profile)
-        form.addRow("Authentication mode:", self._auth_mode)
-        form.addRow("Browser launch status:", self._browser)
-        form.addRow("Waiting for authentication:", self._waiting)
-        form.addRow("Tray available:", self._tray_available)
-        form.addRow("Tray active:", self._tray_active)
-        form.addRow("Close behavior:", self._close_behavior)
-        form.addRow("Autostart enabled:", self._autostart)
-        form.addRow("Auto-reconnect enabled:", self._auto_reconnect)
-        form.addRow("Reconnect attempt / limit:", self._reconnect_attempt)
-        form.addRow("Reconnect pending:", self._reconnect_pending)
-        form.addRow("Shutdown in progress:", self._shutdown)
+        self._copy_button = QPushButton("Copy report")
+        self._copy_button.setObjectName("copyDiagnosticsReportButton")
+        self._copy_button.clicked.connect(self.copy_report)
+
+        self._last_run_label = QLabel("Last run: not yet")
+        self._last_run_label.setObjectName("diagnosticsLastRun")
+
+        self._stale_hint = QLabel("")
+        self._stale_hint.setObjectName("diagnosticsStaleHint")
+        self._stale_hint.setWordWrap(True)
+        self._stale_hint.setVisible(False)
+
+        actions = QHBoxLayout()
+        actions.addWidget(self._run_button)
+        actions.addWidget(self._copy_button)
+        actions.addWidget(self._last_run_label)
+        actions.addStretch(1)
+
+        profile_row = QHBoxLayout()
+        profile_label = QLabel("Profile:")
+        profile_row.addWidget(profile_label)
+        profile_row.addWidget(self._profile_combo, 1)
+
+        self._groups_host = QWidget()
+        self._groups_layout = QVBoxLayout(self._groups_host)
+        self._groups_layout.setContentsMargins(0, 0, 0, 0)
+        self._groups_layout.setSpacing(12)
 
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
@@ -206,66 +157,250 @@ class DiagnosticsPage(QWidget):
         inner_layout.setSpacing(12)
         inner_layout.addWidget(title)
         inner_layout.addWidget(intro)
-        inner_layout.addLayout(form)
+        inner_layout.addLayout(profile_row)
+        inner_layout.addLayout(actions)
+        inner_layout.addWidget(self._stale_hint)
+        inner_layout.addWidget(self._groups_host)
         inner_layout.addWidget(ProfileConfigPathWidget(manager.storage_path))
         inner_layout.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(create_page_scroll_area(inner))
+
+        self._manager.add_change_listener(self._refresh_profile_combo)
+        self._refresh_profile_combo()
         self.refresh(include_version=False)
 
     def showEvent(self, event) -> None:  # noqa: N802 — Qt API
         super().showEvent(event)
         if getattr(self, "_vpn", None) is None:
             return
-        self.refresh(include_version=True)
+        if not self._viewmodel.running:
+            self.refresh(include_version=False)
 
     def refresh(self, *, include_version: bool = True) -> None:
-        data = build_diagnostics_snapshot(
-            self._vpn,
-            self._selected_profile(),
-            str(self._manager.storage_path),
-            detect=lambda **kwargs: self._detect(
-                include_version=include_version,
-                include_capabilities=include_version,
-            ),
-            desktop=self._desktop_info() if self._desktop_info is not None else None,
+        """Show lightweight local status. Does not probe the gateway."""
+        if self._viewmodel.running:
+            return
+        self._sync_combo_from_connection()
+        request = self._request(include_network=False)
+        try:
+            run = self._viewmodel.execute_local(request)
+        except RuntimeError:
+            return
+        self._apply_run(run, full=False)
+
+    def start_run(self) -> None:
+        """Start an active diagnostics pass. Duplicate clicks are ignored."""
+        if not self._viewmodel.can_start():
+            return
+        self._set_running_ui(True)
+        request = self._request(include_network=True)
+        if not self._execute_in_thread:
+            self._finish_run(self._viewmodel.execute(request))
+            return
+        worker = _DiagnosticsWorker(self._viewmodel, request, self)
+        self._worker = worker
+        worker.completed.connect(self._finish_run)
+        worker.finished.connect(self._clear_worker)
+        worker.start()
+
+    def copy_report(self) -> str:
+        """Copy the current sanitized report to the clipboard and return it."""
+        text = self.report_text()
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(text)
+        return text
+
+    def report_text(self) -> str:
+        """Return the current sanitized diagnostic report."""
+        run = self._displayed_run
+        if run is None:
+            run = self._viewmodel.last_run
+        if run is None:
+            return ""
+        profile = self.selected_profile()
+        return format_diagnostic_report(
+            run,
+            app_version=APP_VERSION,
+            os_name=read_os_pretty_name(),
+            kernel=kernel_release(),
+            architecture=architecture(),
+            profile=profile,
+            snapshot=self._vpn.snapshot(),
+            helper_protocol=HELPER_VERSION,
+            session_type=desktop_session_type(),
         )
-        self._helper_installed.setText(data["helper_installed"])
-        self._helper_version.setText(data["helper_version"])
-        self._helper_auth.setText(data["authorization_mechanism"])
-        self._helper_status.setText(data["helper_status"])
-        self._helper_startup.setText(data["helper_startup_detail"])
-        self._helper_pid.setText(data["privileged_pid"])
-        self._detected.setText(data["openfortivpn_detected"])
-        self._path.setText(data["selected_executable"])
-        self._version.setText(data["version"])
-        self._saml.setText(data["supports_saml"])
-        self._cookie_stdin.setText(data["supports_cookie_stdin"])
-        self._cert_pinned.setText(data["certificate_pinned"])
-        self._cert_fingerprint.setText(data["certificate_fingerprint"])
-        self._cert_subject.setText(data["certificate_subject"])
-        self._cert_issuer.setText(data["certificate_issuer"])
-        self._state.setText(data["vpn_state"])
-        self._wait_reason.setText(data["wait_reason"])
-        self._failure.setText(data["failure_reason"])
-        self._last_failure.setText(data["last_failure_reason"])
-        self._last_disconnect.setText(data["last_disconnect_reason"])
-        self._attempt.setText(data["attempt_id"])
-        self._retry.setText(data["retry_count"])
-        self._pid.setText(data["process_pid"])
-        self._profile.setText(data["selected_profile"])
-        self._auth_mode.setText(data["auth_mode"])
-        self._browser.setText(data["browser_status"])
-        self._waiting.setText(data["waiting_for_auth"])
-        self._tray_available.setText(data.get("tray_available", "—"))
-        self._tray_active.setText(data.get("tray_active", "—"))
-        self._close_behavior.setText(data.get("close_behavior", "—"))
-        self._autostart.setText(data.get("autostart_enabled", "—"))
-        self._auto_reconnect.setText(data["auto_reconnect_enabled"])
-        self._reconnect_attempt.setText(
-            f"{data['reconnect_attempt']} / {data['reconnect_limit']}"
+
+    def selected_profile(self) -> ConnectionProfile | None:
+        profile_id = self._profile_combo.currentData()
+        if not profile_id:
+            return None
+        return self._manager.get(str(profile_id))
+
+    def _request(self, *, include_network: bool) -> DiagnosticRequest:
+        return DiagnosticRequest(
+            snapshot=self._vpn.snapshot(),
+            profile=self.selected_profile(),
+            include_network=include_network,
+            app_version=APP_VERSION,
+            helper_protocol=HELPER_VERSION,
         )
-        self._reconnect_pending.setText(data["reconnect_pending"])
-        self._shutdown.setText(data["shutdown_in_progress"])
+
+    def _finish_run(self, run: object) -> None:
+        if not isinstance(run, DiagnosticRun):
+            self._set_running_ui(False)
+            return
+        self._full_run_done = True
+        self._apply_run(run, full=True)
+        self._set_running_ui(False)
+
+    def _clear_worker(self) -> None:
+        self._worker = None
+
+    def _set_running_ui(self, running: bool) -> None:
+        self._run_button.setEnabled(not running)
+        self._run_button.setText("Running diagnostics…" if running else "Run diagnostics")
+        self._profile_combo.setEnabled(not running)
+
+    def _apply_run(self, run: DiagnosticRun, *, full: bool) -> None:
+        self._displayed_run = run
+        if full:
+            self._last_run_label.setText(self._viewmodel.last_run_label())
+            self._stale_hint.setVisible(False)
+        elif not self._full_run_done:
+            self._last_run_label.setText("Last run: not yet")
+        self._rebuild_rows(run.checks)
+
+    def _rebuild_rows(self, checks: tuple[DiagnosticCheck, ...]) -> None:
+        while self._groups_layout.count():
+            item = self._groups_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setObjectName("")
+                widget.setParent(None)
+                widget.deleteLater()
+        self._row_widgets.clear()
+        by_group: dict[str, list[DiagnosticCheck]] = {group: [] for group in GROUP_ORDER}
+        extra: list[DiagnosticCheck] = []
+        for check in checks:
+            if check.group in by_group:
+                by_group[check.group].append(check)
+            else:
+                extra.append(check)
+        for group in GROUP_ORDER:
+            grouped = by_group[group]
+            if not grouped:
+                continue
+            heading = QLabel(group)
+            heading.setStyleSheet("font-weight: 600;")
+            self._groups_layout.addWidget(heading)
+            for check in grouped:
+                row = self._make_row(check)
+                self._row_widgets[check.id] = row
+                self._groups_layout.addWidget(row)
+        for check in extra:
+            row = self._make_row(check)
+            self._row_widgets[check.id] = row
+            self._groups_layout.addWidget(row)
+
+    def _make_row(self, check: DiagnosticCheck) -> QWidget:
+        row = QWidget()
+        slug = check.id.replace(".", "_")
+        row.setObjectName(f"diagCheck_{slug}")
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 4)
+        layout.setSpacing(2)
+        line = QHBoxLayout()
+        status = QLabel(STATUS_LABEL[check.status])
+        status.setObjectName(f"diagCheckStatus_{slug}")
+        status.setStyleSheet(
+            f"color: {_STATUS_COLORS[check.status]}; font-weight: 600; min-width: 92px;"
+        )
+        name = QLabel(check.label)
+        name.setObjectName(f"diagCheckLabel_{slug}")
+        name.setMinimumWidth(180)
+        summary = QLabel(check.summary)
+        summary.setObjectName(f"diagCheckSummary_{slug}")
+        summary.setWordWrap(True)
+        summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        summary.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        line.addWidget(status, 0, Qt.AlignmentFlag.AlignTop)
+        line.addWidget(name, 0, Qt.AlignmentFlag.AlignTop)
+        line.addWidget(summary, 1)
+        layout.addLayout(line)
+        extra_bits = [part for part in (check.detail, check.hint) if part]
+        if extra_bits:
+            extra = QLabel("\n".join(extra_bits))
+            extra.setObjectName(f"diagCheckDetail_{slug}")
+            extra.setWordWrap(True)
+            extra.setStyleSheet("color: #616161; padding-left: 92px;")
+            extra.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(extra)
+        return row
+
+    def _refresh_profile_combo(self) -> None:
+        previous = self._profile_combo.currentData()
+        self._profile_combo.blockSignals(True)
+        self._profile_combo.clear()
+        profiles = self._manager.list_profiles()
+        if not profiles:
+            self._profile_combo.addItem("No profiles configured")
+            self._profile_combo.blockSignals(False)
+            return
+        default_id = self._manager.default_profile_id()
+        selected_index = 0
+        previous_index: int | None = None
+        default_index: int | None = None
+        connection = self._selected_profile()
+        connection_index: int | None = None
+        for index, profile in enumerate(profiles):
+            label = profile.name
+            if profile.id == default_id:
+                label = f"{profile.name} (default)"
+                default_index = index
+            self._profile_combo.addItem(label, profile.id)
+            if previous and profile.id == previous:
+                previous_index = index
+            if connection is not None and profile.id == connection.id:
+                connection_index = index
+        if previous_index is not None:
+            selected_index = previous_index
+        elif connection_index is not None:
+            selected_index = connection_index
+        elif default_index is not None:
+            selected_index = default_index
+        self._profile_combo.setCurrentIndex(selected_index)
+        self._profile_combo.blockSignals(False)
+        self._viewmodel.selected_profile_id = self._profile_combo.currentData()
+
+    def _sync_combo_from_connection(self) -> None:
+        connection = self._selected_profile()
+        if connection is None:
+            return
+        if self._profile_combo.currentData() == connection.id:
+            return
+        if self._full_run_done:
+            return
+        for index in range(self._profile_combo.count()):
+            if self._profile_combo.itemData(index) == connection.id:
+                self._profile_combo.blockSignals(True)
+                self._profile_combo.setCurrentIndex(index)
+                self._profile_combo.blockSignals(False)
+                return
+
+    def _on_profile_changed(self) -> None:
+        profile_id = self._profile_combo.currentData()
+        self._viewmodel.mark_profile_changed(str(profile_id) if profile_id else None)
+        if self._full_run_done:
+            self._stale_hint.setText(
+                "The selected profile changed. Run diagnostics again for DNS, "
+                "routing, and gateway checks."
+            )
+            self._stale_hint.setVisible(True)
+            self._last_run_label.setText(self._viewmodel.last_run_label())
+            return
+        if not self._viewmodel.running:
+            self.refresh(include_version=False)

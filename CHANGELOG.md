@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-11
+
+### Added
+
+- Diagnostics page grouped health checks for system, VPN components, profile/gateway, network, and tunnel
+- Explicit Run diagnostics action with bounded timeouts and no parallel runs
+- Copyable plain-text diagnostic report for support tickets and GitHub issues
+- Unprivileged checks for openfortivpn, helper, polkit policy, DNS, route, gateway TCP, VPN interface, and certificate pin metadata
+
+### Changed
+
+- Diagnostics opens with lightweight local status and does not probe the gateway until Run diagnostics
+- Opening Diagnostics does not launch pkexec or request administrator authorization
+
+### Security
+
+- copied diagnostic reports are sanitized (passwords, tokens, cookies, SAML payloads, helper request bodies)
+- privileged helper protocol version remains 0.7.0 (no helper reinstall required)
+
 ## [0.8.0] - 2026-09-11
 
 ### Added
@@ -216,7 +235,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.6.0...v0.7.0

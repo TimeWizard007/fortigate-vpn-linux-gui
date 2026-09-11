@@ -9,11 +9,13 @@ odpowiednich właścicieli.
 
 ## Status
 
-Aktualna wersja to **0.8.0**. Profile są pełnym przepływem pracy: lista,
+Aktualna wersja to **0.9.0**. Diagnostyka jest stroną do rozwiązywania
+problemów: lokalny stan zdrowia, jawne Uruchom diagnostykę dla DNS/routingu/TCP
+oraz kopiowalny, ocenzurowany raport. Profile są pełnym przepływem pracy: lista,
 tworzenie, edycja, duplikowanie, usuwanie, ustawianie domyślnego i łączenie
 bezpośrednio ze strony Profiles. SAML/SSO przez `--saml-login` i
 systemową przeglądarkę, pomocnik uprzywilejowany polkit oraz jawne
-przypinanie certyfikatu FortiGate pozostają bez zmian względem v0.7.1.
+przypinanie certyfikatu FortiGate pozostają bez zmian względem v0.8.0.
 Integracja z pulpitem dodaje zasobnik systemowy, opcjonalne zamykanie do
 zasobnika, opcjonalny autostart użytkownika, opcjonalne ponawianie
 połączenia po nieoczekiwanej utracie tunelu oraz stronę About z informacją
@@ -36,6 +38,7 @@ o projekcie i licencji.
 | Opcjonalne auto-ponawianie połączenia | Zaimplementowane (domyślnie wyłączone) |
 | Opcjonalny autostart użytkownika | Zaimplementowany (domyślnie wyłączony) |
 | About / projekt / licencja | Zaimplementowane |
+| Diagnostyka i kopiowalny raport | Zaimplementowane |
 
 | Funkcja | Status |
 | ------- | ------ |
@@ -160,6 +163,17 @@ sprzątanie i łączy ten sam profil ponownie.
 **Uruchom FortiGate VPN Linux GUI automatycznie po zalogowaniu** zapisuje
 plik `.desktop` użytkownika w `~/.config/autostart/`. Nie wymaga root i nie
 łączy VPN przy logowaniu. Start aplikacji i połączenie to osobne funkcje.
+
+## Diagnostyka
+
+Strona Diagnostics odpowiada na pytanie „dlaczego VPN się nie łączy?” bez
+otwierania terminala. Otwarcie strony nie żąda uprawnień administratora i nie
+uruchamia VPN.
+
+Lekki status jest widoczny od razu. **Uruchom diagnostykę** dodaje ograniczone
+czasowo testy DNS, trasy i TCP dla wybranego profilu. **Kopiuj raport** wkleja
+na schowek zwykły tekst do zgłoszeń. Raporty są ocenzurowane: bez haseł,
+tokenów, ciasteczek, ładunków SAML i treści żądań pomocnika.
 
 Strona About pokazuje wersję, autora (TimeWizard007), licencję
 GPL-3.0-or-later, adres projektu i zastrzeżenie niezależności od Fortinet.

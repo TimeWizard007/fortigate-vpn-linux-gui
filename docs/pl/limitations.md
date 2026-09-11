@@ -34,6 +34,7 @@ połączenia na bazie utwardzonego cyklu życia i pomocnika polkit.
 - Pakiety nigdy nie są instalowane automatycznie. Pakiet `.deb` jest
   planowany w późniejszym wydaniu (v1.0.0).
 - Logi są tylko w pamięci i są ocenzurowane.
+- Skopiowane raporty diagnostyczne są ocenzurowane i nie zawierają sekretów.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.
 - Profile to lokalny JSON per-użytkownik.
 - Tylko Linux; Ubuntu jest główną wspieraną dystrybucją.

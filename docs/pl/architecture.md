@@ -152,4 +152,4 @@ pomocnika.
 | `fortigate_vpn_gui.helper` | Protokół uprzywilejowany i właściciel procesu |
 | `fortigate_vpn_gui.profiles` | Model i zapis JSON XDG |
 | `fortigate_vpn_gui.system` | Preflight i klient polkit |
-| `fortigate_vpn_gui.diagnostics` | Ocenzurowane migawki |
+| `fortigate_vpn_gui.diagnostics` | Nieuprzywilejowane testy i ocenzurowane raporty |

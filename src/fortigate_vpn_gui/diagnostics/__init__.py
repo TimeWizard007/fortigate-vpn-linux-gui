@@ -2,6 +2,7 @@
 """Diagnostics.
 
 Collects troubleshooting information that is safe to share: application
-version, selected profile metadata (never secrets), openfortivpn presence
-and version, and high-level connection state.
+version, helper and polkit status, selected profile metadata (never secrets),
+openfortivpn presence, DNS/routing/TCP reachability, and tunnel state.
+Copied reports are sanitized.
 """

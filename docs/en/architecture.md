@@ -244,4 +244,4 @@ desktop process.
 | `fortigate_vpn_gui.helper` | Privileged protocol, validation, process owner |
 | `fortigate_vpn_gui.profiles` | Profile model, XDG JSON storage, manager |
 | `fortigate_vpn_gui.system` | Preflight checks; polkit helper client |
-| `fortigate_vpn_gui.diagnostics` | Redacted troubleshooting snapshots |
+| `fortigate_vpn_gui.diagnostics` | Unprivileged health checks and sanitized reports |
