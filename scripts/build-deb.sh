@@ -5,8 +5,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="fortigate-vpn-linux-gui"
-VERSION="1.0.0"
-REVISION="2"
+VERSION="1.1.0"
+REVISION="1"
 ARCH="amd64"
 DEB_VERSION="${VERSION}-${REVISION}"
 DEB_FILENAME="${PACKAGE_NAME}_${DEB_VERSION}_${ARCH}.deb"
@@ -114,6 +114,8 @@ python3.12 -m venv "${STAGING}${VENV_DIR}"
 VENV_PY="${STAGING}${VENV_DIR}/bin/python"
 "${VENV_PY}" -m pip install --no-compile --no-deps "${ROOT}"
 "${VENV_PY}" -m pip install --no-compile -r "${ROOT}/packaging/requirements-bundle.txt"
+"${VENV_PY}" -c "import keyring; import keyring.backends.SecretService" \
+  || die "packaged venv is missing keyring Secret Service"
 
 rm -f \
   "${STAGING}${VENV_DIR}/bin/pip" \

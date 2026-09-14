@@ -6,8 +6,8 @@ than reading or writing JSON themselves.
 
 There is exactly one optional default profile. Deleting it clears the default
 instead of silently choosing another profile. Duplicate copies safe metadata
-(including the certificate pin) and never copies passwords or tokens — those
-fields are not stored.
+(including the certificate pin) and never copies passwords, tokens,
+IPsec pre-shared keys, or stored XAuth passwords.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from fortigate_vpn_gui.profiles.model import (
     unique_copy_name,
 )
 from fortigate_vpn_gui.profiles.storage import ProfileStore
+from fortigate_vpn_gui.system.psk_store import PskStore, default_psk_store
 
 _UNSET = object()
 
@@ -37,15 +38,22 @@ class ProfileManager:
         *,
         config_dir: Path | None = None,
         path: Path | None = None,
+        psk_store: PskStore | None = None,
     ) -> None:
         if store is not None:
             self._store = store
         else:
             self._store = ProfileStore(path=path, config_dir=config_dir)
+        self._psk_store = psk_store if psk_store is not None else default_psk_store()
         self._profiles: list[ConnectionProfile] = []
         self._default_profile_id: str | None = None
         self._listeners: list[Callable[[], None]] = []
         self.load()
+
+    @property
+    def psk_store(self) -> PskStore:
+        """Secret Service (or test) store for IPsec pre-shared keys."""
+        return self._psk_store
 
     @property
     def storage_path(self) -> Path:
@@ -100,6 +108,8 @@ class ProfileManager:
         username_hint: object = "",
         use_sso: object = True,
         trusted_cert_sha256: object = None,
+        vpn_type: object = "ssl",
+        ipsec: object = None,
     ) -> ConnectionProfile:
         profile = self._validated_profile(
             name=name,
@@ -109,6 +119,8 @@ class ProfileManager:
             username_hint=username_hint,
             use_sso=use_sso,
             trusted_cert_sha256=trusted_cert_sha256,
+            vpn_type=vpn_type,
+            ipsec=ipsec,
         )
         self._profiles.append(profile)
         self._persist_and_notify()
@@ -125,11 +137,15 @@ class ProfileManager:
         username_hint: object = "",
         use_sso: object = True,
         trusted_cert_sha256: object = _UNSET,
+        vpn_type: object = _UNSET,
+        ipsec: object = _UNSET,
     ) -> ConnectionProfile:
         existing = self.get(profile_id)
         if existing is None:
             raise ProfileNotFoundError(profile_id)
         pin = existing.trusted_cert_sha256 if trusted_cert_sha256 is _UNSET else trusted_cert_sha256
+        type_value = existing.vpn_type if vpn_type is _UNSET else vpn_type
+        ipsec_value = existing.ipsec_payload() if ipsec is _UNSET else ipsec
         profile = self._validated_profile(
             profile_id=profile_id,
             name=name,
@@ -139,6 +155,8 @@ class ProfileManager:
             username_hint=username_hint,
             use_sso=use_sso,
             trusted_cert_sha256=pin,
+            vpn_type=type_value,
+            ipsec=ipsec_value,
             ignore_id=profile_id,
         )
         self._profiles = [profile if item.id == profile_id else item for item in self._profiles]
@@ -149,7 +167,7 @@ class ProfileManager:
         """Copy safe non-secret metadata into a new profile with a unique name.
 
         The certificate pin is copied because it is a public fingerprint, not a
-        credential. Passwords and tokens are not stored, so they are not copied.
+        credential. Passwords, tokens, and IPsec pre-shared keys are not copied.
         Default status is not copied.
         """
         existing = self.get(profile_id)
@@ -164,6 +182,8 @@ class ProfileManager:
             username_hint=existing.username_hint,
             use_sso=existing.use_sso,
             trusted_cert_sha256=existing.trusted_cert_sha256,
+            vpn_type=existing.vpn_type,
+            ipsec=existing.ipsec_payload(),
         )
 
     def set_default(self, profile_id: str) -> ConnectionProfile:
@@ -183,6 +203,23 @@ class ProfileManager:
             return
         self._default_profile_id = None
         self._persist_and_notify()
+
+    def set_username_hint(self, profile_id: str, username_hint: object) -> ConnectionProfile:
+        """Update the non-secret username reminder without touching other fields."""
+        existing = self.get(profile_id)
+        if existing is None:
+            raise ProfileNotFoundError(profile_id)
+        return self.update(
+            profile_id,
+            name=existing.name,
+            gateway=existing.gateway,
+            port=existing.port,
+            description=existing.description,
+            username_hint=username_hint,
+            use_sso=existing.use_sso,
+            vpn_type=existing.vpn_type,
+            ipsec=existing.ipsec_payload(),
+        )
 
     def set_trusted_certificate(self, profile_id: str, fingerprint: object) -> ConnectionProfile:
         """Pin a SHA-256 fingerprint on an existing profile."""
@@ -217,6 +254,7 @@ class ProfileManager:
         if self._default_profile_id == profile_id:
             self._default_profile_id = None
         self._persist_and_notify()
+        self._psk_store.delete_all(profile_id)
         return True
 
     def _validated_profile(
@@ -230,6 +268,8 @@ class ProfileManager:
         username_hint: object = "",
         use_sso: object = True,
         trusted_cert_sha256: object = None,
+        vpn_type: object = "ssl",
+        ipsec: object = None,
         ignore_id: str | None = None,
     ) -> ConnectionProfile:
         errors: list[str] = []
@@ -245,6 +285,8 @@ class ProfileManager:
                 username_hint=username_hint,
                 use_sso=use_sso,
                 trusted_cert_sha256=trusted_cert_sha256,
+                vpn_type=vpn_type,
+                ipsec=ipsec,
             )
         except ProfileValidationError as exc:
             errors.extend(exc.errors)

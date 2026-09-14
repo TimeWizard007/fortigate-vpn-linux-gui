@@ -42,9 +42,7 @@ _AUTH = (
     "wrong password",
 )
 
-_CERTIFICATE = (
-    "gateway certificate validation failed",
-)
+_CERTIFICATE = ("gateway certificate validation failed",)
 
 _FAILURE_MARKERS = ("error", "failed", "failure", "fatal")
 
@@ -63,9 +61,15 @@ def classify_output(line: str) -> OutputHint:
             return OutputHint.PPP_FAILURE
         if "route" in lowered:
             return OutputHint.ROUTE_FAILURE
+        if "network1.service" in lowered or "dbus-org.freedesktop.network1" in lowered:
+            return OutputHint.NONE
         if "dns" in lowered or "nameserver" in lowered:
             return OutputHint.DNS_FAILURE
     if _TUNNEL_READY in lowered:
+        return OutputHint.CONNECTED
+    if "child_sa" in lowered and "established" in lowered:
+        return OutputHint.CONNECTED
+    if "ipsec child sa established" in lowered:
         return OutputHint.CONNECTED
     if _GATEWAY_CONNECTED in lowered:
         return OutputHint.GATEWAY_CONNECTED

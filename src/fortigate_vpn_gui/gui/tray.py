@@ -11,6 +11,8 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 from fortigate_vpn_gui.metadata import APP_NAME
 from fortigate_vpn_gui.vpn.models import ConnectionState, VpnSnapshot, state_label
 
+TRAY_STILL_RUNNING_MESSAGE = "FortiGate VPN Linux GUI is still running in the system tray."
+
 
 def tray_tooltip(snapshot: VpnSnapshot) -> str:
     """Short tooltip from the backend snapshot. No secrets."""
@@ -22,10 +24,7 @@ def tray_tooltip(snapshot: VpnSnapshot) -> str:
     if snapshot.manual_reconnect:
         return f"{name} — Reconnecting..."
     if snapshot.reconnect_pending:
-        return (
-            f"{name} — Reconnecting "
-            f"({snapshot.reconnect_attempt} of {snapshot.reconnect_limit})"
-        )
+        return f"{name} — Reconnecting ({snapshot.reconnect_attempt} of {snapshot.reconnect_limit})"
     if state is ConnectionState.DISCONNECTED:
         return f"{name} — Disconnected"
     if state is ConnectionState.FAILED:
@@ -80,13 +79,17 @@ def _state_icon(snapshot: VpnSnapshot) -> QIcon:
         color = QColor("#16a34a")
     elif snapshot.state is ConnectionState.FAILED:
         color = QColor("#dc2626")
-    elif snapshot.state in {
-        ConnectionState.STARTING,
-        ConnectionState.CONNECTING,
-        ConnectionState.WAITING_FOR_AUTH,
-        ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
-        ConnectionState.DISCONNECTING,
-    } or snapshot.reconnect_pending:
+    elif (
+        snapshot.state
+        in {
+            ConnectionState.STARTING,
+            ConnectionState.CONNECTING,
+            ConnectionState.WAITING_FOR_AUTH,
+            ConnectionState.WAITING_FOR_CERTIFICATE_TRUST,
+            ConnectionState.DISCONNECTING,
+        }
+        or snapshot.reconnect_pending
+    ):
         color = QColor("#d97706")
     pixmap = QPixmap(16, 16)
     pixmap.fill(QColor(0, 0, 0, 0))
@@ -221,6 +224,20 @@ class TrayController:
             return
         self._icon.hide()
         self._visible = False
+
+    def dispose(self) -> None:
+        """Hide and release the tray icon so it cannot keep Qt's event loop alive."""
+        if self._icon is None:
+            self._visible = False
+            return
+        self._icon.hide()
+        self._visible = False
+        menu = self._icon.contextMenu()
+        self._icon.setContextMenu(None)
+        if menu is not None:
+            menu.deleteLater()
+        self._icon.deleteLater()
+        self._icon = None
 
     def apply_snapshot(self, snapshot: VpnSnapshot) -> None:
         if self._icon is None:

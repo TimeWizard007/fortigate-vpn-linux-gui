@@ -11,8 +11,9 @@ live in [`SECURITY.md`](../../SECURITY.md) at the repository root.
 | ------- | --------- | ---- |
 | GUI | Unprivileged user | Display UI, collect intent, open the system browser |
 | VpnBackend | Same unprivileged user | Structured helper requests, SAML URL handling, redacted logs |
-| Privileged helper | Root via polkit | Start/stop openfortivpn only |
+| Privileged helper | Root via polkit | Start/stop the selected VPN backend only |
 | openfortivpn | Helper-owned | SSL VPN tunnel and SAML callback listener |
+| strongSwan charon | Helper-owned, distro packages | IPsec IKE/ESP; not bundled |
 | System browser | Unprivileged user | Microsoft Entra ID / FortiGate SAML pages |
 
 The GUI must never run as root. It refuses to start as UID 0. Extra rights for
@@ -70,9 +71,17 @@ because query strings can carry session identifiers.
 
 ## Secrets
 
-- VPN passwords are not stored.
-- SAML tokens, SVPNCOOKIE, and session ids must never be written to logs,
-  profile files, diagnostics, or exceptions.
+- VPN passwords and IPsec pre-shared keys are not stored in `profiles.json`.
+- An IPsec pre-shared key may be saved, only when the user opts in, through
+  the Linux desktop Secret Service / GNOME Keyring (`keyring`). It is keyed
+  by the stable profile id. There is no custom encryption and no plaintext
+  fallback. If Secret Service is unavailable, the PSK is entered at connect
+  time.
+-   The XAuth username may be stored in the profile as a non-secret reminder.
+  The XAuth password may be saved in Secret Service only when the user opts
+  in. It is never stored in `profiles.json`.
+- SAML tokens, SVPNCOOKIE, session ids, PSKs, and XAuth passwords must never
+  be written to logs, profile files, diagnostics, or exceptions.
 - Every backend log line passes through `redact_log_line` (case-insensitive)
   before it is shown.
 - Copied diagnostic reports are sanitized the same way. They must not include
@@ -92,16 +101,17 @@ If a pin exists and openfortivpn presents a **different** fingerprint, the UI
 warns that the gateway certificate has changed. The previous pin is never
 replaced automatically.
 
-## What v0.7.0 does not do
+## What this release does not do
 
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
 - No automatic package installation from the GUI. Ubuntu 24.04 uses the
   `fortigate-vpn-linux-gui` `.deb`.
 - No direct firewall, route, or DNS changes by the GUI.
-- No password, token, or VPN cookie storage.
+- No secrets in `profiles.json`. Optional IPsec PSK/XAuth storage uses Secret
+  Service only; there is no plaintext fallback.
 - Logs are in memory only; they are not persisted to disk.
-- No custom username/password login and no embedded webview.
+- No embedded webview.
 - No auto-trust and no TLS validation disable.
 - Auto-reconnect never bypasses SAML or certificate validation.
 - Autostart is user-level only (`~/.config/autostart/`); no system-wide

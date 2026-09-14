@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -31,7 +32,7 @@ from fortigate_vpn_gui.gui.icons import application_icon
 from fortigate_vpn_gui.gui.logs_page import LogsPage
 from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
 from fortigate_vpn_gui.gui.settings_page import SettingsPage
-from fortigate_vpn_gui.gui.tray import TrayController
+from fortigate_vpn_gui.gui.tray import TRAY_STILL_RUNNING_MESSAGE, TrayController
 from fortigate_vpn_gui.gui.windowing import (
     apply_always_on_top,
     clear_transient_parent,
@@ -96,6 +97,7 @@ class MainWindow(QMainWindow):
         self._can_finish_close = False
         self._close_finalized = False
         self._force_quit = False
+        self._interactive_tray_hint = True
         self._last_notified_state: ConnectionState | None = None
         self._tray: TrayController | None = None
         self._shutdown_complete.connect(self._finish_close, Qt.ConnectionType.QueuedConnection)
@@ -167,6 +169,7 @@ class MainWindow(QMainWindow):
         self._pump.state_changed.connect(self._on_vpn_snapshot)
         self._pump.user_error.connect(self._on_vpn_error)
         self._pump.log_record.connect(self._logs_page.append_record)
+        self._pump.shutdown_complete.connect(self._shutdown_complete)
 
         self._tray = TrayController(
             self,
@@ -322,10 +325,9 @@ class MainWindow(QMainWindow):
             self.hide()
             self._log_buffer.append("vpn", "Application minimized to system tray.")
             if not self._prefs.tray_hint_shown:
-                self.tray.notify(
-                    APP_NAME,
-                    "FortiGate VPN Linux GUI is still running in the system tray.",
-                )
+                self.tray.notify(APP_NAME, TRAY_STILL_RUNNING_MESSAGE)
+                if self._interactive_tray_hint:
+                    QMessageBox.information(self, APP_NAME, TRAY_STILL_RUNNING_MESSAGE)
                 self._prefs = DesktopPreferences(
                     always_on_top=self._prefs.always_on_top,
                     close_to_tray=self._prefs.close_to_tray,
@@ -344,9 +346,10 @@ class MainWindow(QMainWindow):
             return
         self._quit_started = True
         self.statusBar().showMessage("Closing...")
-        self._vpn.begin_shutdown(on_complete=self._shutdown_complete.emit)
+        self._vpn.begin_shutdown(on_complete=self._pump.shutdown_mailbox.post_shutdown)
         self._connection_page.apply_snapshot(self._vpn.snapshot())
         self.tray.apply_snapshot(self._vpn.snapshot())
+        self._pump.schedule_drain()
 
     def close_finalized(self) -> bool:
         return self._close_finalized
@@ -356,12 +359,18 @@ class MainWindow(QMainWindow):
             return
         self._close_finalized = True
         self._can_finish_close = True
+        self._pump.stop()
         if self._tray is not None:
-            self._tray.hide()
+            self._tray.dispose()
         app = QApplication.instance()
         if isinstance(app, QApplication):
             app.setQuitOnLastWindowClosed(True)
         self.close()
+        # Closing an already-hidden window (X -> tray, then Tray -> Quit) does
+        # not emit lastWindowClosed, so QuitOnLastWindowClosed cannot end
+        # app.exec(). quit() is the tray-app termination path.
+        if isinstance(app, QApplication):
+            app.quit()
 
     def _tray_connect(self) -> None:
         self._vpn.connect(self._connection_page.selected_profile())

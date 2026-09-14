@@ -7,8 +7,8 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v1.0.0 is the first packaged Ubuntu 24.04 (amd64) release. Helper protocol
-0.7.0 is unchanged.
+v1.1.0 is the current packaged Ubuntu 24.04 (amd64) release. Helper protocol
+is 0.8.0.
 
 | Topic | Document |
 | ----- | -------- |

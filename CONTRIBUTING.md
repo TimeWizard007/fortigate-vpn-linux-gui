@@ -7,10 +7,10 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v1.0.0 is the first packaged Ubuntu 24.04 release. The GUI must never
+v1.1.0 is the current packaged Ubuntu 24.04 release. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
-auto-trust certificates or skip SAML. Helper protocol 0.7.0 must stay
+auto-trust certificates or skip SAML. Helper protocol 0.8.0 must stay
 unchanged unless a real compatibility break requires it.
 
 Please do not send pull requests that:
@@ -20,7 +20,7 @@ Please do not send pull requests that:
 - accept arbitrary root commands, argv, or executable paths from the GUI
 - modify routes, DNS, or firewall rules from the GUI process
 - silently disable certificate verification or auto-trust unknown certificates
-- store passwords, tokens, or VPN cookies
+- store secrets in `profiles.json` or add a plaintext keyring fallback
 - call a real `openfortivpn` binary, real pkexec dialog, or real browser from tests
 
 ## Local development

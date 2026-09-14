@@ -91,6 +91,9 @@ def test_non_zero_exit() -> None:
     harness.process.finish(1)
     assert harness.backend.current_state() is ConnectionState.FAILED
     assert harness.backend.snapshot().error_code is VpnErrorCode.VPN_PROCESS_FAILED
+    exits = [record for record in harness.log.records() if "Process exited" in record.message]
+    assert exits
+    assert all(record.source == "openfortivpn" for record in exits)
 
 
 def test_permission_denied_message() -> None:

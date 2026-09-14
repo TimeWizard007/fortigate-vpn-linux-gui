@@ -19,6 +19,8 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_connection_state,
     check_dns,
     check_helper,
+    check_ipsec_backend,
+    check_ipsec_tunnel,
     check_openfortivpn,
     check_platform,
     check_polkit_authorization,
@@ -30,6 +32,7 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_vpn_routes,
     default_resolve_host,
     default_tcp_connect,
+    parse_ip_literal,
 )
 from fortigate_vpn_gui.diagnostics.model import (
     GROUP_NETWORK,
@@ -43,8 +46,9 @@ from fortigate_vpn_gui.diagnostics.model import (
 )
 from fortigate_vpn_gui.diagnostics.sanitization import sanitize_diagnostic_text
 from fortigate_vpn_gui.diagnostics.subprocess_run import run_argv
-from fortigate_vpn_gui.helper.protocol import HELPER_VERSION, INSTALLED_HELPER_PATH
+from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
+from fortigate_vpn_gui.system.helper_client import resolve_helper_path
 from fortigate_vpn_gui.system.polkit import POLKIT_POLICY_INSTALL_PATH
 from fortigate_vpn_gui.vpn.capabilities import default_is_executable
 from fortigate_vpn_gui.vpn.models import VpnSnapshot
@@ -68,7 +72,7 @@ class DiagnosticDeps:
     resolve_host: ResolveHost = default_resolve_host
     tcp_connect: TcpConnect = default_tcp_connect
     list_interfaces: ListInterfaces | None = None
-    helper_path: str = INSTALLED_HELPER_PATH
+    helper_path: str = field(default_factory=resolve_helper_path)
     policy_path: str = POLKIT_POLICY_INSTALL_PATH
     detect: Callable[..., object] | None = None
     expected_helper_version: str = HELPER_VERSION
@@ -163,6 +167,20 @@ class DiagnosticService:
                 ),
             ),
             (
+                "vpn.ipsec",
+                lambda: add(
+                    self._safe(
+                        "vpn.ipsec",
+                        "IPsec backend",
+                        GROUP_VPN,
+                        lambda: check_ipsec_backend(
+                            request.profile,
+                            is_executable=self._deps.is_executable or default_is_executable,
+                        ),
+                    )
+                ),
+            ),
+            (
                 "vpn.helper",
                 lambda: add(
                     self._safe(
@@ -175,7 +193,7 @@ class DiagnosticService:
                             is_executable=self._deps.is_executable,
                             run_command=self._deps.run_argv,
                             expected_version=self._deps.expected_helper_version,
-                            probe_version=request.include_network,
+                            probe_version=True,
                         ),
                     )
                 ),
@@ -314,6 +332,30 @@ class DiagnosticService:
                     ),
                 )
             )
+        elif not cancelled:
+            cancelled = True
+
+        if not cancelled and not should_stop():
+            if request.profile is not None and request.profile.is_ipsec():
+                gateway_ips = dns_addresses
+                literal = parse_ip_literal(request.profile.gateway)
+                if literal and literal not in gateway_ips:
+                    gateway_ips = (*gateway_ips, literal)
+                add(
+                    self._safe(
+                        "tunnel.ipsec",
+                        "IPsec tunnel",
+                        GROUP_TUNNEL,
+                        lambda: check_ipsec_tunnel(
+                            request.snapshot,
+                            request.profile,
+                            gateway_ips,
+                            include_network=request.include_network,
+                            which=self._deps.which,
+                            run_command=self._deps.run_argv,
+                        ),
+                    )
+                )
         elif not cancelled:
             cancelled = True
 

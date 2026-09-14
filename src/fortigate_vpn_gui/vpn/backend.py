@@ -12,6 +12,8 @@ from collections.abc import Callable
 
 from fortigate_vpn_gui.helper.executables import resolve_approved_executable
 from fortigate_vpn_gui.helper.protocol import (
+    BACKEND_IPSEC,
+    BACKEND_OPENFORTIVPN,
     CertificateInfo,
     ConnectRequest,
     HelperError,
@@ -116,6 +118,24 @@ _CONNECTION_LOST_MESSAGE = "VPN connection was lost."
 _PPP_MESSAGE = "The VPN tunnel could not configure PPP. See Logs for details."
 _ROUTE_MESSAGE = "The VPN tunnel could not update routes. See Logs for details."
 _DNS_MESSAGE = "The VPN tunnel could not update DNS. See Logs for details."
+_IPSEC_MISSING_MESSAGE = (
+    "strongSwan was not found. Install the distribution strongSwan packages "
+    "(strongswan, strongswan-swanctl, libcharon-extra-plugins, "
+    "libcharon-extauth-plugins). This application "
+    "does not bundle an IPsec daemon."
+)
+_IPSEC_DAEMON_START_MESSAGE = (
+    "The IPsec daemon failed to start. strongSwan binaries were found; see Logs "
+    "for the daemon output."
+)
+_IPSEC_UNSUPPORTED_MESSAGE = (
+    "This IPsec combination is not implemented yet. v1.1.0 supports IKEv1 "
+    "Aggressive Mode with PSK, XAuth, and Mode Config."
+)
+_IPSEC_CREDENTIALS_MESSAGE = (
+    "IPsec connect needs a pre-shared key and XAuth username/password. "
+    "These secrets are not stored in the profile."
+)
 
 
 class VpnEvent:
@@ -226,6 +246,9 @@ class VpnBackend:
     def subscribe(self, callback: VpnListener) -> None:
         self._listeners.append(callback)
 
+    def unsubscribe(self, callback: VpnListener) -> None:
+        self._listeners = [item for item in self._listeners if item is not callback]
+
     @property
     def log_buffer(self) -> LogBuffer:
         return self._log
@@ -249,8 +272,14 @@ class VpnBackend:
         with self._lock:
             return self._snapshot_locked()
 
-    def connect(self, profile: ConnectionProfile | None, *, after_trust: bool = False) -> None:
-        """Ask the privileged helper to start openfortivpn for *profile*."""
+    def connect(
+        self,
+        profile: ConnectionProfile | None,
+        *,
+        after_trust: bool = False,
+        credentials: object | None = None,
+    ) -> None:
+        """Ask the privileged helper to start the selected VPN backend."""
         if profile is None:
             self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
             return
@@ -271,9 +300,27 @@ class VpnBackend:
 
         self._wait_helper_idle()
 
-        capabilities = self._resolve_executable(profile)
-        if capabilities is None:
-            return
+        if profile.is_ipsec():
+            settings = profile.ipsec
+            if settings is None or not settings.is_supported():
+                self._fail_without_process(
+                    VpnErrorCode.IPSEC_UNSUPPORTED, _IPSEC_UNSUPPORTED_MESSAGE
+                )
+                return
+            psk = getattr(credentials, "psk", "") if credentials is not None else ""
+            username = getattr(credentials, "username", "") if credentials is not None else ""
+            password = getattr(credentials, "password", "") if credentials is not None else ""
+            if not psk or not username or not password:
+                self._fail_without_process(
+                    VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED, _IPSEC_CREDENTIALS_MESSAGE
+                )
+                return
+            capabilities = None
+        else:
+            credentials = None
+            capabilities = self._resolve_executable(profile)
+            if capabilities is None:
+                return
 
         probe = self._helper.probe()
         with self._lock:
@@ -294,18 +341,34 @@ class VpnBackend:
             return
 
         try:
-            request = connect_request_from_fields(
-                gateway=profile.gateway,
-                port=profile.port,
-                auth_mode="saml" if profile.use_sso else "standard",
-                trusted_certificate_fingerprint=profile.trusted_cert_sha256,
-            )
+            if profile.is_ipsec():
+                request = connect_request_from_fields(
+                    gateway=profile.gateway,
+                    port=profile.port,
+                    auth_mode="standard",
+                    backend=BACKEND_IPSEC,
+                    ipsec=profile.ipsec_payload(),
+                )
+            else:
+                request = connect_request_from_fields(
+                    gateway=profile.gateway,
+                    port=profile.port,
+                    auth_mode="saml" if profile.use_sso else "standard",
+                    trusted_certificate_fingerprint=profile.trusted_cert_sha256,
+                    backend=BACKEND_OPENFORTIVPN,
+                )
         except HelperError as exc:
             self._log.append("vpn", f"Rejected connect request: {exc.message}")
             self._fail_without_process(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
             return
 
-        self._begin_session(profile, capabilities, request, after_trust=after_trust)
+        self._begin_session(
+            profile,
+            capabilities,
+            request,
+            after_trust=after_trust,
+            credentials=credentials,
+        )
 
     def disconnect(
         self,
@@ -596,10 +659,11 @@ class VpnBackend:
     def _begin_session(
         self,
         profile: ConnectionProfile,
-        capabilities: OpenfortivpnCapabilities,
+        capabilities: OpenfortivpnCapabilities | None,
         request: ConnectRequest,
         *,
         after_trust: bool = False,
+        credentials: object | None = None,
     ) -> None:
         with self._lock:
             if after_trust:
@@ -655,14 +719,21 @@ class VpnBackend:
         if not skip_start_log:
             self._app_log("Starting VPN connection.")
         mode = "SAML/SSO" if profile.use_sso else "standard"
-        self._log.append(
-            "vpn",
-            f"Starting privileged openfortivpn for {profile.name} "
-            f"({profile.gateway}:{profile.port}) mode={mode}.",
-            severity=LogLevel.DEBUG,
-        )
+        if profile.is_ipsec():
+            self._log.append(
+                "vpn",
+                f"Starting privileged IPsec for {profile.name} ({profile.gateway}:{profile.port}).",
+                severity=LogLevel.DEBUG,
+            )
+        else:
+            self._log.append(
+                "vpn",
+                f"Starting privileged openfortivpn for {profile.name} "
+                f"({profile.gateway}:{profile.port}) mode={mode}.",
+                severity=LogLevel.DEBUG,
+            )
         try:
-            self._helper.connect(request, self._on_helper_event)
+            self._helper.connect(request, self._on_helper_event, credentials=credentials)
         except HelperError as exc:
             code, message = _helper_error_to_vpn(exc)
             self._log.append("vpn", exc.message, severity=LogLevel.ERROR)
@@ -730,7 +801,12 @@ class VpnBackend:
 
     def _handle_log_line(self, line: str) -> None:
         text = redact_log_line(line)
-        self._log.append("openfortivpn", text)
+        source = "ipsec"
+        with self._lock:
+            profile = self._profile
+        if profile is None or not profile.is_ipsec():
+            source = "openfortivpn"
+        self._log.append(source, text)
         hint = classify_output(text)
         snapshots: list[VpnSnapshot] = []
         log_gateway = False
@@ -1090,7 +1166,12 @@ class VpnBackend:
 
     def _on_exit(self, code: int) -> None:
         self._cancel_saml_timeout()
-        self._log.append("openfortivpn", f"Process exited with status {code}.")
+        source = "openfortivpn"
+        with self._lock:
+            profile = self._profile
+        if profile is not None and profile.is_ipsec():
+            source = "ipsec"
+        self._log.append(source, f"Process exited with status {code}.")
         with self._lock:
             previous = self._state
             hint = self._output_hint
@@ -1283,7 +1364,10 @@ class VpnBackend:
         capabilities = self._capabilities
         auth_mode = None
         if profile is not None:
-            auth_mode = "SAML/SSO" if profile.use_sso else "non-SSO"
+            if profile.is_ipsec():
+                auth_mode = profile.auth_label()
+            else:
+                auth_mode = "SAML/SSO" if profile.use_sso else "non-SSO"
         elif self._use_sso:
             auth_mode = "SAML/SSO"
         selected = None
@@ -1321,6 +1405,9 @@ class VpnBackend:
             supports_saml=supports_saml,
             supports_cookie_stdin=supports_cookie,
             use_sso=None if profile is None else profile.use_sso,
+            vpn_backend=None
+            if profile is None
+            else (BACKEND_IPSEC if profile.is_ipsec() else BACKEND_OPENFORTIVPN),
             failure_reason=failure,
             helper_installed=None if probe is None else probe.installed,
             helper_version=None if probe is None else probe.helper_version,
@@ -1382,6 +1469,10 @@ _CODE_MAP = {
     "INVALID_AUTH_URL": VpnErrorCode.INVALID_AUTH_URL,
     "SAML_FAILED": VpnErrorCode.SAML_FAILED,
     "VPN_PROCESS_FAILED": VpnErrorCode.VPN_PROCESS_FAILED,
+    "IPSEC_BACKEND_MISSING": VpnErrorCode.IPSEC_BACKEND_MISSING,
+    "IPSEC_DAEMON_START_FAILED": VpnErrorCode.IPSEC_DAEMON_START_FAILED,
+    "UNSUPPORTED_IPSEC": VpnErrorCode.IPSEC_UNSUPPORTED,
+    "INVALID_CREDENTIALS": VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED,
 }
 
 
@@ -1396,6 +1487,10 @@ def _helper_error_to_vpn(exc: HelperError) -> tuple[VpnErrorCode, str]:
         VpnErrorCode.OPENFORTIVPN_MISSING: _MISSING_MESSAGE,
         VpnErrorCode.FAILED_TO_START: _START_MESSAGE,
         VpnErrorCode.ALREADY_BUSY: _BUSY_MESSAGE,
+        VpnErrorCode.IPSEC_BACKEND_MISSING: _IPSEC_MISSING_MESSAGE,
+        VpnErrorCode.IPSEC_DAEMON_START_FAILED: _IPSEC_DAEMON_START_MESSAGE,
+        VpnErrorCode.IPSEC_UNSUPPORTED: _IPSEC_UNSUPPORTED_MESSAGE,
+        VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED: _IPSEC_CREDENTIALS_MESSAGE,
     }
     return mapped, messages.get(mapped, exc.message)
 

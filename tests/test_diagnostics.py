@@ -9,7 +9,7 @@ from fortigate_vpn_gui.diagnostics.checks import CommandResult, DnsResult, TcpRe
 from fortigate_vpn_gui.diagnostics.collector import build_diagnostics_snapshot
 from fortigate_vpn_gui.diagnostics.service import DiagnosticDeps, DiagnosticService
 from fortigate_vpn_gui.gui.diagnostics_page import DiagnosticsPage
-from fortigate_vpn_gui.helper.protocol import POLKIT_ACTION_ID
+from fortigate_vpn_gui.helper.protocol import HELPER_VERSION, POLKIT_ACTION_ID
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import build_profile
 from fortigate_vpn_gui.vpn.detect import OpenfortivpnDetection
@@ -62,6 +62,9 @@ def test_diagnostics_snapshot_values() -> None:
     assert data["shutdown_in_progress"] == "No"
     assert "should-not-leak" not in str(data.values())
     assert data["helper_installed"] == "Yes"
+    assert data["expected_helper_protocol"] == HELPER_VERSION
+    assert data["detected_helper_protocol"] == data["helper_version"]
+    assert data["helper_path"]
     assert data["authorization_mechanism"] == "polkit"
     assert data["helper_startup_detail"] == "—"
     assert data["certificate_pinned"] == "No"

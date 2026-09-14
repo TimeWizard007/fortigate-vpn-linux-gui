@@ -11,12 +11,14 @@ from fortigate_vpn_gui.system.helper_client import InProcessHelperClient
 from fortigate_vpn_gui.vpn.backend import VpnBackend
 from fortigate_vpn_gui.vpn.browser import BrowserLaunchError
 from fortigate_vpn_gui.vpn.capabilities import OpenfortivpnCapabilities
+from fortigate_vpn_gui.vpn.ipsec.detect import IpsecBackendCapabilities
 from fortigate_vpn_gui.vpn.log_buffer import LogBuffer
 
 
 class FakeVpnProcess:
-    def __init__(self, argv: list[str], on_output, on_exit) -> None:
+    def __init__(self, argv: list[str], on_output, on_exit, env=None) -> None:
         self.argv = list(argv)
+        self.env = dict(env) if env is not None else None
         self._on_output = on_output
         self._on_exit = on_exit
         self.pid = 4242
@@ -114,6 +116,9 @@ class VpnHarness:
         privilege_denied: bool = False,
         helper_version: str = HELPER_VERSION,
         version_mismatch: bool = False,
+        ipsec_available: bool = False,
+        runtime_dir_factory=None,
+        vici_wait=None,
     ) -> None:
         self._process: FakeVpnProcess | None = None
         self.log = LogBuffer()
@@ -129,6 +134,18 @@ class VpnHarness:
                 supports_cookie_stdin=supports_cookie_stdin,
                 source="test",
             )
+        ipsec_discover = None
+        if ipsec_available:
+
+            def _ipsec_discover() -> IpsecBackendCapabilities:
+                return IpsecBackendCapabilities(
+                    charon_path="/usr/lib/ipsec/charon",
+                    swanctl_path="/usr/sbin/swanctl",
+                    available=True,
+                    source="test",
+                )
+
+            ipsec_discover = _ipsec_discover
         self.helper = InProcessHelperClient(
             process_factory=self.factory,
             selector=self.selector,
@@ -138,6 +155,9 @@ class VpnHarness:
             denied=privilege_denied,
             version_mismatch=version_mismatch,
             grace_seconds=0.05,
+            ipsec_discover=ipsec_discover,
+            runtime_dir_factory=runtime_dir_factory,
+            vici_wait=vici_wait,
         )
         self.backend = VpnBackend(
             log_buffer=self.log,
@@ -168,6 +188,6 @@ class VpnHarness:
             return None
         return self.capabilities
 
-    def factory(self, argv: list[str], on_output, on_exit) -> FakeVpnProcess:
-        self._process = FakeVpnProcess(argv, on_output, on_exit)
+    def factory(self, argv: list[str], on_output, on_exit, env=None) -> FakeVpnProcess:
+        self._process = FakeVpnProcess(argv, on_output, on_exit, env=env)
         return self._process

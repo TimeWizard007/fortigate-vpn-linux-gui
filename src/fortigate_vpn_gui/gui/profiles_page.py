@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fortigate_vpn_gui.gui.ipsec_credentials_dialog import prompt_ipsec_credentials
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
@@ -78,9 +79,7 @@ class ProfilesPage(QWidget):
         empty_layout = QVBoxLayout(self._empty)
         empty_layout.setContentsMargins(0, 24, 0, 0)
         empty_layout.setSpacing(12)
-        empty_hint = QLabel(
-            "No VPN profiles yet.\nAdd a profile to connect to a FortiGate VPN."
-        )
+        empty_hint = QLabel("No VPN profiles yet.\nAdd a profile to connect to a FortiGate VPN.")
         empty_hint.setObjectName("emptyProfilesHint")
         empty_hint.setWordWrap(True)
         self._empty_add = QPushButton("Add profile")
@@ -209,9 +208,19 @@ class ProfilesPage(QWidget):
             return False
         if self._select_profile is not None:
             self._select_profile(profile.id)
-        self._feedback.setText(f'Connecting… {profile.name}')
+        credentials = None
+        if profile.is_ipsec():
+            credentials = prompt_ipsec_credentials(
+                profile,
+                parent=dialog_parent_for(self),
+                psk_store=self._manager.psk_store,
+                manager=self._manager,
+            )
+            if credentials is None:
+                return False
+        self._feedback.setText(f"Connecting… {profile.name}")
         self._feedback.show()
-        self._vpn.connect(profile)
+        self._vpn.connect(profile, credentials=credentials)
         self.apply_snapshot(self._vpn.snapshot())
         if self._on_connect is not None:
             self._on_connect()
@@ -235,7 +244,7 @@ class ProfilesPage(QWidget):
         default_badge.setObjectName("profileDefaultBadge")
         default_badge.setVisible(self._manager.is_default(profile.id))
 
-        host = QLabel(f"{profile.gateway}:{profile.port}")
+        host = QLabel(f"{profile.vpn_type_label()} · {profile.gateway}:{profile.port}")
         host.setObjectName("profileCardHost")
         host.setWordWrap(True)
 
@@ -249,8 +258,10 @@ class ProfilesPage(QWidget):
         more = QToolButton()
         more.setObjectName(f"profileMoreButton_{profile.id}")
         more.setText("More")
+        more.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        more.setMenu(self._card_menu(profile))
+        more.setMenu(self._card_menu(profile, more))
+        more.clicked.connect(more.showMenu)
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -272,19 +283,29 @@ class ProfilesPage(QWidget):
         layout.addLayout(meta_row)
         return card
 
-    def _card_menu(self, profile: ConnectionProfile) -> QMenu:
-        menu = QMenu()
-        menu.addAction("Edit", lambda pid=profile.id: self.edit_profile(pid))
-        menu.addAction("Duplicate", lambda pid=profile.id: self.duplicate_profile(pid))
-        set_default = menu.addAction(
-            "Set as default", lambda pid=profile.id: self.set_default_profile(pid)
+    def _card_menu(self, profile: ConnectionProfile, parent: QWidget) -> QMenu:
+        menu = QMenu(parent)
+        menu.setObjectName(f"profileMoreMenu_{profile.id}")
+        edit = menu.addAction("Edit")
+        edit.setObjectName(f"profileEditAction_{profile.id}")
+        edit.triggered.connect(lambda checked=False, pid=profile.id: self.edit_profile(pid))
+        duplicate = menu.addAction("Duplicate")
+        duplicate.setObjectName(f"profileDuplicateAction_{profile.id}")
+        duplicate.triggered.connect(
+            lambda checked=False, pid=profile.id: self.duplicate_profile(pid)
+        )
+        set_default = menu.addAction("Set as default")
+        set_default.setObjectName(f"profileDefaultAction_{profile.id}")
+        set_default.triggered.connect(
+            lambda checked=False, pid=profile.id: self.set_default_profile(pid)
         )
         set_default.setEnabled(not self._manager.is_default(profile.id))
         menu.addSeparator()
-        delete_action = menu.addAction(
-            "Delete…", lambda pid=profile.id: self.delete_profile(pid)
+        delete_action = menu.addAction("Delete")
+        delete_action.setObjectName(f"profileDeleteAction_{profile.id}")
+        delete_action.triggered.connect(
+            lambda checked=False, pid=profile.id: self.delete_profile(pid)
         )
-        delete_action.setObjectName("profileDeleteAction")
         return menu
 
     def _sync_connect_buttons(self) -> None:

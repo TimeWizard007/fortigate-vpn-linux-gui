@@ -113,6 +113,17 @@ def test_tray_show_hide_and_connect_callbacks(qapp) -> None:
     assert calls == ["show", "hide", "connect", "disconnect", "quit"]
 
 
+def test_tray_dispose_releases_icon(qapp) -> None:
+    parent = QWidget()
+    tray = TrayController(parent, available=True)
+    tray.show()
+    assert tray.active is True
+    tray.dispose()
+    assert tray.active is False
+    tray.show()
+    assert tray.active is False
+
+
 def test_iconless_injected_tray_gets_default_icon_before_show(qapp) -> None:
     parent = QWidget()
     raw = QSystemTrayIcon(parent)

@@ -24,9 +24,10 @@ from fortigate_vpn_gui.helper.protocol import (
     HelperProbe,
     event_from_payload,
 )
-from fortigate_vpn_gui.helper.service import HelperService
+from fortigate_vpn_gui.helper.service import HelperService, SwanctlCommandResult
 from fortigate_vpn_gui.helper.validation import connect_request_from_fields
 from fortigate_vpn_gui.vpn.capabilities import OpenfortivpnCapabilities
+from fortigate_vpn_gui.vpn.ipsec.detect import IpsecBackendCapabilities
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
 from fortigate_vpn_gui.vpn.process import ProcessFactory, default_process_factory
 
@@ -46,7 +47,12 @@ class HelperClient(Protocol):
 
     def probe(self) -> HelperProbe: ...
 
-    def connect(self, request: ConnectRequest, listener: HelperListener) -> None: ...
+    def connect(
+        self,
+        request: ConnectRequest,
+        listener: HelperListener,
+        credentials: object | None = None,
+    ) -> None: ...
 
     def disconnect(self, *, wait: bool = True, grace_seconds: float | None = None) -> None: ...
 
@@ -76,6 +82,10 @@ class InProcessHelperClient:
         denied: bool = False,
         version_mismatch: bool = False,
         grace_seconds: float = 5.0,
+        ipsec_discover=None,
+        swanctl_runner=None,
+        vici_wait=None,
+        runtime_dir_factory=None,
     ) -> None:
         self._probe_installed = installed
         self._probe_version = helper_version
@@ -86,6 +96,10 @@ class InProcessHelperClient:
             process_factory=process_factory,
             selector=selector,
             grace_seconds=grace_seconds,
+            ipsec_discover=ipsec_discover or _unavailable_ipsec,
+            swanctl_runner=swanctl_runner or _noop_swanctl,
+            vici_wait=vici_wait or (lambda path, timeout: True),
+            runtime_dir_factory=runtime_dir_factory,
         )
         self._listener: HelperListener | None = None
 
@@ -103,10 +117,11 @@ class InProcessHelperClient:
                 authorization_mechanism="polkit",
                 status="missing",
             )
+        path = resolve_helper_path()
         if not self._polkit_available:
             return HelperProbe(
                 installed=True,
-                helper_path=INSTALLED_HELPER_PATH,
+                helper_path=path,
                 helper_version=self._probe_version,
                 polkit_available=False,
                 authorization_mechanism="polkit",
@@ -115,7 +130,7 @@ class InProcessHelperClient:
         if self._version_mismatch:
             return HelperProbe(
                 installed=True,
-                helper_path=INSTALLED_HELPER_PATH,
+                helper_path=path,
                 helper_version=self._probe_version,
                 polkit_available=True,
                 authorization_mechanism="polkit",
@@ -124,14 +139,19 @@ class InProcessHelperClient:
             )
         return HelperProbe(
             installed=True,
-            helper_path=INSTALLED_HELPER_PATH,
+            helper_path=path,
             helper_version=self._probe_version,
             polkit_available=True,
             authorization_mechanism="polkit",
             status="ready",
         )
 
-    def connect(self, request: ConnectRequest, listener: HelperListener) -> None:
+    def connect(
+        self,
+        request: ConnectRequest,
+        listener: HelperListener,
+        credentials: object | None = None,
+    ) -> None:
         probe = self.probe()
         if probe.status == "missing":
             raise HelperError("HELPER_NOT_AVAILABLE", "The privileged VPN helper is not installed.")
@@ -149,10 +169,12 @@ class InProcessHelperClient:
             auth_mode=request.auth_mode,
             trusted_certificate_fingerprint=request.trusted_certificate_fingerprint,
             request_id=request.request_id,
+            backend=request.backend,
+            ipsec=request.ipsec,
         )
         self._listener = listener
         self._service.set_listener(listener)
-        self._service.connect(validated)
+        self._service.connect(validated, credentials=credentials)
 
     def disconnect(self, *, wait: bool = True, grace_seconds: float | None = None) -> None:
         self._service.disconnect(wait=wait, grace_seconds=grace_seconds)
@@ -168,6 +190,9 @@ class InProcessHelperClient:
 
     def argv(self) -> tuple[str, ...]:
         return self._service.argv()
+
+    def wait_for_ipsec_setup(self, timeout: float = 2.0) -> None:
+        self._service.wait_for_ipsec_setup(timeout=timeout)
 
 
 class PolkitHelperClient:
@@ -185,9 +210,7 @@ class PolkitHelperClient:
         expected_protocol: int = PROTOCOL_VERSION,
         version_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
-        self._helper_path = (
-            helper_path or os.environ.get("FORTIGATE_VPN_HELPER") or INSTALLED_HELPER_PATH
-        )
+        self._helper_path = resolve_helper_path(helper_path)
         self._pkexec_name = pkexec_name
         self._which = which
         self._path_exists = path_exists
@@ -244,7 +267,12 @@ class PolkitHelperClient:
             startup_detail=detail,
         )
 
-    def connect(self, request: ConnectRequest, listener: HelperListener) -> None:
+    def connect(
+        self,
+        request: ConnectRequest,
+        listener: HelperListener,
+        credentials: object | None = None,
+    ) -> None:
         probe = self.probe()
         if probe.status == "missing":
             raise HelperError("HELPER_NOT_AVAILABLE", "The privileged VPN helper is not installed.")
@@ -263,19 +291,35 @@ class PolkitHelperClient:
             auth_mode=request.auth_mode,
             trusted_certificate_fingerprint=request.trusted_certificate_fingerprint,
             request_id=request.request_id,
+            backend=request.backend,
+            ipsec=request.ipsec,
         )
         self._listener = listener
         self._ensure_session()
-        self._send(
-            {
-                "id": validated.request_id or "connect",
-                "operation": "connect",
-                "gateway": validated.gateway,
-                "port": validated.port,
-                "auth_mode": validated.auth_mode,
-                "trusted_certificate_fingerprint": validated.trusted_certificate_fingerprint,
-            }
-        )
+        payload = {
+            "id": validated.request_id or "connect",
+            "operation": "connect",
+            "gateway": validated.gateway,
+            "port": validated.port,
+            "auth_mode": validated.auth_mode,
+            "trusted_certificate_fingerprint": validated.trusted_certificate_fingerprint,
+            "backend": validated.backend,
+        }
+        if validated.ipsec is not None:
+            payload["ipsec"] = validated.ipsec
+        self._send(payload)
+        if credentials is not None:
+            self._send(
+                {
+                    "operation": "credentials",
+                    "psk": getattr(credentials, "psk", ""),
+                    "username": getattr(credentials, "username", ""),
+                    "password": getattr(credentials, "password", ""),
+                }
+            )
+            wipe = getattr(credentials, "wipe", None)
+            if callable(wipe):
+                wipe()
 
     def disconnect(self, *, wait: bool = True, grace_seconds: float | None = None) -> None:
         del grace_seconds
@@ -462,6 +506,13 @@ def _run_version(argv: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def resolve_helper_path(explicit: str | None = None) -> str:
+    """Return the helper binary the GUI will ask pkexec to start."""
+    if explicit:
+        return explicit
+    return os.environ.get("FORTIGATE_VPN_HELPER") or INSTALLED_HELPER_PATH
+
+
 def default_helper_client() -> PolkitHelperClient:
     """Production client: pkexec + installed helper path."""
     return PolkitHelperClient()
@@ -476,9 +527,24 @@ def helper_path_from_source_tree() -> str | None:
     return None
 
 
+def _unavailable_ipsec() -> IpsecBackendCapabilities:
+    return IpsecBackendCapabilities(
+        charon_path=None,
+        swanctl_path=None,
+        available=False,
+        source="missing",
+    )
+
+
+def _noop_swanctl(argv: list[str], timeout: float) -> SwanctlCommandResult:
+    del argv, timeout
+    return SwanctlCommandResult(returncode=0)
+
+
 __all__ = [
     "HelperClient",
     "InProcessHelperClient",
     "PolkitHelperClient",
     "default_helper_client",
+    "resolve_helper_path",
 ]

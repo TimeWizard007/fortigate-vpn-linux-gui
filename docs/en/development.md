@@ -31,22 +31,45 @@ install system packages automatically.
 
 ## Privileged helper (development)
 
-Real tunnels need the helper and polkit policy. The GUI never runs as root
-and does not fall back to sudo.
+The GUI from this checkout expects helper protocol **0.8.0**. A previously
+installed **1.0.0-2** package helper is protocol **0.7.0**. pkexec only starts
+`/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`; do not point the GUI at a
+user-writable helper, do not setuid, and do not run the GUI as root.
+
+Install or update the checkout helper into the polkit-approved path:
 
 ```bash
-sudo install -D -m 0755 packaging/libexec/vpn-helper \
-  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
-sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
-  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+sudo ./scripts/install-dev-helper.sh
 ```
 
-The installed helper must import `fortigate_vpn_gui` (packaged install, or
-point the wrapper at this checkout). See [`packaging/README.md`](../../packaging/README.md).
+Verify (no pkexec required for `--version`):
+
+```bash
+./scripts/install-dev-helper.sh status
+/usr/libexec/fortigate-vpn-linux-gui/vpn-helper --version
+```
+
+The script copies `src/fortigate_vpn_gui` to a root-owned directory and writes
+the helper wrapper. Re-run it after helper-protocol changes. The GUI still
+uses pkexec on the same path. Diagnostics reports expected protocol, detected
+protocol, and the effective helper path.
+
+Restore the previously packaged helper later:
+
+```bash
+sudo ./scripts/install-dev-helper.sh restore
+```
+
+If no backup exists:
+
+```bash
+sudo apt install --reinstall fortigate-vpn-linux-gui
+```
 
 Optional override: `FORTIGATE_VPN_HELPER=/path/to/vpn-helper`. Missing helper,
 missing polkit, authorization denied, and version mismatch are reported.
-There is no silent insecure fallback.
+There is no silent insecure fallback. A custom path must still be allowed by
+the polkit policy (`exec.path` remains the installed helper).
 
 ## Profile storage
 
@@ -57,9 +80,12 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
 Stored fields: `id`, `name`, `gateway`, `port`, `description`,
-`username_hint`, `use_sso`, optional `trusted_cert_sha256`, and document-level
-`default_profile_id`. Passwords, SAML tokens, cookies, and other secrets are
-never written. Duplicate copies metadata and the certificate pin only.
+`username_hint`, `use_sso`, optional `trusted_cert_sha256`, optional
+`vpn_type` (missing treated as SSL), optional nested `ipsec` settings without
+secrets, and document-level `default_profile_id`. Passwords, SAML tokens,
+cookies, IPsec PSKs, XAuth passwords, and other secrets are never written.
+Duplicate copies metadata and the certificate pin only; Secret Service
+entries are not copied.
 
 Pytest uses a temporary `XDG_CONFIG_HOME` so tests never modify the real
 `~/.config`.

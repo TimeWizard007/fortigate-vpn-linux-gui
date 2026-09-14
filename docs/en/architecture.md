@@ -7,12 +7,8 @@ privilege.
 GUI                          PySide6 widgets (unprivileged)
   ↓ structured JSON request
 Privileged helper            root via polkit (pkexec)
-  ↓ controlled argv
-openfortivpn                 --saml-login for SSO; PPP / routes / DNS
-  ↓ SAML URL event
-System browser               Microsoft Entra ID via FortiGate SAML
-  ↓
-FortiGate SSL VPN            gateway
+  ├── openfortivpn           FortiGate SSL VPN (SAML or username/password)
+  └── strongSwan charon      FortiGate IPsec (distro packages; not bundled)
 ```
 
 The GUI must never become the helper and must never run as root. `pkexec`
@@ -62,7 +58,8 @@ probing is not done at application startup.
 
 A small helper activated with polkit action
 `com.fortigate-vpn-linux-gui.manage-vpn`. It is not a general command
-executor. Supported operations: `hello`, `connect`, `disconnect`, `status`.
+executor. Supported operations: `hello`, `connect`, `credentials`,
+`disconnect`, `status`.
 
 Install locations (also installed by the Ubuntu `.deb`):
 
@@ -72,9 +69,14 @@ Install locations (also installed by the Ubuntu `.deb`):
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
 ```
 
-The helper validates every field again, selects an approved openfortivpn
-binary, and builds argv itself. It never accepts a command string, argv list,
-or executable path from the GUI.
+The helper validates every field again, selects an approved backend binary,
+and builds argv itself. It never accepts a command string, argv list,
+or executable path from the GUI. IPsec pre-shared keys and XAuth passwords
+are sent in a follow-up `credentials` operation after `connect`, then written
+to a 0600 helper runtime file. They are never placed on argv. The GUI may
+reuse a PSK from Secret Service / GNOME Keyring (keyed by profile id); it
+never writes that PSK to `profiles.json`. The XAuth password may be saved the
+same way only when the user opts in; it is never stored in `profiles.json`.
 
 ### openfortivpn
 
@@ -112,6 +114,42 @@ not from assuming a path. The Ubuntu 24.04 `.deb` ships a private **1.24.1**
 with SAML. Distro **1.21.0** at `/usr/bin/openfortivpn` lacks `--saml-login`
 and is not used for SSO when the package-owned binary is present.
 
+### IPsec / strongSwan
+
+IPsec is a second helper backend (`backend=ipsec`). The GUI never runs
+charon or swanctl. The helper starts a **private** charon using an allowlisted
+path (`/usr/lib/ipsec/charon` or `/usr/libexec/ipsec/charon`) and a runtime
+`strongswan.conf` selected with the `STRONGSWAN_CONF` environment variable
+(Ubuntu charon does not accept `--conf`). Ubuntu's charon AppArmor profile
+cannot read that file from `/tmp`; the live helper writes it to
+`/run/charon.fvl.conf` and the private vici socket to `/run/charon.vici`
+(the only vici path `swanctl` AppArmor allows). Ubuntu 5.9.13 `swanctl` has no
+`--unix`; it uses the compiled VICI default `unix:///var/run/charon.vici`
+(`/run/charon.vici`) unless `swanctl.socket` is set. The helper therefore does
+not pass a socket CLI option. Configuration is loaded with
+`swanctl --load-all --file /etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf`
+(not `conf.d`, and not by overwriting `/etc/swanctl/swanctl.conf`). Secrets are
+in `secrets.conf` (mode 0600), included from `swanctl.conf`, and wiped on
+disconnect. CHILD_SA `local_ts` is `dynamic` (the assigned VIP). `remote_ts`
+is `0.0.0.0/0` so FortiGate can narrow via Cisco Unity split-include; it is
+not the public gateway `/32`. Generated `strongswan.conf` sets
+`charon.cisco_unity = yes`. Received VPN DNS is applied with `resolvectl` on
+the VIP interface after snapshotting that link's pre-VPN DNS/domains. On
+disconnect the helper restores the snapshot and runs `nmcli device reapply` so
+NetworkManager re-owns DHCP/static DNS. It does not use `resolvectl revert` on
+the physical interface (that clears NM's systemd-resolved slot and leaves an
+empty resolver). No permanent `/etc/resolv.conf` edits; systemd-networkd is
+not enabled.
+
+strongSwan is a distribution **Depends** on the Ubuntu package
+(`strongswan`, `strongswan-swanctl`, `libcharon-extra-plugins`,
+`libcharon-extauth-plugins`). It is not bundled. PATH is not searched for
+execution. `/etc/strongswan.conf` is not modified.
+
+v1.1.0 starts IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T with
+FortiGate/Cisco Unity split include. Other combinations may be stored in the
+profile and are rejected at connect.
+
 ### FortiGate SSL VPN
 
 The remote gateway. This project does not implement the VPN protocol itself.
@@ -124,6 +162,13 @@ the session is busy. Retry after certificate trust waits until the previous
 privileged process has exited.
 
 Non-SSO:
+
+```text
+DISCONNECTED → STARTING → CONNECTING → CONNECTED
+```
+
+IPsec (PSK authenticates the tunnel; XAuth username/password authenticate
+the user. A saved PSK is read from Secret Service when present):
 
 ```text
 DISCONNECTED → STARTING → CONNECTING → CONNECTED
@@ -191,9 +236,12 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 
 JSON schema (version 1): `id`, `name`, `gateway`, `port` (default 443),
 `description`, `username_hint`, `use_sso` (default true), optional
-`trusted_cert_sha256`. The document may include `default_profile_id`
-(exactly one default, or none). v0.7.1 files without that key load with no
-default.
+`trusted_cert_sha256`, `vpn_type` (`ssl` or `ipsec`, missing treated as
+`ssl`), and for IPsec profiles a nested non-secret `ipsec` object. The
+document may include `default_profile_id` (exactly one default, or none).
+v0.7.1 files without that key load with no default. Pre-shared keys and
+XAuth passwords are never stored in this file; optional Secret Service save
+is keyed by profile id.
 
 Passwords, SAML tokens, cookies, client secrets, and MFA data are not stored.
 Unknown JSON fields are ignored. Malformed files do not crash the application.

@@ -49,6 +49,10 @@ class LogBuffer:
     def subscribe(self, callback: LogListener) -> None:
         self._listeners.append(callback)
 
+    def unsubscribe(self, callback: LogListener) -> None:
+        with self._lock:
+            self._listeners = [item for item in self._listeners if item is not callback]
+
     def append(self, source: str, message: str, *, severity: LogLevel | None = None) -> LogRecord:
         redacted = redact_log_line(message)
         level = severity if severity is not None else infer_severity(redacted)

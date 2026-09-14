@@ -13,12 +13,17 @@ from typing import Any
 
 from fortigate_vpn_gui.helper.protocol import (
     ALLOWED_AUTH_MODES,
+    ALLOWED_BACKENDS,
+    ALLOWED_CREDENTIAL_KEYS,
     ALLOWED_OPERATIONS,
     ALLOWED_REQUEST_KEYS,
+    BACKEND_IPSEC,
+    BACKEND_OPENFORTIVPN,
     FORBIDDEN_REQUEST_KEYS,
     ConnectRequest,
     HelperProtocolError,
 )
+from fortigate_vpn_gui.vpn.ipsec.secrets import IpsecCredentials
 
 _HOSTNAME_RE = re.compile(
     r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
@@ -29,6 +34,13 @@ _SHELL_META = frozenset(";&|<>$`(){}!\\\"'\n\r\t,*?~#")
 _PORT_MSG = "Port must be an integer between 1 and 65535."
 _GW_HOST_MSG = "Gateway must be a hostname or IP address."
 _AUTH_MODE_MSG = "Authentication mode must be saml or standard."
+_BACKEND_MSG = "VPN backend must be openfortivpn or ipsec."
+
+
+def _parse_ipsec_settings(payload: object):
+    from fortigate_vpn_gui.profiles.ipsec import parse_ipsec_settings
+
+    return parse_ipsec_settings(payload)
 
 
 def normalize_sha256_fingerprint(value: object) -> str | None:
@@ -117,17 +129,20 @@ def parse_request_payload(payload: object) -> tuple[str, ConnectRequest | None]:
         raise HelperProtocolError("INVALID_REQUEST", "Request must be a JSON object.")
     keys = {str(key) for key in payload}
     forbidden = keys & FORBIDDEN_REQUEST_KEYS
-    extra = keys - ALLOWED_REQUEST_KEYS
     if forbidden:
         raise HelperProtocolError(
             "UNSUPPORTED_FIELD",
             "Request contains forbidden command or executable fields.",
         )
-    if extra:
-        raise HelperProtocolError("UNSUPPORTED_FIELD", "Request contains unsupported fields.")
     operation = payload.get("operation")
     if not isinstance(operation, str) or operation not in ALLOWED_OPERATIONS:
         raise HelperProtocolError("UNSUPPORTED_OPERATION", "Unsupported helper operation.")
+    allowed = ALLOWED_CREDENTIAL_KEYS if operation == "credentials" else ALLOWED_REQUEST_KEYS
+    if operation != "connect":
+        allowed = allowed | {"id", "operation"}
+    extra = keys - allowed
+    if extra:
+        raise HelperProtocolError("UNSUPPORTED_FIELD", "Request contains unsupported fields.")
     request_id = payload.get("id")
     ident = request_id if isinstance(request_id, str) else None
     if operation != "connect":
@@ -135,6 +150,21 @@ def parse_request_payload(payload: object) -> tuple[str, ConnectRequest | None]:
     auth_mode = payload.get("auth_mode", "standard")
     if not isinstance(auth_mode, str) or auth_mode not in ALLOWED_AUTH_MODES:
         raise HelperProtocolError("INVALID_AUTH_MODE", _AUTH_MODE_MSG)
+    backend = payload.get("backend", BACKEND_OPENFORTIVPN)
+    if not isinstance(backend, str) or backend not in ALLOWED_BACKENDS:
+        raise HelperProtocolError("INVALID_BACKEND", _BACKEND_MSG)
+    ipsec_payload = payload.get("ipsec")
+    ipsec_data: dict[str, object] | None = None
+    if backend == BACKEND_IPSEC:
+        try:
+            settings = _parse_ipsec_settings(ipsec_payload)
+        except ValueError as exc:
+            raise HelperProtocolError("INVALID_IPSEC", str(exc)) from exc
+        if not settings.is_supported():
+            raise HelperProtocolError("UNSUPPORTED_IPSEC", settings.support_summary())
+        ipsec_data = settings.to_json()
+    elif ipsec_payload not in (None, {}):
+        raise HelperProtocolError("INVALID_IPSEC", "IPsec settings are only valid for IPsec.")
     request = ConnectRequest(
         gateway=validate_gateway(payload.get("gateway")),
         port=validate_port(payload.get("port")),
@@ -143,6 +173,8 @@ def parse_request_payload(payload: object) -> tuple[str, ConnectRequest | None]:
             payload.get("trusted_certificate_fingerprint")
         ),
         request_id=ident,
+        backend=backend,
+        ipsec=ipsec_data,
     )
     return operation, request
 
@@ -161,6 +193,22 @@ def parse_request_line(line: str) -> tuple[str, ConnectRequest | None, str | Non
     return operation, request, request_id
 
 
+def parse_credentials_payload(payload: object) -> IpsecCredentials:
+    """Parse a credentials follow-up. Never used for SSL VPN."""
+    if not isinstance(payload, dict):
+        raise HelperProtocolError("INVALID_REQUEST", "Request must be a JSON object.")
+    psk = payload.get("psk")
+    username = payload.get("username")
+    password = payload.get("password")
+    if not isinstance(psk, str) or not psk:
+        raise HelperProtocolError("INVALID_CREDENTIALS", "Pre-shared key is required.")
+    if not isinstance(username, str) or not username.strip():
+        raise HelperProtocolError("INVALID_CREDENTIALS", "XAuth username is required.")
+    if not isinstance(password, str) or not password:
+        raise HelperProtocolError("INVALID_CREDENTIALS", "XAuth password is required.")
+    return IpsecCredentials(psk=psk, username=username.strip(), password=password)
+
+
 def connect_request_from_fields(
     *,
     gateway: object,
@@ -168,14 +216,29 @@ def connect_request_from_fields(
     auth_mode: object,
     trusted_certificate_fingerprint: object = None,
     request_id: str | None = None,
+    backend: object = BACKEND_OPENFORTIVPN,
+    ipsec: object = None,
 ) -> ConnectRequest:
     """Validate GUI-side connect fields before they are sent to the helper."""
     if not isinstance(auth_mode, str) or auth_mode not in ALLOWED_AUTH_MODES:
         raise HelperProtocolError("INVALID_AUTH_MODE", _AUTH_MODE_MSG)
+    if not isinstance(backend, str) or backend not in ALLOWED_BACKENDS:
+        raise HelperProtocolError("INVALID_BACKEND", _BACKEND_MSG)
+    ipsec_data: dict[str, object] | None = None
+    if backend == BACKEND_IPSEC:
+        try:
+            settings = _parse_ipsec_settings(ipsec)
+        except ValueError as exc:
+            raise HelperProtocolError("INVALID_IPSEC", str(exc)) from exc
+        if not settings.is_supported():
+            raise HelperProtocolError("UNSUPPORTED_IPSEC", settings.support_summary())
+        ipsec_data = settings.to_json()
     return ConnectRequest(
         gateway=validate_gateway(gateway),
         port=validate_port(port),
         auth_mode=auth_mode,
         trusted_certificate_fingerprint=validate_fingerprint(trusted_certificate_fingerprint),
         request_id=request_id,
+        backend=backend,
+        ipsec=ipsec_data,
     )

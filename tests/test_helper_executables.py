@@ -32,8 +32,8 @@ def _runner_for(versions: dict[str, str], helps: dict[str, str]):
     return runner
 
 
-def test_helper_protocol_remains_0_7_0() -> None:
-    assert HELPER_VERSION == "0.7.0"
+def test_helper_protocol_is_0_8_0() -> None:
+    assert HELPER_VERSION == "0.8.0"
 
 
 def test_approved_paths_prefer_package_owned_binary() -> None:

@@ -42,6 +42,10 @@ _SENSITIVE_QUERY_KEYS = frozenset(
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(password\s*[=:]\s*)\S+", re.IGNORECASE),
     re.compile(r"(passwd\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(secret\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(psk\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(pre[-_]?shared[-_]?key\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(xauth[-_]?password\s*[=:]\s*)\S+", re.IGNORECASE),
     re.compile(r"(svpncookie\s*[=:]\s*)\S+", re.IGNORECASE),
     re.compile(r"(authorization:\s*bearer\s+)\S+", re.IGNORECASE),
     re.compile(r"(authorization:\s*basic\s+)\S+", re.IGNORECASE),

@@ -7,8 +7,8 @@ FortiGate SSL VPN na Linuxie.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v1.0.0 jest pierwszym pakietem Ubuntu 24.04 (amd64). Protokół
-pomocnika 0.7.0 pozostaje bez zmian.
+Wersja v1.1.0 jest aktualnym pakietem Ubuntu 24.04 (amd64). Protokół
+pomocnika to 0.8.0.
 
 | Temat | Dokument |
 | ----- | -------- |

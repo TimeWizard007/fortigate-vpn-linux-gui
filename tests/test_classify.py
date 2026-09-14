@@ -14,7 +14,13 @@ def test_gateway_connected_is_not_tunnel_ready() -> None:
 
 
 def test_tunnel_ready_is_canonical_connected_signal() -> None:
-    assert (
-        classify_output("INFO:   Tunnel is up and running.") is OutputHint.CONNECTED
-    )
+    assert classify_output("INFO:   Tunnel is up and running.") is OutputHint.CONNECTED
     assert classify_output("tunnel is up and running") is OutputHint.CONNECTED
+
+
+def test_ipsec_child_sa_is_connected() -> None:
+    assert (
+        classify_output("13[IKE] CHILD_SA fortigate{1} established with SPIs c1-c2")
+        is OutputHint.CONNECTED
+    )
+    assert classify_output("IPsec CHILD SA established") is OutputHint.CONNECTED

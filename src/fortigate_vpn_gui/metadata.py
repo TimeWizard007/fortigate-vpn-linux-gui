@@ -19,7 +19,8 @@ LICENSE_SPDX = "GPL-3.0-or-later"
 LICENSE_NAME = "GNU General Public License v3.0 or later"
 LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
 PROJECT_DESCRIPTION = (
-    "A native Linux desktop client for FortiGate SSL VPN with SAML/SSO via the system browser."
+    "A native Linux desktop client for FortiGate SSL VPN and IPsec, with SAML/SSO "
+    "via the system browser."
 )
 ABOUT_LICENSE_TEXT = (
     "FortiGate VPN Linux GUI is free and open-source software licensed under the "
@@ -32,8 +33,9 @@ ABOUT_LICENSE_TEXT = (
 HOW_IT_WORKS_TEXT = (
     "SSO profiles sign in with the system browser (for example Microsoft Entra ID "
     "via FortiGate SAML). Connect asks polkit to authorize a privileged helper "
-    "that starts openfortivpn. This application stays unprivileged and never runs "
-    "as root. Sign-in URL query parameters are never shown in the GUI."
+    "that starts openfortivpn or a private strongSwan charon. This application "
+    "stays unprivileged and never runs as root. Sign-in URL query parameters are "
+    "never shown in the GUI."
 )
 CONNECTION_SSO_NOTICE = (
     "SSO profiles open your web browser to sign in. See the About page for how this works."

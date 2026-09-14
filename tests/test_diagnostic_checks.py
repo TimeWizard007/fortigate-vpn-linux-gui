@@ -133,8 +133,9 @@ def test_openfortivpn_diagnostics_prefers_package_owned_binary() -> None:
         return CommandResult(returncode=0, stdout="Usage: [--cookie-on-stdin]\n")
 
     check = check_openfortivpn(
-        is_executable=lambda path: path
-        in {package, "/usr/local/bin/openfortivpn", "/usr/bin/openfortivpn"},
+        is_executable=lambda path: (
+            path in {package, "/usr/local/bin/openfortivpn", "/usr/bin/openfortivpn"}
+        ),
         run_command=run_command,
         profile=build_profile(name="Office", gateway="vpn.example.com", use_sso=True),
     )
@@ -169,6 +170,31 @@ def test_helper_installed_compatible() -> None:
     assert check.status is CheckStatus.PASS
     assert "compatible" in check.summary.lower()
     assert HELPER_VERSION in check.detail
+    assert "Expected protocol:" in check.detail
+    assert "effective path: /tmp/vpn-helper" in check.detail
+
+
+def test_helper_protocol_mismatch_reports_path_and_versions() -> None:
+    def run_command(argv, timeout=3.0):
+        del argv, timeout
+        from fortigate_vpn_gui.helper.handshake import encode_hello_line
+
+        return CommandResult(returncode=0, stdout=encode_hello_line(helper_version="0.7.0") + "\n")
+
+    check = check_helper(
+        helper_path="/usr/libexec/fortigate-vpn-linux-gui/vpn-helper",
+        path_exists=lambda path: True,
+        is_executable=lambda path: True,
+        run_command=run_command,
+        expected_version="0.8.0",
+        probe_version=True,
+    )
+    assert check.status is CheckStatus.FAIL
+    assert "0.7.0" in check.summary
+    assert "0.8.0" in check.summary
+    assert "Expected protocol: 0.8.0" in (check.detail or "")
+    assert "detected protocol: 0.7.0" in (check.detail or "")
+    assert "effective path: /usr/libexec/fortigate-vpn-linux-gui/vpn-helper" in (check.detail or "")
 
 
 def test_helper_missing() -> None:
@@ -181,6 +207,8 @@ def test_helper_missing() -> None:
     )
     assert check.status is CheckStatus.FAIL
     assert "not installed" in check.summary.lower()
+    assert "Expected protocol:" in (check.detail or "")
+    assert "effective path: /missing/vpn-helper" in (check.detail or "")
 
 
 def test_helper_not_executable() -> None:

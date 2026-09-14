@@ -11,7 +11,7 @@ from fortigate_vpn_gui.diagnostics.model import (
 )
 from fortigate_vpn_gui.diagnostics.sanitization import sanitize_diagnostic_text
 from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
-from fortigate_vpn_gui.profiles.model import ConnectionProfile, auth_mode_label
+from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.vpn.models import VpnSnapshot, state_label
 
 
@@ -25,15 +25,28 @@ def format_diagnostic_report(
     profile: ConnectionProfile | None,
     snapshot: VpnSnapshot | None = None,
     helper_protocol: str = HELPER_VERSION,
+    detected_helper_protocol: str = "",
+    helper_path: str = "",
     session_type: str = "",
 ) -> str:
     """Return a sanitized plain-text report."""
     generated = run.finished_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    helper_check = run.check("vpn.helper")
+    detected = detected_helper_protocol
+    path = helper_path
+    if helper_check is not None and helper_check.detail:
+        detail = helper_check.detail
+        if not detected and "detected protocol:" in detail:
+            detected = detail.split("detected protocol:", 1)[1].split(";", 1)[0].strip()
+        if not path and "effective path:" in detail:
+            path = detail.split("effective path:", 1)[1].strip()
     lines = [
         "FortiGate VPN Linux GUI Diagnostic Report",
         f"Generated: {generated}",
         f"Application: {app_version}",
-        f"Helper protocol: {helper_protocol}",
+        f"Helper protocol expected: {helper_protocol}",
+        f"Helper protocol detected: {sanitize_diagnostic_text(detected or '—')}",
+        f"Helper path: {sanitize_diagnostic_text(path or '—')}",
         f"OS: {sanitize_diagnostic_text(os_name)}",
         f"Kernel: {sanitize_diagnostic_text(kernel)}",
         f"Architecture: {sanitize_diagnostic_text(architecture)}",
@@ -46,9 +59,10 @@ def format_diagnostic_report(
         lines.append("None selected")
     else:
         lines.append(f"Name: {sanitize_diagnostic_text(profile.name)}")
+        lines.append(f"VPN type: {profile.vpn_type_label()}")
         lines.append(f"Gateway: {sanitize_diagnostic_text(profile.gateway)}")
         lines.append(f"Port: {profile.port}")
-        lines.append(f"Authentication: {auth_mode_label(profile.use_sso)}")
+        lines.append(f"Authentication: {profile.auth_label()}")
     lines.append("")
     lines.append("Checks:")
     for group in GROUP_ORDER:

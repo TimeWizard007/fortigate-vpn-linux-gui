@@ -1,7 +1,7 @@
 # Znane ograniczenia
 
-Wersja v0.7.0 dodaje zasobnik, opcjonalny autostart i opcjonalne ponawianie
-połączenia na bazie utwardzonego cyklu życia i pomocnika polkit.
+Wersja v1.1.0 dodaje IPsec remote access na bazie klienta SSL VPN, zasobnika,
+opcjonalnego autostartu i opcjonalnego ponawiania połączenia.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -30,7 +30,19 @@ połączenia na bazie utwardzonego cyklu życia i pomocnika polkit.
 - Disconnect/Cancel jest bezpieczny w STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED. Przeglądarka nie
   jest zamykana na siłę; listener SAML znika razem z procesem.
-- Hasła, ciasteczka SAML i tokeny nie są przechowywane.
+- IPsec to ogólny typ profilu. v1.1.0 uruchamia IKEv1 Aggressive Mode
+  z PSK, XAuth, Mode Config, NAT-T i FortiGate/Cisco Unity split include.
+  IKEv2, Main Mode, certyfikat, EAP, SAML/SSO IPsec i adresacja ręczna nie
+  są łączone.
+- IPsec używa dystrybucyjnego strongSwan (`charon`/`swanctl`). Nie jest
+  dołączany do paczki. Wsparcie Debian 13, Fedora, Windows i macOS nie jest
+  deklarowane.
+- Klucz pre-shared nie trafia do `profiles.json`. Jeśli użytkownik wyrazi
+  zgodę, PSK IPsec i/lub hasło XAuth są zapisywane w Secret Service / GNOME
+  Keyring pod stabilnym identyfikatorem profilu, w osobnych nazwach usług.
+  Gdy Secret Service jest niedostępny, sekret podaje się przy łączeniu.
+  Brak zapisu jawnego. `username_hint` nie jest sekretem.
+- Hasła SSL, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - GUI samo nie instaluje pakietów. Instalacja na Ubuntu 24.04 używa
   pakietu `.deb` `fortigate-vpn-linux-gui`.

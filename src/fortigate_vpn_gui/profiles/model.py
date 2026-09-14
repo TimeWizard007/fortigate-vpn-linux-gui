@@ -17,11 +17,21 @@ from fortigate_vpn_gui.helper.validation import (
     normalize_sha256_fingerprint,
     validate_gateway,
 )
+from fortigate_vpn_gui.profiles.ipsec import (
+    VPN_TYPE_IPSEC,
+    VPN_TYPE_SSL,
+    VPN_TYPES,
+    IpsecSettings,
+    default_ipsec_settings,
+    parse_ipsec_settings,
+)
 
 SCHEMA_VERSION = 1
 
 AUTH_SAML_LABEL = "SAML / SSO"
 AUTH_PASSWORD_LABEL = "Username / Password"
+VPN_TYPE_SSL_LABEL = "SSL VPN"
+VPN_TYPE_IPSEC_LABEL = "IPsec"
 
 # Keys that must never be persisted or round-tripped from disk.
 FORBIDDEN_SECRET_KEYS = frozenset(
@@ -40,6 +50,11 @@ FORBIDDEN_SECRET_KEYS = frozenset(
         "otp",
         "totp",
         "pin",
+        "psk",
+        "preshared_key",
+        "pre_shared_key",
+        "xauth_password",
+        "ike_secret",
     }
 )
 
@@ -52,6 +67,7 @@ STORED_FIELDS = (
     "username_hint",
     "use_sso",
     "trusted_cert_sha256",
+    "vpn_type",
 )
 
 _MAX_NAME_LENGTH = 200
@@ -92,17 +108,41 @@ class ConnectionProfile:
     username_hint: str = ""
     use_sso: bool = True
     trusted_cert_sha256: str | None = None
+    vpn_type: str = VPN_TYPE_SSL
+    ipsec: IpsecSettings | None = None
 
     def to_json(self) -> dict[str, object]:
         """Return the JSON-serialisable record. Secret keys are never included."""
         payload = {key: asdict(self)[key] for key in STORED_FIELDS}
         if not payload.get("trusted_cert_sha256"):
             payload["trusted_cert_sha256"] = None
+        if self.is_ipsec():
+            settings = self.ipsec or default_ipsec_settings()
+            payload["ipsec"] = settings.to_json()
         return payload
+
+    def is_ssl(self) -> bool:
+        return self.vpn_type == VPN_TYPE_SSL
+
+    def is_ipsec(self) -> bool:
+        return self.vpn_type == VPN_TYPE_IPSEC
+
+    def vpn_type_label(self) -> str:
+        return VPN_TYPE_IPSEC_LABEL if self.is_ipsec() else VPN_TYPE_SSL_LABEL
 
     def auth_label(self) -> str:
         """Return the human-readable authentication mode."""
+        if self.is_ipsec():
+            settings = self.ipsec or default_ipsec_settings()
+            return settings.auth_label()
         return auth_mode_label(self.use_sso)
+
+    def ipsec_payload(self) -> dict[str, object] | None:
+        """Return stored IPsec settings, or None for SSL profiles."""
+        if not self.is_ipsec():
+            return None
+        settings = self.ipsec or default_ipsec_settings()
+        return settings.to_json()
 
 
 def auth_mode_label(use_sso: bool) -> str:
@@ -141,6 +181,8 @@ def build_profile(
     username_hint: object = "",
     use_sso: object = True,
     trusted_cert_sha256: object = None,
+    vpn_type: object = VPN_TYPE_SSL,
+    ipsec: object = None,
 ) -> ConnectionProfile:
     """Validate and construct a profile. Raises ``ProfileValidationError``."""
     errors: list[str] = []
@@ -183,6 +225,22 @@ def build_profile(
     if sso_value is None:
         _add_error(errors, field_errors, "use_sso", "Authentication mode must be true or false.")
 
+    type_value = VPN_TYPE_SSL if vpn_type in (None, "") else vpn_type
+    if not isinstance(type_value, str) or type_value not in VPN_TYPES:
+        _add_error(errors, field_errors, "vpn_type", "VPN type must be SSL VPN or IPsec.")
+        type_value = VPN_TYPE_SSL
+
+    ipsec_settings: IpsecSettings | None = None
+    if type_value == VPN_TYPE_IPSEC:
+        try:
+            ipsec_settings = parse_ipsec_settings(ipsec)
+        except ValueError as exc:
+            _add_error(errors, field_errors, "ipsec", str(exc))
+            ipsec_settings = default_ipsec_settings()
+        sso_value = False
+    else:
+        ipsec_settings = None
+
     pin_value: str | None = None
     if trusted_cert_sha256 not in (None, ""):
         pin_value = normalize_sha256_fingerprint(trusted_cert_sha256)
@@ -211,8 +269,10 @@ def build_profile(
         port=port_value,
         description=description_text,
         username_hint=hint_text,
-        use_sso=sso_value,
+        use_sso=False if type_value == VPN_TYPE_IPSEC else sso_value,
         trusted_cert_sha256=pin_value,
+        vpn_type=type_value,
+        ipsec=ipsec_settings if type_value == VPN_TYPE_IPSEC else None,
     )
 
 

@@ -11,8 +11,9 @@ Ten dokument podsumowuje model bezpieczeństwa. Instrukcje zgłaszania są w
 | ------ | ----------- | ---- |
 | GUI | Nieuprzywilejowany użytkownik | UI, intencje, przeglądarka systemowa |
 | VpnBackend | Ten sam użytkownik | Żądania do pomocnika, SAML, ocenzurowane logi |
-| Pomocnik | Root przez polkit | Start/stop openfortivpn |
+| Pomocnik | Root przez polkit | Start/stop wybranego backendu VPN |
 | openfortivpn | Własność pomocnika | Tunel SSL VPN i listener SAML |
+| strongSwan charon | Własność pomocnika, pakiety dystrybucji | IPsec IKE/ESP; nie w paczce |
 | Przeglądarka | Nieuprzywilejowany użytkownik | Strony Entra ID / FortiGate SAML |
 
 GUI nigdy nie działa jako root. Odmawia startu przy UID 0. Dodatkowe prawa do
@@ -40,7 +41,9 @@ zweryfikowane zdarzenie URL SAML. Nieuprzywilejowane GUI otwiera przeglądarkę.
 
 ## Sekrety
 
-Hasła VPN, tokeny SAML i SVPNCOOKIE nie są przechowywane. Skopiowane raporty
+Hasła SSL, tokeny SAML i SVPNCOOKIE nie są przechowywane w `profiles.json`.
+PSK IPsec i hasło XAuth mogą być zapisane w Secret Service tylko po zgodzie
+użytkownika; nigdy w `profiles.json` i bez zapisu jawnego. Skopiowane raporty
 diagnostyczne są ocenzurowane i nie mogą zawierać haseł, tokenów, ciasteczek
 ani ładunków SAML. Otwarcie Diagnostics nie uruchamia pkexec.
 `trusted_cert_sha256` to publiczny pin certyfikatu, nie hasło.
@@ -52,14 +55,15 @@ FortiGate wymaga jawnego **Zaufaj temu certyfikatowi dla tego profilu VPN**.
 Anuluj nie zapisuje pinu. Zmiana odcisku nigdy nie jest przyjmowana
 automatycznie.
 
-## Czego v0.7.0 nie robi
+## Czego to wydanie nie robi
 
 - Brak sudo i sudoers.
 - Brak dowolnego wykonywania poleceń root przez pomocnika.
 - Brak automatycznej instalacji pakietów z GUI. Ubuntu 24.04 używa pakietu
   `.deb` `fortigate-vpn-linux-gui`.
 - GUI samo nie zmienia zapory, tras ani DNS.
-- Brak przechowywania haseł, tokenów i ciasteczek VPN.
+- Brak sekretów w `profiles.json`. Opcjonalny zapis PSK/XAuth tylko przez
+  Secret Service; bez zapisu jawnego.
 - Logi są tylko w pamięci; nie są zapisywane na dysk.
 - Brak automatycznego zaufania i wyłączania TLS.
 - Auto-ponawianie nigdy nie pomija SAML ani walidacji certyfikatu.

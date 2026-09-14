@@ -1,7 +1,7 @@
 # Cel projektu
 
 FortiGate VPN Linux GUI ma być utrzymywalnym, natywnym klientem pulpitu Linux
-dla FortiGate SSL VPN.
+dla FortiGate SSL VPN i IPsec.
 
 Użytkownicy FortiGate SSL VPN na Linuxie często korzystają z oficjalnego
 FortiClient, sesji `openfortivpn` z linii poleceń albo opakowań dystrybucji.
@@ -13,10 +13,11 @@ Ten projekt ma dać jasne, nowoczesne GUI, które:
 - pozostaje niezależne od Fortinet
 
 Aplikacja używa [openfortivpn](https://github.com/adrienverge/openfortivpn)
-jako zaplecza VPN. v0.7.0 nadal uruchamia go przez minimalny pomocnik
-uprzywilejowany. GUI pozostaje nieuprzywilejowane i otwiera systemową
-przeglądarkę dla SAML. Opcjonalne ponawianie po utracie tunelu jest
-domyślnie wyłączone i nigdy nie pomija zatwierdzenia certyfikatu ani SAML.
+dla SSL VPN i dystrybucyjnego strongSwan dla IPsec. Oba uruchamia minimalny
+pomocnik uprzywilejowany (protokół 0.8.0 w v1.1.0). GUI pozostaje
+nieuprzywilejowane. SSL SAML otwiera systemową przeglądarkę. Opcjonalne
+ponawianie po utracie tunelu jest domyślnie wyłączone i nigdy nie pomija
+zatwierdzenia certyfikatu ani SAML.
 
 Ten projekt **nie** jest powiązany, wspierany ani sponsorowany przez Fortinet.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich

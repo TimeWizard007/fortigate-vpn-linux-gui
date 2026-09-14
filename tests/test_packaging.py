@@ -24,12 +24,12 @@ from fortigate_vpn_gui.metadata import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_application_version_is_1_0_0() -> None:
-    assert __version__ == "1.0.0"
+def test_application_version_is_1_1_0() -> None:
+    assert __version__ == "1.1.0"
 
 
-def test_helper_protocol_remains_0_7_0() -> None:
-    assert HELPER_VERSION == "0.7.0"
+def test_helper_protocol_is_0_8_0() -> None:
+    assert HELPER_VERSION == "0.8.0"
 
 
 def test_production_helper_path() -> None:
@@ -98,7 +98,8 @@ def test_launcher_script_has_no_shell_injection() -> None:
 def test_debian_control_metadata() -> None:
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "Package: fortigate-vpn-linux-gui" in control
-    assert "Version: 1.0.0-2" in control
+    assert "Version: 1.1.0-1" in control
+    assert "1.0.0-2" not in control
     assert "Architecture: amd64" in control
     assert "Depends:" in control
     depends = next(line for line in control.splitlines() if line.startswith("Depends:"))
@@ -106,10 +107,39 @@ def test_debian_control_metadata() -> None:
     assert "libssl3" in depends
     assert "ppp" in depends
     assert "pkexec" in depends
-    assert "iproute2" in control
-    assert "PySide6_Essentials==6.11.2" in (
-        ROOT / "packaging" / "requirements-bundle.txt"
-    ).read_text(encoding="utf-8")
+    assert "strongswan," in depends
+    assert "strongswan-swanctl" in depends
+    assert "libcharon-extra-plugins" in depends
+    assert "libcharon-extauth-plugins" in depends
+    assert "Recommends:" not in control
+    bundle = (ROOT / "packaging" / "requirements-bundle.txt").read_text(encoding="utf-8")
+    assert "PySide6_Essentials==6.11.2" in bundle
+    assert "keyring==25.7.0" in bundle
+    assert "SecretStorage==3.5.0" in bundle
+    assert "jeepney==0.9.0" in bundle
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "keyring" in pyproject
+    changelog = (ROOT / "packaging" / "debian" / "changelog").read_text(encoding="utf-8")
+    assert changelog.startswith("fortigate-vpn-linux-gui (1.1.0-1)")
+    script = (ROOT / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
+    assert 'VERSION="1.1.0"' in script
+    assert 'REVISION="1"' in script
+    assert "import keyring" in script
+    assert 'OPENFORTIVPN_VERSION="1.24.1"' in script
+
+
+def test_dev_helper_install_script_keeps_polkit_path() -> None:
+    script = (ROOT / "scripts" / "install-dev-helper.sh").read_text(encoding="utf-8")
+    assert "/usr/libexec/${PACKAGE_NAME}/vpn-helper" in script
+    assert "install-dev-helper.sh" in script
+    assert "does not install a setuid" in script.lower()
+    assert "chmod 4755" not in script
+    assert "chmod u+s" not in script
+    assert "pkexec" in script
+    assert "restore" in script
+    assert "apt install --reinstall fortigate-vpn-linux-gui" in script
+    assert "/home/" not in script
+    assert (ROOT / "scripts" / "install-dev-helper.sh").stat().st_mode & 0o111
 
 
 def test_icon_resource_is_packaged() -> None:

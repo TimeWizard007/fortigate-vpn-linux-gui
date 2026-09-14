@@ -6,12 +6,8 @@ Projekt oddziela interfejs pulpitu od sterowania procesem VPN i od uprawnień.
 GUI                          Widżety PySide6 (nieuprzywilejowane)
   ↓ strukturalne żądanie JSON
 Pomocnik uprzywilejowany     root przez polkit (pkexec)
-  ↓ kontrolowane argv
-openfortivpn                 --saml-login dla SSO; PPP / trasy / DNS
-  ↓ zdarzenie URL SAML
-Przeglądarka systemowa       Microsoft Entra ID przez FortiGate SAML
-  ↓
-FortiGate SSL VPN            brama
+  ├── openfortivpn           FortiGate SSL VPN (SAML lub użytkownik/hasło)
+  └── strongSwan charon      FortiGate IPsec (pakiety dystrybucji; nie w paczce)
 ```
 
 GUI nigdy nie może stać się pomocnikiem i nigdy nie może działać jako root.
@@ -52,8 +48,8 @@ właściwie uruchamia openfortivpn.
 ### Pomocnik uprzywilejowany
 
 Mały pomocnik z akcją polkit `com.fortigate-vpn-linux-gui.manage-vpn`. To nie
-jest ogólny executor poleceń. Operacje: `hello`, `connect`, `disconnect`,
-`status`.
+jest ogólny executor poleceń. Operacje: `hello`, `connect`, `credentials`,
+`disconnect`, `status`.
 
 Lokalizacje instalacji:
 
@@ -80,6 +76,27 @@ Kandydaci pomocnika, w kolejności:
 Zdolności z `--help`. Paczka Ubuntu 24.04 (**1.21.0**) nie ma SAML; nasza
 paczka dostarcza prywatny **1.24.1**.
 
+### IPsec / strongSwan
+
+IPsec to drugi backend pomocnika. GUI nie uruchamia charon ani swanctl.
+Prywatny charon dostaje wygenerowany `strongswan.conf` przez `STRONGSWAN_CONF`
+(Ubuntu charon nie przyjmuje `--conf`; AppArmor czyta ten plik z
+`/run/charon.fvl.conf`, gniazdo vici to `/run/charon.vici`). Ubuntu 5.9.13
+`swanctl` nie ma `--unix`; ładuje
+`/etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf` przez `--load-all --file`
+i łączy się z domyślnym gniazdem VICI `/run/charon.vici`. strongSwan pochodzi
+z dystrybucji (`Depends`: `strongswan`, `strongswan-swanctl`,
+`libcharon-extra-plugins`, `libcharon-extauth-plugins`) i nie jest
+dołączany do paczki. `/etc/strongswan.conf` nie jest zmieniany. v1.1.0 łączy
+IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T z FortiGate/Cisco Unity
+split include. Sekrety idą
+osobną operacją `credentials` i plikiem 0600, nigdy przez argv. PSK i hasło
+XAuth mogą być zapisane w Secret Service tylko po zgodzie użytkownika; nigdy
+w `profiles.json`. DNS VPN jest nakładką tymczasową: pomocnik zapisuje stan
+przed VPN, nakłada DNS FortiGate i `~.`, a przy Disconnect przywraca migawkę
+i woła `nmcli device reapply`. Nie używa `resolvectl revert` na łączu
+zarządzanym przez NetworkManager.
+
 ## Stany połączenia
 
 Tylko jedna próba połączenia na instancję GUI. Ponowny Connect w trakcie
@@ -87,6 +104,9 @@ zajętej sesji jest ignorowany. Ponowienie po zaufaniu certyfikatu czeka na
 zakończenie poprzedniego procesu.
 
 Bez SSO: `DISCONNECTED → STARTING → CONNECTING → CONNECTED`.
+
+IPsec (PSK tunelu i osobne poświadczenia XAuth; zapisany PSK z Secret Service):
+to samo co bez SSO.
 
 SSO: `DISCONNECTED → STARTING → WAITING_FOR_AUTH → CONNECTING → CONNECTED`.
 
@@ -120,12 +140,15 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 ```
 
 Schemat (wersja 1): `id`, `name`, `gateway`, `port`, `description`,
-`username_hint`, `use_sso`, opcjonalne `trusted_cert_sha256`. Dokument może
+`username_hint`, `use_sso`, opcjonalne `trusted_cert_sha256`, opcjonalne
+`vpn_type` (brak = SSL), opcjonalne zagnieżdżone `ipsec` bez sekretów.
+Dokument może
 zawierać `default_profile_id` (dokładnie jeden profil domyślny albo żaden).
 Pliki v0.7.1 bez tego klucza wczytują się bez profilu domyślnego.
 
-Hasła, tokeny SAML, ciasteczka i dane MFA nie są przechowywane. Duplikowanie
-kopiuje bezpieczne metadane i pin certyfikatu, nie poświadczenia.
+Hasła, tokeny SAML, ciasteczka, PSK IPsec, hasła XAuth i dane MFA nie są
+przechowywane. Duplikowanie kopiuje bezpieczne metadane i pin certyfikatu,
+nie sekrety z Secret Service.
 
 ## Cenzura logów
 

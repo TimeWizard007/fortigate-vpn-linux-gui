@@ -150,10 +150,10 @@ def _extract_document(payload: object) -> tuple[list[object], str | None]:
 
 
 def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None:
-    # Secret keys are dropped, not loaded. Unknown fields are ignored.
-    cleaned = {
-        str(key): value for key, value in record.items() if str(key) not in FORBIDDEN_SECRET_KEYS
-    }
+    # Secret keys are dropped, not loaded, including nested IPsec objects.
+    cleaned = _without_secrets(record)
+    if not isinstance(cleaned, dict):
+        return None
     profile_id = cleaned.get("id")
     if not isinstance(profile_id, str) or not profile_id.strip():
         return None
@@ -168,6 +168,8 @@ def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None
             username_hint=cleaned.get("username_hint", ""),
             use_sso=cleaned.get("use_sso", True),
             trusted_cert_sha256=pin,
+            vpn_type=cleaned.get("vpn_type", "ssl"),
+            ipsec=cleaned.get("ipsec"),
         )
     except ProfileValidationError:
         try:
@@ -180,9 +182,24 @@ def _record_to_profile(record: dict[object, object]) -> ConnectionProfile | None
                 username_hint=cleaned.get("username_hint", ""),
                 use_sso=cleaned.get("use_sso", True),
                 trusted_cert_sha256=None,
+                vpn_type=cleaned.get("vpn_type", "ssl"),
+                ipsec=cleaned.get("ipsec"),
             )
         except ProfileValidationError:
             return None
+
+
+def _without_secrets(value: object) -> object:
+    """Drop forbidden secret keys at every object level."""
+    if isinstance(value, dict):
+        return {
+            str(key): _without_secrets(item)
+            for key, item in value.items()
+            if str(key) not in FORBIDDEN_SECRET_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_secrets(item) for item in value]
+    return value
 
 
 def atomic_write_text(path: Path, text: str) -> None:

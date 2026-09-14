@@ -20,12 +20,13 @@ from PySide6.QtWidgets import (
 )
 
 from fortigate_vpn_gui.gui.certificate_dialog import CertificateTrustDialog
+from fortigate_vpn_gui.gui.ipsec_credentials_dialog import prompt_ipsec_credentials
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.helper.protocol import CertificateInfo
 from fortigate_vpn_gui.metadata import CONNECTION_SSO_NOTICE
 from fortigate_vpn_gui.profiles.manager import ProfileManager
-from fortigate_vpn_gui.profiles.model import ConnectionProfile, auth_mode_label
+from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.system.dependencies import ubuntu_install_command
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
@@ -304,8 +305,11 @@ class ConnectionPage(QWidget):
         """Update status and buttons from a backend snapshot."""
         self._safe_auth_url = snapshot.safe_auth_url
         busy = snapshot.state in BUSY_STATES or snapshot.manual_reconnect
-        has_profile = self.selected_profile() is not None
-        missing = self._openfortivpn_path is None
+        profile = self.selected_profile()
+        has_profile = profile is not None
+        missing = self._openfortivpn_path is None and not (
+            profile is not None and profile.is_ipsec()
+        )
         waiting = snapshot.state is ConnectionState.WAITING_FOR_AUTH
         waiting_cert = snapshot.state is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
         closing = snapshot.shutdown_in_progress or snapshot.state is ConnectionState.CLOSING
@@ -454,7 +458,7 @@ class ConnectionPage(QWidget):
             return
         self._gateway_label.setText(profile.gateway)
         self._port_label.setText(str(profile.port))
-        self._sso_label.setText(auth_mode_label(profile.use_sso))
+        self._sso_label.setText(profile.auth_label())
 
     def _on_action_clicked(self) -> None:
         snapshot = self._vpn.snapshot()
@@ -469,7 +473,19 @@ class ConnectionPage(QWidget):
         if state in CANCELABLE_STATES:
             self._vpn.disconnect()
             return
-        self._vpn.connect(self.selected_profile())
+        profile = self.selected_profile()
+        if profile is not None and profile.is_ipsec():
+            credentials = prompt_ipsec_credentials(
+                profile,
+                parent=dialog_parent_for(self),
+                psk_store=self._manager.psk_store,
+                manager=self._manager,
+            )
+            if credentials is None:
+                return
+            self._vpn.connect(profile, credentials=credentials)
+            return
+        self._vpn.connect(profile)
 
     def _copy_safe_auth_url(self) -> None:
         """Copy origin+path only. Query values are never placed on the clipboard."""
@@ -531,6 +547,10 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.PPP_FAILED: "PPP setup failed",
         VpnErrorCode.ROUTE_FAILED: "Route setup failed",
         VpnErrorCode.DNS_FAILED: "DNS setup failed",
+        VpnErrorCode.IPSEC_BACKEND_MISSING: "IPsec backend missing",
+        VpnErrorCode.IPSEC_DAEMON_START_FAILED: "IPsec daemon failed to start",
+        VpnErrorCode.IPSEC_UNSUPPORTED: "IPsec combination not supported",
+        VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED: "IPsec credentials required",
     }
     if code is None:
         return "VPN"

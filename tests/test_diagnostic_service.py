@@ -76,7 +76,7 @@ def test_service_dns_failure_does_not_abort_local_checks() -> None:
     assert dns is not None and dns.status is CheckStatus.FAIL
     assert route is not None and route.status is CheckStatus.NOT_TESTED
     assert tcp is not None and tcp.status is CheckStatus.NOT_TESTED
-    assert HELPER_VERSION == "0.7.0"
+    assert HELPER_VERSION == "0.8.0"
 
 
 def test_service_internal_failure_is_isolated() -> None:

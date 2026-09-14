@@ -1,7 +1,7 @@
 # Known limitations
 
-v0.7.0 adds desktop tray, optional autostart, and optional auto-reconnect on
-top of the hardened connection lifecycle and polkit helper.
+v1.1.0 adds FortiGate IPsec remote access on top of the SSL VPN desktop
+client, tray, optional autostart, and optional auto-reconnect.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing
@@ -28,7 +28,18 @@ top of the hardened connection lifecycle and polkit helper.
 - Disconnect/Cancel is safe during STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED. The browser is
   not force-closed; the SAML listener goes away with the process.
-- Passwords, SAML cookies, and tokens are not stored.
+- IPsec is a generic profile type. v1.1.0 starts IKEv1 Aggressive Mode with
+  PSK, XAuth, Mode Config, NAT-T, and FortiGate/Cisco Unity split include.
+  IKEv2, Main Mode, certificate authentication, EAP, IPsec SAML/SSO, and
+  manual-address IPsec are not connected.
+- IPsec uses distribution strongSwan (`charon`/`swanctl`). It is not bundled.
+  Ubuntu 24.04 packages it. Debian 13, Fedora, Windows, and macOS are not
+  claimed.
+- Pre-shared keys are not stored in `profiles.json`. When the user opts in,
+  the IPsec PSK and/or XAuth password may be saved in the desktop Secret
+  Service / GNOME Keyring, keyed by profile id, in separate Secret Service
+  names. If Secret Service is unavailable, each secret is entered at connect
+  time. There is no plaintext fallback. `username_hint` is not a secret.
 - The GUI does not modify firewall rules, routes, or DNS itself.
 - Packages are never installed automatically by the GUI. Ubuntu 24.04
   installation uses the `fortigate-vpn-linux-gui` `.deb`.

@@ -11,6 +11,8 @@ from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import (
     AUTH_PASSWORD_LABEL,
     AUTH_SAML_LABEL,
+    VPN_TYPE_IPSEC_LABEL,
+    VPN_TYPE_SSL_LABEL,
     ConnectionProfile,
     ProfileError,
     ProfileNotFoundError,
@@ -28,6 +30,8 @@ from fortigate_vpn_gui.profiles.storage import (
 __all__ = [
     "AUTH_PASSWORD_LABEL",
     "AUTH_SAML_LABEL",
+    "VPN_TYPE_IPSEC_LABEL",
+    "VPN_TYPE_SSL_LABEL",
     "ConnectionProfile",
     "ProfileError",
     "ProfileManager",

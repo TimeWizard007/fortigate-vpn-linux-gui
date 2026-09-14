@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-14
+
+### Added
+
+- Generic FortiGate IPsec remote-access profile type (not site-specific)
+- Live-tested IPsec: IKEv1 Aggressive Mode, PSK, XAuth username/password, Mode Config, NAT-T, Phase 1/2, Cisco Unity / FortiGate split include
+- Distro strongSwan backend (charon/swanctl allowlisted paths; not bundled)
+- Private charon instance with swanctl `--load-all` / `--initiate` (no secrets on argv)
+- Connect-time PSK and XAuth prompt; either secret may be saved in Secret Service when the user opts in
+- `scripts/install-dev-helper.sh` installs checkout helper protocol 0.8.0 onto the polkit path
+- IPsec Diagnostics checks that never include PSK or passwords
+- NetworkManager-safe IPsec DNS overlay and restore (pre-VPN snapshot, temporary `~.`, no `resolvectl revert` on NM-managed links)
+
+### Changed
+
+- Application version is 1.1.0; helper protocol is 0.8.0; Debian package is 1.1.0-1
+- Missing `vpn_type` in existing profiles is treated as SSL VPN (schema version remains 1)
+- Ubuntu package Depends on distro strongSwan (`strongswan`, `strongswan-swanctl`, `libcharon-extra-plugins`, `libcharon-extauth-plugins`); they are not bundled
+- Package-owned venv includes `keyring` and the Secret Service Python stack so a clean `.deb` does not need `pip`
+- Tray Quit disposes the tray and calls `QApplication.quit()` so `app.exec()` returns after helper cleanup
+
+### Fixed
+
+- Ubuntu 5.9.13 `swanctl` has no `--unix`; load uses `--load-all --file` and the default VICI socket `/run/charon.vici`
+- IPsec CHILD_SA `remote_ts` is `0.0.0.0/0` with `charon.cisco_unity = yes` so FortiGate Unity split-include can narrow; the public gateway is not used as a traffic selector
+- IPsec PSK/XAuth Secret Service detection accepts GNOME Keyring / python-keyring SecretService (including a chainer wrapper) and no longer treats a missing venv `keyring` package or a locked collection as a generic “unavailable” backend
+
+### Security
+
+- GUI still never runs as root; helper is not setuid
+- IPsec secrets are written to a 0600 helper runtime file and wiped on disconnect
+- PSK/password are not passed on command-line arguments
+- IPsec PSK is never stored in profiles.json; optional save uses Secret Service only
+- XAuth password may be stored in Secret Service only; never in profiles.json
+
 ## [1.0.0] - 2026-09-11
 
 ### Added
@@ -260,7 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...v0.8.0

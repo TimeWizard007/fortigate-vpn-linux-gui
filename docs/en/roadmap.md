@@ -53,7 +53,22 @@ Dates are not committed. Order may change as design work proceeds.
 - Expanded diagnostics for helper, DNS, routing, and VPN interface
 - Diagnostic report export (sanitized, copyable)
 
-## v1.0.0 — packaging and stable release (current)
+## v1.1.0 — IPsec remote access
+
+- Generic FortiGate IPsec remote-access profiles
+- Distro strongSwan backend (not bundled)
+- Live-tested: IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T + Unity split include
+- Optional Secret Service storage for PSK and XAuth password
+- Helper protocol 0.8.0; Debian package 1.1.0-1
+- Supported platform remains Ubuntu 24.04 LTS amd64 only
+
+## Later (not claimed in v1.1.0)
+
+- IKEv1 Main Mode, IKEv2, certificate authentication, EAP, IPsec SAML/SSO
+- Manual-address IPsec
+- Debian 13, Fedora, Windows, macOS
+
+## v1.0.0 — packaging and stable release
 
 - Debian/Ubuntu `.deb` for Ubuntu 24.04 LTS amd64
 - Desktop launcher, icon, packaged helper and polkit policy

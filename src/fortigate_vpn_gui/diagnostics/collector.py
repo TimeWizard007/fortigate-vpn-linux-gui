@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from fortigate_vpn_gui.helper.handshake import is_valid_helper_version
+from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
 from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
 from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.vpn.backend import VpnBackend
@@ -37,7 +38,7 @@ def build_diagnostics_snapshot(
         fingerprint = snapshot.certificate_fingerprint
     else:
         profile = f"{selected_profile.name} ({selected_profile.gateway}:{selected_profile.port})"
-        auth_mode = "SAML/SSO" if selected_profile.use_sso else "non-SSO"
+        auth_mode = snapshot.auth_mode or selected_profile.auth_label()
         pinned = bool(selected_profile.trusted_cert_sha256)
         fingerprint = selected_profile.trusted_cert_sha256
     path = snapshot.selected_executable or detection.path
@@ -62,6 +63,9 @@ def build_diagnostics_snapshot(
     data = {
         "helper_installed": "Yes" if probe.installed else "No",
         "helper_version": helper_version,
+        "helper_path": probe.helper_path or "—",
+        "expected_helper_protocol": HELPER_VERSION,
+        "detected_helper_protocol": helper_version,
         "authorization_mechanism": probe.authorization_mechanism or "polkit",
         "helper_status": probe.status,
         "helper_startup_detail": probe.startup_detail or "—",

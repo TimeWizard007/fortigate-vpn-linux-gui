@@ -59,12 +59,16 @@ def test_report_contains_summary_and_statuses() -> None:
         architecture="x86_64",
         profile=profile,
         snapshot=VpnHarness().backend.snapshot(),
-        helper_protocol="0.7.0",
+        helper_protocol="0.8.0",
+        detected_helper_protocol="0.7.0",
+        helper_path="/usr/libexec/fortigate-vpn-linux-gui/vpn-helper",
         session_type="Wayland",
     )
     assert text.startswith("FortiGate VPN Linux GUI Diagnostic Report")
     assert "Application: 0.9.0" in text
-    assert "Helper protocol: 0.7.0" in text
+    assert "Helper protocol expected: 0.8.0" in text
+    assert "Helper protocol detected: 0.7.0" in text
+    assert "Helper path: /usr/libexec/fortigate-vpn-linux-gui/vpn-helper" in text
     assert "Name: Office" in text
     assert "Gateway: vpn.example.com" in text
     assert "Port: 17414" in text

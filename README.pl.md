@@ -1,6 +1,6 @@
 # FortiGate VPN Linux GUI
 
-Natywny klient pulpitu Linux dla FortiGate SSL VPN. SAML/SSO używa
+Natywny klient pulpitu Linux dla FortiGate SSL VPN i IPsec. SAML/SSO używa
 systemowej przeglądarki (na przykład Microsoft Entra ID przez FortiGate).
 GUI nigdy nie działa jako root.
 
@@ -13,30 +13,36 @@ odpowiednich właścicieli.
 Główny cel wydania: **Ubuntu 24.04 LTS, amd64**. Inne dystrybucje z rodziny
 Debian nie były testowane.
 
-Aktualna wersja to **1.0.0**. Protokół pomocnika pozostaje **0.7.0**.
+Aktualna wersja to **1.1.0**. Protokół pomocnika to **0.8.0**.
 
 ## Funkcje
 
 - Trwałe profile połączeń (tworzenie, edycja, duplikowanie, usuwanie, domyślny)
 - Łączenie ze strony Profiles lub Connection
 - SAML/SSO przez `openfortivpn --saml-login` i systemową przeglądarkę
-- Profile z hasłem, gdy SSO nie jest używane
-- Jawne przypinanie certyfikatu FortiGate (nigdy automatycznie)
+- Profile SSL z hasłem, gdy SSO nie jest używane
+- IPsec: IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T, FortiGate/Cisco
+  Unity split include (dystrybucyjny strongSwan, nie dołączany do paczki)
+- Jawne przypinanie certyfikatu FortiGate dla SSL (nigdy automatycznie)
 - Pomocnik uprzywilejowany przez polkit (`pkexec` uruchamia tylko pomocnika)
+- Opcjonalny zapis PSK IPsec i hasła XAuth w Secret Service (nigdy w
+  `profiles.json`; bez zapisu jawnego)
 - Zasobnik systemowy, opcjonalne zamykanie do zasobnika, opcjonalny autostart
 - Opcjonalne ponawianie po nieoczekiwanej utracie tunelu (domyślnie wyłączone)
-- Diagnostyka: DNS, routing, TCP, tunel, pomocnik, polkit
+- Diagnostyka: DNS, routing, TCP, tunel, pomocnik, IPsec, polkit
 - Kopiowalny, ocenzurowany raport diagnostyczny
 
 ## Instalacja (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.0.0-2_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.1.0-1_amd64.deb
 ```
 
-`apt` dociąga biblioteki runtime, `pkexec`, `ppp` i `iproute2`. Środowisko
-wirtualne Pythona nie jest potrzebne. Paczka zawiera prywatny `openfortivpn`
-**1.24.1** z obsługą SAML i nie zastępuje `/usr/bin/openfortivpn`.
+`apt` dociąga biblioteki runtime, `pkexec`, `ppp`, `iproute2` oraz pakiety
+strongSwan używane do IPsec. Środowisko wirtualne Pythona nie jest potrzebne.
+Paczka zawiera prywatny `openfortivpn` **1.24.1** z obsługą SAML i nie
+zastępuje `/usr/bin/openfortivpn`. Zależności Pythona, w tym `keyring`, są w
+prywatnym venv paczki. Po instalacji `.deb` nie uruchamiaj `pip install`.
 
 Uruchom z menu GNOME jako **FortiGate VPN Linux GUI** albo:
 
@@ -100,16 +106,16 @@ Plik nie przechowuje haseł, tokenów SAML, ciasteczek ani innych sekretów.
 GUI                          widżety PySide6 (bez uprawnień root)
   ↓ ustrukturyzowane żądanie
 Pomocnik uprzywilejowany     root przez polkit (pkexec)
-  ↓ kontrolowane argv
-openfortivpn                 PPP / trasy / DNS
-  ↓ zdarzenie URL SAML
-Przeglądarka systemowa       sesja użytkownika pulpitu
+  ├── openfortivpn           SSL VPN (SAML albo użytkownik/hasło)
+  └── strongSwan charon      IPsec (pakiety dystrybucji; nie w paczce)
 ```
 
 `pkexec` uruchamia tylko `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`.
 Nie ma reguł sudoers, setuid pomocnika ani polityki polkit bez hasła.
-Hasła i ciasteczka SAML nie są zapisywane i nie trafiają do linii poleceń.
-Kopiowane raporty diagnostyczne są ocenzurowane.
+Hasła SSL, ciasteczka SAML, PSK IPsec i hasła XAuth nie są zapisywane w
+`profiles.json` i nie trafiają do linii poleceń. Opcjonalne sekrety IPsec
+używają Secret Service tylko po zgodzie użytkownika. Kopiowane raporty
+diagnostyczne są ocenzurowane.
 
 ## Rozwiązywanie problemów
 

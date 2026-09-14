@@ -16,19 +16,21 @@ instaluje pakietów sama.
 
 ## Pomocnik uprzywilejowany (rozwój)
 
+GUI z tego checkoutu oczekuje protokołu pomocnika **0.8.0**. Wcześniejsza
+paczka **1.0.0-2** ma protokół **0.7.0**. Zainstaluj pomocnik ze źródła:
+
 ```bash
-sudo install -D -m 0755 packaging/libexec/vpn-helper \
-  /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
-sudo install -D -m 0644 packaging/polkit/com.fortigate-vpn-linux-gui.policy \
-  /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+sudo ./scripts/install-dev-helper.sh
+./scripts/install-dev-helper.sh status
 ```
 
-Pomocnik musi importować `fortigate_vpn_gui`. Szczegóły:
-[`packaging/README.md`](../../packaging/README.md).
+Przywrócenie wydanego pomocnika:
 
-Opcjonalnie: `FORTIGATE_VPN_HELPER=/ścieżka/do/vpn-helper`. Brak pomocnika,
-brak polkit, odmowa autoryzacji i niezgodność wersji są zgłaszane. Nie ma
-cichego, niebezpiecznego fallbacku.
+```bash
+sudo ./scripts/install-dev-helper.sh restore
+```
+
+Skrypt nie ustawia setuid, nie osłabia polkit i nie uruchamia GUI jako root.
 
 ## Testy zaplecza VPN
 

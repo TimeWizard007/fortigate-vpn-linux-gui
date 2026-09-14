@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtCore import QElapsedTimer, QEventLoop, QSettings, Qt, QThread
 from PySide6.QtWidgets import QApplication
 
 from fortigate_vpn_gui.gui.main_window import MainWindow
@@ -54,11 +54,17 @@ def _window(profile_manager, tmp_path, harness, *, tray_available: bool = False)
     )
 
 
-def _wait_finalized(qapp, window: MainWindow, *, rounds: int = 40) -> None:
-    for _ in range(rounds):
-        qapp.processEvents()
+def _wait_finalized(qapp, window: MainWindow, *, timeout_ms: int = 1000) -> None:
+    clock = QElapsedTimer()
+    clock.start()
+    flags = (
+        QEventLoop.ProcessEventsFlag.AllEvents
+        | QEventLoop.ProcessEventsFlag.WaitForMoreEvents
+    )
+    while clock.elapsed() < timeout_ms:
         if window.close_finalized():
             return
+        qapp.processEvents(flags, 50)
     raise AssertionError("shutdown completion did not finalize the window")
 
 
@@ -296,11 +302,10 @@ def test_gui_tray_quit_uses_same_shutdown_path(
     _wait_finalized(qapp, window)
     assert harness.process.terminate_called
     assert window.tray.active is False
+    assert window.close_finalized() is True
 
 
-def test_close_to_tray_hides_window(
-    qapp, profile_manager: ProfileManager, tmp_path
-) -> None:
+def test_close_to_tray_hides_window(qapp, profile_manager: ProfileManager, tmp_path) -> None:
     harness = VpnHarness()
     profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
     settings = QSettings(str(tmp_path / "ui.ini"), QSettings.Format.IniFormat)
@@ -312,6 +317,7 @@ def test_close_to_tray_hides_window(
         tray_available=True,
     )
     window.set_close_to_tray(True)
+    window._interactive_tray_hint = False
     window.show()
     qapp.processEvents()
     window.connection_page._on_action_clicked()
@@ -321,6 +327,44 @@ def test_close_to_tray_hides_window(
     assert window.isHidden()
     assert harness.backend.current_state() is ConnectionState.CONNECTED
     assert any("still running in the system tray" in message for _, message in window.tray.messages)
+    window.show()
+    qapp.processEvents()
+    window.close()
+    qapp.processEvents()
+    assert window.isHidden()
+    still_running = [
+        message
+        for _, message in window.tray.messages
+        if "still running in the system tray" in message
+    ]
+    assert len(still_running) == 1
     window.request_quit()
     _wait_finalized(qapp, window)
     assert harness.process.terminate_called
+    assert window.tray.active is False
+
+
+def test_gui_tray_quit_after_hide_to_tray_finalizes(
+    qapp, profile_manager: ProfileManager, tmp_path
+) -> None:
+    harness = VpnHarness()
+    settings = QSettings(str(tmp_path / "ui.ini"), QSettings.Format.IniFormat)
+    window = MainWindow(
+        profile_manager=profile_manager,
+        vpn_backend=harness.backend,
+        detect=_no_openfortivpn,
+        settings=settings,
+        tray_available=True,
+    )
+    window.set_close_to_tray(True)
+    window._interactive_tray_hint = False
+    window.show()
+    qapp.processEvents()
+    window.close()
+    qapp.processEvents()
+    assert window.isHidden()
+    assert window.close_finalized() is False
+    window.tray._quit_action.trigger()
+    _wait_finalized(qapp, window)
+    assert window.close_finalized() is True
+    assert window.tray.active is False

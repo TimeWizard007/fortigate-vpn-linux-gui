@@ -222,6 +222,7 @@ class DiagnosticsPage(QWidget):
         if run is None:
             return ""
         profile = self.selected_profile()
+        probe = self._vpn.helper.probe()
         return format_diagnostic_report(
             run,
             app_version=APP_VERSION,
@@ -231,6 +232,8 @@ class DiagnosticsPage(QWidget):
             profile=profile,
             snapshot=self._vpn.snapshot(),
             helper_protocol=HELPER_VERSION,
+            detected_helper_protocol=probe.helper_version or "",
+            helper_path=probe.helper_path or "",
             session_type=desktop_session_type(),
         )
 

@@ -93,6 +93,10 @@ class VpnErrorCode(Enum):
     PPP_FAILED = "ppp_failed"
     ROUTE_FAILED = "route_failed"
     DNS_FAILED = "dns_failed"
+    IPSEC_BACKEND_MISSING = "ipsec_backend_missing"
+    IPSEC_DAEMON_START_FAILED = "ipsec_daemon_start_failed"
+    IPSEC_UNSUPPORTED = "ipsec_unsupported"
+    IPSEC_CREDENTIALS_REQUIRED = "ipsec_credentials_required"
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,7 @@ class VpnSnapshot:
     supports_saml: bool | None = None
     supports_cookie_stdin: bool | None = None
     use_sso: bool | None = None
+    vpn_backend: str | None = None
     failure_reason: str | None = None
     helper_installed: bool | None = None
     helper_version: str | None = None

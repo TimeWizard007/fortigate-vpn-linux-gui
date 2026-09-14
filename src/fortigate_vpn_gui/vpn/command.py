@@ -36,6 +36,8 @@ def build_connect_argv(
     trusted_cert_sha256: str | None = None,
 ) -> list[str]:
     """Return a list argv for *profile*. Never a shell command string."""
+    if profile.is_ipsec():
+        raise CommandConstructionError("openfortivpn argv is not used for IPsec profiles")
     return build_openfortivpn_argv(
         executable=executable,
         gateway=profile.gateway,

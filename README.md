@@ -1,8 +1,8 @@
 # FortiGate VPN Linux GUI
 
-A native Linux desktop client for FortiGate SSL VPN. SAML/SSO uses the system
-browser (for example Microsoft Entra ID via FortiGate). The GUI never runs as
-root.
+A native Linux desktop client for FortiGate SSL VPN and IPsec. SAML/SSO uses
+the system browser (for example Microsoft Entra ID via FortiGate). The GUI
+never runs as root.
 
 **This project is independent and is not affiliated with, endorsed by, or
 sponsored by Fortinet.** Fortinet, FortiGate, and FortiClient are trademarks of
@@ -13,30 +13,37 @@ their respective owner(s).
 Primary release target: **Ubuntu 24.04 LTS, amd64**. Other Debian-family
 distributions are untested.
 
-The current version is **1.0.0**. Helper protocol remains **0.7.0**.
+The current version is **1.1.0**. Helper protocol is **0.8.0**.
 
 ## Features
 
 - Persistent connection profiles (create, edit, duplicate, delete, default)
 - Connect from Profiles or the Connection page
 - SAML/SSO via `openfortivpn --saml-login` and the system browser
-- Username/password profiles when SSO is not used
-- Explicit FortiGate certificate pinning (never auto-trusted)
+- Username/password SSL profiles when SSO is not used
+- IPsec remote access: IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T,
+  FortiGate/Cisco Unity split include (distribution strongSwan, not bundled)
+- Explicit FortiGate certificate pinning for SSL (never auto-trusted)
 - Privileged helper authorized through polkit (`pkexec` starts only the helper)
+- Optional Secret Service storage for IPsec PSK and XAuth password (never in
+  `profiles.json`; no plaintext fallback)
 - System tray, optional close-to-tray, optional user autostart
 - Optional auto-reconnect after unexpected tunnel loss (off by default)
-- Diagnostics with DNS, routing, TCP, tunnel, helper, and polkit checks
+- Diagnostics with DNS, routing, TCP, tunnel, helper, IPsec, and polkit checks
 - Copyable sanitized diagnostic report
 
 ## Install (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.0.0-2_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.1.0-1_amd64.deb
 ```
 
-`apt` resolves runtime libraries, `pkexec`, `ppp`, and `iproute2`. No virtualenv
-is required. The package includes a private SAML-capable `openfortivpn`
-**1.24.1**; it does not replace `/usr/bin/openfortivpn`.
+`apt` resolves runtime libraries, `pkexec`, `ppp`, `iproute2`, and the
+distribution strongSwan packages used for IPsec. No virtualenv is required.
+The package includes a private SAML-capable `openfortivpn` **1.24.1**; it does
+not replace `/usr/bin/openfortivpn`. Python dependencies including `keyring`
+are inside the package-owned venv. Do not run `pip install` after installing
+the `.deb`.
 
 Launch from the GNOME application menu as **FortiGate VPN Linux GUI**, or:
 
@@ -101,16 +108,16 @@ The file does not store passwords, SAML tokens, cookies, or other secrets.
 GUI                          PySide6 widgets (unprivileged)
   ↓ structured request
 Privileged helper            root via polkit (pkexec)
-  ↓ controlled argv
-openfortivpn                 PPP / routes / DNS
-  ↓ SAML URL event
-System browser               unprivileged desktop session
+  ├── openfortivpn           SSL VPN (SAML or username/password)
+  └── strongSwan charon      IPsec (distro packages; not bundled)
 ```
 
 `pkexec` starts only `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. There
 are no sudoers rules, no setuid helper, and no passwordless polkit policy.
-Passwords and SAML cookies are not stored and are not passed on the command
-line. Copied diagnostic reports are sanitized.
+SSL passwords, SAML cookies, IPsec PSKs, and XAuth passwords are not stored
+in `profiles.json` and are not passed on the command line. Optional IPsec
+secrets use Secret Service only when the user opts in. Copied diagnostic
+reports are sanitized.
 
 ## Troubleshooting
 

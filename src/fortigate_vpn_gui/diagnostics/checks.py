@@ -14,6 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fortigate_vpn_gui import __version__ as APP_VERSION
+from fortigate_vpn_gui.diagnostics.ipsec_status import (
+    UNUSABLE_SELECTOR_WARNING,
+    is_gateway_only_remote_ts,
+    local_selectors,
+    parse_xfrm_policies,
+    remote_selectors,
+    virtual_ips_from_policies,
+)
 from fortigate_vpn_gui.diagnostics.model import (
     GROUP_NETWORK,
     GROUP_PROFILE,
@@ -49,13 +57,14 @@ from fortigate_vpn_gui.helper.protocol import (
     POLKIT_ACTION_ID,
 )
 from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
-from fortigate_vpn_gui.profiles.model import ConnectionProfile, auth_mode_label
+from fortigate_vpn_gui.profiles.model import ConnectionProfile
 from fortigate_vpn_gui.system.polkit import POLKIT_POLICY_INSTALL_PATH
 from fortigate_vpn_gui.vpn.capabilities import (
     OpenfortivpnCapabilities,
     VersionRunner,
     default_is_executable,
 )
+from fortigate_vpn_gui.vpn.ipsec.detect import discover_ipsec_backend
 from fortigate_vpn_gui.vpn.models import ConnectionState, VpnSnapshot, state_label
 
 Which = Callable[[str], str | None]
@@ -166,7 +175,7 @@ def check_openfortivpn(
             group=GROUP_VPN,
         )
 
-    require_saml = bool(profile is not None and profile.use_sso)
+    require_saml = bool(profile is not None and profile.is_ssl() and profile.use_sso)
     runner: VersionRunner | None = None
     if probe_version and run_command is not None:
         first_path = discovered[0][0]
@@ -287,13 +296,18 @@ def check_helper(
     """Inspect the installed helper without pkexec or starting a VPN."""
     exists = path_exists or os.path.exists
     executable = is_executable or default_is_executable
+    path_detail = (
+        f"Expected protocol: {expected_version}; "
+        f"detected protocol: unknown; "
+        f"effective path: {helper_path}"
+    )
     if not exists(helper_path):
         return _check(
             check_id="vpn.helper",
             label="VPN helper",
             status=CheckStatus.FAIL,
             summary="VPN helper is not installed.",
-            detail=helper_path,
+            detail=path_detail,
             hint="Install the FortiGate VPN Linux GUI helper and retry.",
             group=GROUP_VPN,
         )
@@ -303,7 +317,7 @@ def check_helper(
             label="VPN helper",
             status=CheckStatus.FAIL,
             summary="VPN helper is installed but not executable.",
-            detail=helper_path,
+            detail=path_detail,
             hint="Reinstall the helper package so the binary is executable.",
             group=GROUP_VPN,
         )
@@ -313,7 +327,7 @@ def check_helper(
             label="VPN helper",
             status=CheckStatus.PASS,
             summary="Helper installed.",
-            detail=helper_path,
+            detail=path_detail,
             group=GROUP_VPN,
         )
     result = run_command([helper_path, "--version"], timeout=VERSION_TIMEOUT_SECONDS)
@@ -323,7 +337,7 @@ def check_helper(
             label="VPN helper",
             status=CheckStatus.WARNING,
             summary="Helper version check timed out.",
-            detail=helper_path,
+            detail=path_detail,
             group=GROUP_VPN,
         )
     hello = parse_helper_hello_output(
@@ -332,13 +346,19 @@ def check_helper(
         returncode=result.returncode or 0,
     )
     version = hello.helper_version
+    detected = version if is_valid_helper_version(version) else "unknown"
+    detail = (
+        f"Expected protocol: {expected_version}; "
+        f"detected protocol: {detected}; "
+        f"effective path: {helper_path}"
+    )
     if is_valid_helper_version(version) and version == expected_version:
         return _check(
             check_id="vpn.helper",
             label="VPN helper",
             status=CheckStatus.PASS,
             summary="Helper installed and compatible.",
-            detail=f"{helper_path}; protocol {version}",
+            detail=detail,
             group=GROUP_VPN,
         )
     if is_valid_helper_version(version):
@@ -347,8 +367,11 @@ def check_helper(
             label="VPN helper",
             status=CheckStatus.FAIL,
             summary=f"Helper protocol {version} does not match GUI {expected_version}.",
-            detail=helper_path,
-            hint="Reinstall a helper that matches this application.",
+            detail=detail,
+            hint=(
+                "Install a helper that matches this application. From a Git "
+                "checkout run: sudo ./scripts/install-dev-helper.sh"
+            ),
             group=GROUP_VPN,
         )
     return _check(
@@ -356,7 +379,7 @@ def check_helper(
         label="VPN helper",
         status=CheckStatus.WARNING,
         summary="Helper is installed but its protocol version could not be read.",
-        detail=helper_path,
+        detail=detail,
         hint="The helper file is present. Interactive authorization is not tested here.",
         group=GROUP_VPN,
     )
@@ -425,6 +448,67 @@ def check_polkit_authorization() -> DiagnosticCheck:
     )
 
 
+def check_ipsec_backend(
+    profile: ConnectionProfile | None,
+    *,
+    is_executable: IsExecutable | None = None,
+) -> DiagnosticCheck:
+    """Report distro strongSwan availability without exposing secrets."""
+    capabilities = discover_ipsec_backend(
+        is_executable=is_executable or default_is_executable,
+    )
+    if profile is not None and profile.is_ipsec():
+        settings = profile.ipsec
+        combo = settings.support_summary() if settings is not None else ""
+        ike = ""
+        if settings is not None:
+            ike = (
+                f"IKE {settings.ike_version} {settings.ike_mode}; "
+                f"auth={settings.auth_method}; "
+                f"address={settings.address_assignment}"
+            )
+        if not capabilities.available:
+            return _check(
+                check_id="vpn.ipsec",
+                label="IPsec backend",
+                status=CheckStatus.FAIL,
+                summary="strongSwan charon/swanctl was not found.",
+                detail=f"{ike}. {combo}".strip(". "),
+                hint=(
+                    "Install strongswan, strongswan-swanctl, "
+                    "libcharon-extra-plugins, and libcharon-extauth-plugins."
+                ),
+                group=GROUP_VPN,
+            )
+        return _check(
+            check_id="vpn.ipsec",
+            label="IPsec backend",
+            status=CheckStatus.PASS,
+            summary="strongSwan binaries found.",
+            detail=(
+                f"charon={capabilities.charon_path}; swanctl={capabilities.swanctl_path}. "
+                f"{ike}. {combo}"
+            ),
+            group=GROUP_VPN,
+        )
+    if capabilities.available:
+        return _check(
+            check_id="vpn.ipsec",
+            label="IPsec backend",
+            status=CheckStatus.INFO,
+            summary="strongSwan is available for IPsec profiles.",
+            detail=f"charon={capabilities.charon_path}",
+            group=GROUP_VPN,
+        )
+    return _check(
+        check_id="vpn.ipsec",
+        label="IPsec backend",
+        status=CheckStatus.INFO,
+        summary="strongSwan is not installed. SSL VPN does not require it.",
+        group=GROUP_VPN,
+    )
+
+
 def check_profile_context(profile: ConnectionProfile | None) -> DiagnosticCheck:
     """Non-secret profile/gateway context."""
     if profile is None:
@@ -436,13 +520,14 @@ def check_profile_context(profile: ConnectionProfile | None) -> DiagnosticCheck:
             hint="Create or select a profile, then run diagnostics.",
             group=GROUP_PROFILE,
         )
-    mode = auth_mode_label(profile.use_sso)
+    mode = profile.auth_label()
+    vpn_type = profile.vpn_type_label()
     return _check(
         check_id="profile.context",
         label="Selected profile",
         status=CheckStatus.INFO,
-        summary=f"{profile.name} → {profile.gateway}:{profile.port} ({mode})",
-        detail=f"Authentication: {mode}",
+        summary=f"{profile.name} → {profile.gateway}:{profile.port} ({vpn_type}, {mode})",
+        detail=f"VPN type: {vpn_type}. Authentication: {mode}",
         group=GROUP_PROFILE,
     )
 
@@ -458,6 +543,14 @@ def check_certificate_pin(profile: ConnectionProfile | None) -> DiagnosticCheck:
             group=GROUP_PROFILE,
         )
     fingerprint = profile.trusted_cert_sha256
+    if profile.is_ipsec():
+        return _check(
+            check_id="profile.certificate",
+            label="Gateway certificate pin",
+            status=CheckStatus.INFO,
+            summary="SSL certificate pin is not used for IPsec profiles.",
+            group=GROUP_PROFILE,
+        )
     if not fingerprint:
         return _check(
             check_id="profile.certificate",
@@ -849,6 +942,14 @@ def check_tcp(
             summary="No profile selected.",
             group=GROUP_NETWORK,
         )
+    if profile.is_ipsec():
+        return _check(
+            check_id="network.tcp",
+            label="Gateway TCP",
+            status=CheckStatus.INFO,
+            summary="IKE uses UDP 500/4500; TCP probe skipped for IPsec.",
+            group=GROUP_NETWORK,
+        )
     if dns_failed:
         return _check(
             check_id="network.tcp",
@@ -1013,6 +1114,17 @@ def check_vpn_interface(
         interfaces = ()
     vpn_ifaces = [item for item in interfaces if is_likely_vpn_interface(item.name)]
     chosen = vpn_ifaces[0] if vpn_ifaces else None
+    if chosen is None and snapshot.vpn_backend == "ipsec":
+        return (
+            _check(
+                check_id="tunnel.interface",
+                label="VPN interface",
+                status=CheckStatus.INFO,
+                summary="IPsec uses XFRM policies, not a PPP/tun interface.",
+                group=GROUP_TUNNEL,
+            ),
+            None,
+        )
     if chosen is None:
         return (
             _check(
@@ -1116,3 +1228,149 @@ def check_vpn_routes(
         detail=f"Routes on {interface.name}. Full-tunnel and split-tunnel layouts both occur.",
         group=GROUP_TUNNEL,
     )
+
+
+def check_ipsec_tunnel(
+    snapshot: VpnSnapshot,
+    profile: ConnectionProfile | None,
+    gateway_ips: Sequence[str],
+    *,
+    include_network: bool,
+    which: Which | None = None,
+    run_command: RunArgv = run_argv,
+) -> DiagnosticCheck:
+    """Describe IPsec SAs, VIP, selectors, XFRM, and received DNS. No keys."""
+    if profile is None or not profile.is_ipsec():
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.INFO,
+            summary="Not an IPsec profile.",
+            group=GROUP_TUNNEL,
+        )
+    if snapshot.state is not ConnectionState.CONNECTED:
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.INFO,
+            summary="Not connected.",
+            group=GROUP_TUNNEL,
+        )
+    import shutil
+
+    locator = which or shutil.which
+    ip_bin = locator("ip")
+    if not ip_bin:
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.INFO,
+            summary="The ip command was not found; XFRM policies were not listed.",
+            group=GROUP_TUNNEL,
+        )
+    result = run_command([ip_bin, "xfrm", "policy"], timeout=ROUTE_TIMEOUT_SECONDS)
+    if result.timed_out or result.missing:
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.INFO,
+            summary="XFRM policies could not be listed.",
+            group=GROUP_TUNNEL,
+        )
+    text = result.stdout or ""
+    policies = parse_xfrm_policies(text)
+    vips = virtual_ips_from_policies(policies)
+    local_ts = local_selectors(policies)
+    remote_ts = remote_selectors(policies)
+    dns_servers = _vpn_dns_from_resolvectl(
+        vips,
+        include_network=include_network,
+        which=locator,
+        run_command=run_command,
+    )
+    details = [
+        f"IKE_SA: {'ESTABLISHED' if policies else 'unknown'}",
+        f"CHILD_SA: {'ESP policies installed' if policies else 'no ESP policies'}",
+        f"virtual IP: {', '.join(vips) if vips else 'unknown'}",
+        f"local TS: {', '.join(local_ts) if local_ts else 'unknown'}",
+        f"remote TS: {', '.join(remote_ts) if remote_ts else 'unknown'}",
+        f"received DNS: {', '.join(dns_servers) if dns_servers else 'none observed'}",
+    ]
+    policy_lines = [
+        line
+        for line in text.splitlines()
+        if line.strip()
+        and "hmac" not in line.lower()
+        and "auth" not in line.lower()
+        and "enc " not in line.lower()
+    ]
+    if policy_lines:
+        details.append("xfrm policy: " + " | ".join(policy_lines[:8]))
+    detail = sanitize_diagnostic_text("; ".join(details))
+    if is_gateway_only_remote_ts(policies, gateway_ips):
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.WARNING,
+            summary=UNUSABLE_SELECTOR_WARNING,
+            detail=detail,
+            hint="The CHILD_SA protects only the FortiGate public IP.",
+            group=GROUP_TUNNEL,
+        )
+    if not policies:
+        return _check(
+            check_id="tunnel.ipsec",
+            label="IPsec tunnel",
+            status=CheckStatus.WARNING,
+            summary="Connected but no IPsec XFRM policies were found.",
+            detail=detail,
+            group=GROUP_TUNNEL,
+        )
+    return _check(
+        check_id="tunnel.ipsec",
+        label="IPsec tunnel",
+        status=CheckStatus.PASS,
+        summary=(
+            f"VIP {', '.join(vips) or 'unknown'}; "
+            f"remote TS {', '.join(remote_ts) or 'unknown'}"
+        ),
+        detail=detail,
+        group=GROUP_TUNNEL,
+    )
+
+
+def _vpn_dns_from_resolvectl(
+    vips: Sequence[str],
+    *,
+    include_network: bool,
+    which: Which,
+    run_command: RunArgv,
+) -> tuple[str, ...]:
+    if not include_network or not vips:
+        return ()
+    resolvectl = which("resolvectl")
+    ip_bin = which("ip")
+    if not resolvectl or not ip_bin:
+        return ()
+    iface_result = run_command(
+        [ip_bin, "-o", "addr", "show", "to", f"{vips[0]}/32"],
+        timeout=ROUTE_TIMEOUT_SECONDS,
+    )
+    parts = (iface_result.stdout or "").split()
+    if len(parts) < 2:
+        return ()
+    interface = parts[1]
+    dns_result = run_command(
+        [resolvectl, "dns", interface],
+        timeout=ROUTE_TIMEOUT_SECONDS,
+    )
+    text = f"{dns_result.stdout or ''} {dns_result.stderr or ''}"
+    found: list[str] = []
+    for token in text.replace(":", " ").split():
+        try:
+            parsed = ipaddress.ip_address(token)
+        except ValueError:
+            continue
+        if parsed.version == 4:
+            found.append(str(parsed))
+    return tuple(found)

@@ -11,7 +11,7 @@ import os
 import signal
 import subprocess
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Protocol
 
 OutputCallback = Callable[[str], None]
@@ -37,19 +37,30 @@ class VpnProcess(Protocol):
     def wait(self, timeout: float | None = None) -> int: ...
 
 
-ProcessFactory = Callable[[list[str], OutputCallback, ExitCallback], VpnProcess]
+class ProcessFactory(Protocol):
+    """Create a VpnProcess. *env* is used for IPsec (STRONGSWAN_CONF); SSL omits it."""
+
+    def __call__(
+        self,
+        argv: list[str],
+        on_output: OutputCallback,
+        on_exit: ExitCallback,
+        env: Mapping[str, str] | None = None,
+    ) -> VpnProcess: ...
 
 
 class SubprocessVpnProcess:
-    """Real openfortivpn child process."""
+    """Real helper-owned child process (openfortivpn or private charon)."""
 
     def __init__(
         self,
         argv: list[str],
         on_output: OutputCallback,
         on_exit: ExitCallback,
+        env: Mapping[str, str] | None = None,
     ) -> None:
         self.argv = list(argv)
+        self.env = dict(env) if env is not None else None
         self._on_output = on_output
         self._on_exit = on_exit
         self._proc: subprocess.Popen[str] | None = None
@@ -71,6 +82,7 @@ class SubprocessVpnProcess:
             bufsize=1,
             shell=False,
             start_new_session=True,
+            env=self.env,
         )
         self._reader = threading.Thread(
             target=self._read_output,
@@ -121,5 +133,6 @@ def default_process_factory(
     argv: list[str],
     on_output: OutputCallback,
     on_exit: ExitCallback,
+    env: Mapping[str, str] | None = None,
 ) -> VpnProcess:
-    return SubprocessVpnProcess(argv, on_output, on_exit)
+    return SubprocessVpnProcess(argv, on_output, on_exit, env=env)

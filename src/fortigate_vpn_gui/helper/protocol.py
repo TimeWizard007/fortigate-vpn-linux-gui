@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-HELPER_VERSION = "0.7.0"  # helper protocol; independent of GUI patch releases
+HELPER_VERSION = "0.8.0"  # helper protocol; independent of GUI patch releases
 PROTOCOL_VERSION = 1
 POLKIT_ACTION_ID = "com.fortigate-vpn-linux-gui.manage-vpn"
 INSTALLED_HELPER_PATH = "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper"
@@ -22,7 +22,11 @@ APPROVED_OPENFORTIVPN_PATHS: tuple[str, ...] = (
     "/usr/bin/openfortivpn",
 )
 
-ALLOWED_OPERATIONS = frozenset({"hello", "connect", "disconnect", "status"})
+BACKEND_OPENFORTIVPN = "openfortivpn"
+BACKEND_IPSEC = "ipsec"
+ALLOWED_BACKENDS = frozenset({BACKEND_OPENFORTIVPN, BACKEND_IPSEC})
+
+ALLOWED_OPERATIONS = frozenset({"hello", "connect", "disconnect", "status", "credentials"})
 ALLOWED_AUTH_MODES = frozenset({"saml", "standard"})
 ALLOWED_REQUEST_KEYS = frozenset(
     {
@@ -32,8 +36,11 @@ ALLOWED_REQUEST_KEYS = frozenset(
         "port",
         "auth_mode",
         "trusted_certificate_fingerprint",
+        "backend",
+        "ipsec",
     }
 )
+ALLOWED_CREDENTIAL_KEYS = frozenset({"id", "operation", "psk", "username", "password"})
 FORBIDDEN_REQUEST_KEYS = frozenset(
     {
         "command",
@@ -44,7 +51,6 @@ FORBIDDEN_REQUEST_KEYS = frozenset(
         "shell",
         "options",
         "extra_args",
-        "password",
         "cookie",
         "token",
         "saml",
@@ -92,6 +98,8 @@ class ConnectRequest:
     auth_mode: str
     trusted_certificate_fingerprint: str | None = None
     request_id: str | None = None
+    backend: str = BACKEND_OPENFORTIVPN
+    ipsec: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +132,7 @@ class HelperEvent:
     selected_executable: str | None = None
     openfortivpn_version: str | None = None
     supports_saml: bool | None = None
+    backend: str | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +186,8 @@ def encode_event(event: HelperEvent) -> dict[str, Any]:
         payload["openfortivpn_version"] = event.openfortivpn_version
     if event.supports_saml is not None:
         payload["supports_saml"] = event.supports_saml
+    if event.backend is not None:
+        payload["backend"] = event.backend
     return payload
 
 
@@ -215,6 +226,7 @@ def event_from_payload(payload: dict[str, Any]) -> HelperEvent:
         selected_executable=_optional_str(payload.get("selected_executable")),
         openfortivpn_version=_optional_str(payload.get("openfortivpn_version")),
         supports_saml=_optional_bool(payload.get("supports_saml")),
+        backend=_optional_str(payload.get("backend")),
     )
 
 
