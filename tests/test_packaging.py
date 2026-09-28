@@ -128,6 +128,10 @@ def test_debian_control_metadata() -> None:
     assert "import keyring" in script
     assert 'OPENFORTIVPN_VERSION="1.24.1"' in script
     assert "apparmor/usr.sbin.swanctl.local" in script
+    assert 'SYSTEM_PYTHON="/usr/bin/python3.12"' in script
+    assert '"${SYSTEM_PYTHON}" -m venv' in script
+    assert "python3.12 -m venv" not in script
+    assert "staging still contains the development checkout path" in script
 
 
 def test_apparmor_local_snippet_is_private_vici_only() -> None:

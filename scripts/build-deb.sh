@@ -80,9 +80,11 @@ build_package_openfortivpn() {
     || die "packaged openfortivpn is missing --saml-login"
 }
 
+SYSTEM_PYTHON="/usr/bin/python3.12"
+
 [[ "$(id -u)" -ne 0 ]] || die "do not run this build as root"
 [[ -f "${ROOT}/pyproject.toml" ]] || die "run from the repository (missing pyproject.toml)"
-command -v python3.12 >/dev/null || die "python3.12 is required to build the Ubuntu 24.04 package"
+[[ -x "${SYSTEM_PYTHON}" ]] || die "${SYSTEM_PYTHON} is required to build the Ubuntu 24.04 package"
 command -v dpkg-deb >/dev/null || die "dpkg-deb is required (install dpkg-dev)"
 command -v gcc >/dev/null || die "gcc is required to build openfortivpn"
 command -v make >/dev/null || die "make is required to build openfortivpn"
@@ -110,7 +112,9 @@ mkdir -p "${DIST}" \
   "${STAGING}/usr/share/polkit-1/actions" \
   "${STAGING}/usr/share/doc/${PACKAGE_NAME}"
 
-python3.12 -m venv "${STAGING}${VENV_DIR}"
+# Distro interpreter only. PATH python3.12 is often this checkout's .venv, and
+# that writes the development path into pyvenv.cfg's command= line.
+env -u VIRTUAL_ENV "${SYSTEM_PYTHON}" -m venv "${STAGING}${VENV_DIR}"
 VENV_PY="${STAGING}${VENV_DIR}/bin/python"
 "${VENV_PY}" -m pip install --no-compile --no-deps "${ROOT}"
 "${VENV_PY}" -m pip install --no-compile -r "${ROOT}/packaging/requirements-bundle.txt"
