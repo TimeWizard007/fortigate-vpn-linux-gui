@@ -4,7 +4,7 @@
 These fields are non-secret connection parameters. The IPsec pre-shared
 key authenticates the IKE peer and is never stored here. The XAuth user
 password is a separate credential and is also never stored here. The
-XAuth username may be kept as the profile ``username_hint``. v1.1.0
+XAuth username may be kept as the profile ``username_hint``. This release
 implements and tests only IKEv1 Aggressive + PSK + XAuth + Mode Config;
 other combinations may be stored for later work but are not presented as
 supported.
@@ -50,7 +50,7 @@ DH_GROUP_TO_MODP = {
     20: "ecp384",
 }
 
-# Only this combination is implemented/tested in v1.1.0.
+# Only this combination is implemented/tested in this release.
 SUPPORTED_IPSEC_COMBOS = frozenset(
     {
         (IKE_V1, IKE_MODE_AGGRESSIVE, AUTH_PSK_XAUTH, ADDR_MODECONFIG),
@@ -128,7 +128,7 @@ class IpsecSettings:
             return "IKEv1 Aggressive Mode, PSK + XAuth, Mode Config"
         return (
             "This IPsec combination is stored but not implemented yet. "
-            "v1.1.0 supports IKEv1 Aggressive + PSK + XAuth + Mode Config."
+            "This release supports IKEv1 Aggressive + PSK + XAuth + Mode Config."
         )
 
     def phase1_proposal(self) -> str:

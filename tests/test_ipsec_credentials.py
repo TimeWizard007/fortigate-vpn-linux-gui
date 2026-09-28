@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QGroupBox, QLabel, QLineEdit
+from PySide6.QtWidgets import QCheckBox, QComboBox, QGroupBox, QLabel, QLineEdit, QPushButton
 
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
 from fortigate_vpn_gui.gui.ipsec_credentials_dialog import (
@@ -158,7 +158,8 @@ def test_editor_save_psk_enabled_when_secret_service_backend_is_available(
     save = dialog.findChild(QCheckBox, "profileSavePsk")
     status = dialog.findChild(QLabel, "profilePskStatus")
     assert save is not None and save.isEnabled()
-    assert status is not None and status.isHidden()
+    assert status is not None and not status.isHidden()
+    assert "not stored" in status.text().lower()
 
 
 def test_connection_page_looks_up_stored_psk(
@@ -379,3 +380,68 @@ def test_connect_password_save_enabled_when_secret_service_is_available(qapp) ->
     status = dialog.findChild(QLabel, "ipsecPasswordStatus")
     assert save is not None and save.isEnabled()
     assert status is None or status.isHidden()
+
+
+def test_editor_forget_psk_does_not_reveal_secret(
+    qapp, profile_manager: ProfileManager, psk_store
+) -> None:
+    profile = profile_manager.add(
+        name="IPsec office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        username_hint="mwi",
+        ipsec=default_ipsec_settings().to_json(),
+    )
+    psk_store.set(profile.id, _PSK)
+    psk_store.set_xauth_password(profile.id, _XAUTH_PASSWORD)
+    dialog = ProfileEditorDialog(profile_manager, profile)
+    psk_field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    assert psk_field is not None
+    assert psk_field.text() == ""
+    assert _PSK not in psk_field.placeholderText()
+    status = dialog.findChild(QLabel, "profilePskStatus")
+    assert status is not None and "stored securely" in status.text().lower()
+    forget = dialog.findChild(QPushButton, "profileForgetPsk")
+    assert forget is not None and forget.isEnabled()
+    forget.click()
+    assert psk_store.get(profile.id) is None
+    assert psk_field.text() == ""
+    assert "not stored" in dialog.findChild(QLabel, "profilePskStatus").text().lower()
+    forget_password = dialog.findChild(QPushButton, "profileForgetPassword")
+    assert forget_password is not None and forget_password.isEnabled()
+    forget_password.click()
+    assert psk_store.get_xauth_password(profile.id) is None
+    raw = profile_manager.storage_path.read_text(encoding="utf-8")
+    assert _PSK not in raw
+    assert _XAUTH_PASSWORD not in raw
+
+
+def test_connect_replace_psk_does_not_show_stored_secret(qapp) -> None:
+    dialog = IpsecCredentialsDialog(
+        "Office IPsec",
+        username_hint="mwi",
+        stored_psk=_PSK,
+        stored_password=_XAUTH_PASSWORD,
+    )
+    psk = dialog.findChild(QLineEdit, "ipsecPsk")
+    assert psk is not None and psk.isHidden()
+    assert psk.text() == ""
+    replace = dialog.findChild(QPushButton, "ipsecPskReplace")
+    assert replace is not None and not replace.isHidden()
+    replace.click()
+    assert not psk.isHidden()
+    assert psk.text() == ""
+    psk.setText("new-psk")
+    password = dialog.findChild(QLineEdit, "ipsecPassword")
+    replace_password = dialog.findChild(QPushButton, "ipsecPasswordReplace")
+    assert replace_password is not None
+    replace_password.click()
+    assert not password.isHidden()
+    assert password.text() == ""
+    password.setText("new-password")
+    credentials = dialog.credentials()
+    assert credentials is not None
+    assert credentials.psk == "new-psk"
+    assert credentials.password == "new-password"
+    assert _PSK not in credentials.psk

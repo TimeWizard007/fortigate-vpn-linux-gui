@@ -5,7 +5,7 @@ Debian/Ubuntu packaging for Ubuntu 24.04 LTS (amd64).
 The GUI is never installed setuid and never launched with pkexec. The
 privileged helper remains `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`
 and polkit action `com.fortigate-vpn-linux-gui.manage-vpn`. Helper protocol
-**0.8.0** is required by application version **1.1.0**.
+**0.8.0** is required by application version **1.2.0**.
 
 ## Build
 
@@ -15,7 +15,7 @@ From a clean checkout:
 ./scripts/build-deb.sh
 ```
 
-The script writes `dist/fortigate-vpn-linux-gui_1.1.0-1_amd64.deb` and prints
+The script writes `dist/fortigate-vpn-linux-gui_1.2.0-1_amd64.deb` and prints
 its path and SHA-256. It does not install the package, publish anything, or
 modify user configuration.
 
@@ -34,7 +34,7 @@ install and is not a user venv. A clean `.deb` install does not require
 ## Install
 
 ```bash
-sudo apt install ./dist/fortigate-vpn-linux-gui_1.1.0-1_amd64.deb
+sudo apt install ./dist/fortigate-vpn-linux-gui_1.2.0-1_amd64.deb
 ```
 
 Launch:
@@ -55,19 +55,25 @@ or use the GNOME application menu. Do not run the GUI as root.
 /usr/share/applications/fortigate-vpn-linux-gui.desktop
 /usr/share/icons/hicolor/scalable/apps/fortigate-vpn-linux-gui.svg
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
+/usr/share/fortigate-vpn-linux-gui/apparmor/usr.sbin.swanctl.local
 ```
 
 The helper is not setuid. Privilege escalation stays on the existing
 polkit/pkexec path. The helper shebang uses the package-owned interpreter so
 it can import `fortigate_vpn_gui` without a Git checkout.
 
-v1.1.0 **Depends** on distro strongSwan packages (`strongswan`,
+The Ubuntu package **Depends** on distro strongSwan packages (`strongswan`,
 `strongswan-swanctl`, `libcharon-extra-plugins`,
 `libcharon-extauth-plugins`). They are not bundled. `/etc/strongswan.conf`
-is not modified. Optional IPsec PSK and XAuth password storage uses the
+is not modified. Install, upgrade, and removal **do not** stop or disable
+`strongswan-starter`. Optional IPsec PSK and XAuth password storage uses the
 packaged Python `keyring` Secret Service interface. There is no plaintext
 fallback in `profiles.json`. GNOME Keyring is one compatible provider;
 any Secret Service implementation is accepted.
+
+`postinst` appends a minimal AppArmor local snippet so distro `swanctl` may
+read `/run/charon.fvl.conf` and connect to `/run/charon.fvl.vici`. It does
+not grant `/run/charon.vici`. `postrm` removes that snippet only on purge.
 
 ## User data
 
@@ -89,3 +95,4 @@ no maintainer scripts that walk user homes.
 - No world-writable helper directories
 - No systemd VPN service
 - No passwordless polkit rule
+- No automatic stop or disable of `strongswan-starter`

@@ -72,6 +72,9 @@ class ConnectionPage(QWidget):
         self._profile_combo.setMinimumWidth(280)
         self._profile_combo.currentIndexChanged.connect(self._on_profile_changed)
 
+        self._vpn_type_label = QLabel("—")
+        self._vpn_type_label.setObjectName("vpnTypeValue")
+
         self._status_label = QLabel("Disconnected")
         self._status_label.setObjectName("connectionStatus")
 
@@ -89,6 +92,7 @@ class ConnectionPage(QWidget):
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(10)
         form.addRow("Connection profile:", self._profile_combo)
+        form.addRow("VPN type:", self._vpn_type_label)
         form.addRow("Status:", self._status_label)
         form.addRow("Gateway:", self._gateway_label)
         form.addRow("Port:", self._port_label)
@@ -285,9 +289,10 @@ class ConnectionPage(QWidget):
         previous_index: int | None = None
         default_index: int | None = None
         for index, profile in enumerate(profiles):
-            label = profile.name
+            type_label = "IPsec" if profile.is_ipsec() else "SSL"
+            label = f"{profile.name} · {type_label}"
             if profile.id == default_id:
-                label = f"{profile.name} (default)"
+                label = f"{profile.name} · {type_label} (default)"
                 default_index = index
             self._profile_combo.addItem(label, profile.id)
             if previous and profile.id == previous:
@@ -455,7 +460,9 @@ class ConnectionPage(QWidget):
             self._gateway_label.setText("Not configured")
             self._port_label.setText("—")
             self._sso_label.setText("—")
+            self._vpn_type_label.setText("—")
             return
+        self._vpn_type_label.setText(profile.vpn_type_label())
         self._gateway_label.setText(profile.gateway)
         self._port_label.setText(str(profile.port))
         self._sso_label.setText(profile.auth_label())
@@ -547,8 +554,19 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.PPP_FAILED: "PPP setup failed",
         VpnErrorCode.ROUTE_FAILED: "Route setup failed",
         VpnErrorCode.DNS_FAILED: "DNS setup failed",
+        VpnErrorCode.DNS_RESOLUTION_FAILED: "DNS resolution failed",
+        VpnErrorCode.GATEWAY_UNREACHABLE: "Gateway unreachable",
+        VpnErrorCode.IKE_NEGOTIATION_TIMEOUT: "IKE negotiation timed out",
+        VpnErrorCode.IPSEC_PSK_FAILURE: "IPsec pre-shared key failed",
+        VpnErrorCode.IPSEC_XAUTH_FAILURE: "XAuth authentication failed",
+        VpnErrorCode.IPSEC_PROPOSAL_MISMATCH: "IPsec proposal mismatch",
+        VpnErrorCode.IPSEC_CHILD_SA_FAILED: "CHILD_SA failed",
+        VpnErrorCode.IPSEC_VIP_FAILED: "Virtual IP assignment failed",
+        VpnErrorCode.IPSEC_SWANCTL_FAILED: "swanctl failed",
+        VpnErrorCode.IPSEC_NEGOTIATION_FAILED: "IPsec negotiation failed",
         VpnErrorCode.IPSEC_BACKEND_MISSING: "IPsec backend missing",
         VpnErrorCode.IPSEC_DAEMON_START_FAILED: "IPsec daemon failed to start",
+        VpnErrorCode.IKE_PORT_IN_USE: "IKE ports in use",
         VpnErrorCode.IPSEC_UNSUPPORTED: "IPsec combination not supported",
         VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED: "IPsec credentials required",
     }

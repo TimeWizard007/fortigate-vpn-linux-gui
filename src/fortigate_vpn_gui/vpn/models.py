@@ -97,6 +97,17 @@ class VpnErrorCode(Enum):
     IPSEC_DAEMON_START_FAILED = "ipsec_daemon_start_failed"
     IPSEC_UNSUPPORTED = "ipsec_unsupported"
     IPSEC_CREDENTIALS_REQUIRED = "ipsec_credentials_required"
+    GATEWAY_UNREACHABLE = "gateway_unreachable"
+    DNS_RESOLUTION_FAILED = "dns_resolution_failed"
+    IKE_NEGOTIATION_TIMEOUT = "ike_negotiation_timeout"
+    IPSEC_PSK_FAILURE = "ipsec_psk_failure"
+    IPSEC_XAUTH_FAILURE = "ipsec_xauth_failure"
+    IPSEC_PROPOSAL_MISMATCH = "ipsec_proposal_mismatch"
+    IPSEC_CHILD_SA_FAILED = "ipsec_child_sa_failed"
+    IPSEC_VIP_FAILED = "ipsec_vip_failed"
+    IPSEC_SWANCTL_FAILED = "ipsec_swanctl_failed"
+    IPSEC_NEGOTIATION_FAILED = "ipsec_negotiation_failed"
+    IKE_PORT_IN_USE = "ike_port_in_use"
 
 
 @dataclass(frozen=True)

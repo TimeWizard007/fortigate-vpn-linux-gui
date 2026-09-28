@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from fortigate_vpn_gui.helper.ike_ports import free_ike_port_report
 from fortigate_vpn_gui.helper.protocol import BACKEND_IPSEC, HelperEventKind, HelperProtocolError
 from fortigate_vpn_gui.helper.service import (
     HelperService,
@@ -159,6 +160,7 @@ def test_helper_ipsec_argv_has_no_secrets(tmp_path: Path) -> None:
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=swanctl_runner,
         vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
         listener=events.append,
     )
     (tmp_path / "run").mkdir()
@@ -190,6 +192,10 @@ def test_helper_ipsec_argv_has_no_secrets(tmp_path: Path) -> None:
     assert "cisco_unity = yes" in strongswan
     assert "unix://" in strongswan
     assert "charon.vici" in strongswan
+    client = (tmp_path / "run" / "vici-client.conf").read_text(encoding="utf-8")
+    assert "unix:///run/charon.vici" not in client
+    assert "unix:///var/run/charon.vici" not in client
+    assert "unix://" in client
     assert any("--load-all" in call for call in swanctl_calls)
     assert any("--initiate" in call for call in swanctl_calls)
     conf_path = str(tmp_path / "run" / "swanctl.conf")
@@ -235,6 +241,7 @@ def test_helper_emits_connected_from_charon_child_sa(tmp_path: Path) -> None:
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=lambda argv, timeout: SwanctlCommandResult(returncode=0),
         vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
         listener=events.append,
     )
     (tmp_path / "run").mkdir()
@@ -306,6 +313,7 @@ def test_early_charon_exit_is_daemon_start_failed_not_backend_missing(
         ipsec_discover=_available_ipsec,
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=lambda argv, timeout: SwanctlCommandResult(returncode=0),
+        ike_port_probe=free_ike_port_report,
         listener=events.append,
     )
     (tmp_path / "run").mkdir()
@@ -421,6 +429,7 @@ def test_repeated_swanctl_usage_dump_is_logged_once(tmp_path: Path) -> None:
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=swanctl_runner,
         vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
         listener=events.append,
     )
     (tmp_path / "run").mkdir()

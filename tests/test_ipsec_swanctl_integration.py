@@ -2,11 +2,10 @@
 """Real Ubuntu 5.9.13 charon + /usr/sbin/swanctl integration.
 
 This is not a FortiGate live test. It uses the helper's generated runtime
-and the installed swanctl. Production helper swanctl inherits
-/etc/strongswan.conf (swanctl.socket commented out) and therefore the
-libvici default unix:///var/run/charon.vici (/run/charon.vici). Tests that
-cannot bind that path point swanctl at the private socket through
-STRONGSWAN_CONF swanctl.socket — the mechanism command.c uses.
+and the installed swanctl. Production helper swanctl always sets
+STRONGSWAN_CONF to an application-owned client conf whose swanctl.socket is
+unix:///run/charon.fvl.vici — never the compiled default
+unix:///var/run/charon.vici. Ubuntu 5.9.13 swanctl has no --unix.
 """
 
 from __future__ import annotations
@@ -20,8 +19,10 @@ from pathlib import Path
 
 import pytest
 
+from fortigate_vpn_gui.helper.ike_ports import inspect_ike_udp_ports
 from fortigate_vpn_gui.helper.ipsec_runtime import (
     LIVE_SWANCTL_DIR,
+    LIVE_VICI_SOCKET,
     wipe_ipsec_runtime,
     write_ipsec_runtime,
 )
@@ -30,6 +31,7 @@ from fortigate_vpn_gui.vpn.ipsec.commands import (
     STRONGSWAN_CONF_ENV,
     build_charon_argv,
     build_charon_environment,
+    build_swanctl_environment,
     build_swanctl_list_conns_argv,
     build_swanctl_load_argv,
     build_swanctl_stats_argv,
@@ -127,14 +129,18 @@ def test_real_swanctl_accepts_generated_argv_without_unix(tmp_path: Path) -> Non
 
 
 def test_real_swanctl_reaches_private_charon_vici() -> None:
-    """Production helper layout: STRONGSWAN_CONF=/run/charon.fvl.conf, VICI=/run/charon.vici.
+    """Production helper layout: STRONGSWAN_CONF client conf + VICI=/run/charon.fvl.vici.
 
     The helper runs as root. Unprivileged charon cannot keep kernel-ipsec, so this
-    probe is skipped unless it has the same privilege the helper uses.
+    probe is skipped unless it has the same privilege the helper uses. Skip when
+    an unrelated IKE daemon already owns UDP/500 or UDP/4500.
     """
     _require_binaries()
+    _require_aa_exec()
     if os.geteuid() != 0:
         pytest.skip("private charon VICI probe uses the helper's root /run layout")
+    if inspect_ike_udp_ports().unrelated_conflict():
+        pytest.skip("unrelated IKE daemon already owns UDP/500 or UDP/4500")
 
     credentials = IpsecCredentials(psk="super-psk", username="ada", password="hunter2")
     files = write_ipsec_runtime(
@@ -145,9 +151,14 @@ def test_real_swanctl_reaches_private_charon_vici() -> None:
         runtime_dir=LIVE_SWANCTL_DIR,
     )
     credentials.wipe()
-    assert str(files.vici_socket) == "/run/charon.vici"
+    assert str(files.vici_socket) == "/run/charon.fvl.vici"
+    assert files.vici_socket == LIVE_VICI_SOCKET
     assert str(files.strongswan_conf) == "/run/charon.fvl.conf"
     assert str(files.swanctl_conf) == "/etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf"
+    client_text = files.swanctl_client_conf.read_text(encoding="utf-8")
+    assert "unix:///run/charon.fvl.vici" in client_text
+    assert "unix:///run/charon.vici" not in client_text
+    assert "unix:///var/run/charon.vici" not in client_text
 
     load_argv = build_swanctl_load_argv(str(_SWANCTL), str(files.swanctl_conf))
     stats_argv = build_swanctl_stats_argv(str(_SWANCTL))
@@ -160,6 +171,7 @@ def test_real_swanctl_reaches_private_charon_vici() -> None:
         assert "/etc/swanctl/swanctl.conf" not in argv
 
     charon_env = build_charon_environment(str(files.strongswan_conf))
+    swanctl_env = build_swanctl_environment(str(files.swanctl_client_conf))
     proc = subprocess.Popen(  # noqa: S603
         build_charon_argv(str(_CHARON)),
         env=charon_env,
@@ -184,18 +196,17 @@ def test_real_swanctl_reaches_private_charon_vici() -> None:
         if proc.poll() is not None:
             pytest.fail(f"private charon exited before swanctl: {output}")
 
-        # Production swanctl uses the compiled default /run/charon.vici.
-        stats = _run_root_swanctl(stats_argv)
+        stats = _run_root_swanctl(stats_argv, env=swanctl_env)
         stats_text = f"{stats.stdout}\n{stats.stderr}"
         _assert_supported_cli(stats_text)
         assert stats.returncode == 0, stats_text
 
-        listed = _run_root_swanctl(list_argv)
+        listed = _run_root_swanctl(list_argv, env=swanctl_env)
         listed_text = f"{listed.stdout}\n{listed.stderr}"
         _assert_supported_cli(listed_text)
         assert listed.returncode == 0, listed_text
 
-        loaded = _run_root_swanctl(load_argv, timeout=12.0)
+        loaded = _run_root_swanctl(load_argv, env=swanctl_env, timeout=12.0)
         loaded_text = f"{loaded.stdout}\n{loaded.stderr}"
         _assert_supported_cli(loaded_text)
         assert "super-psk" not in loaded_text
@@ -203,7 +214,7 @@ def test_real_swanctl_reaches_private_charon_vici() -> None:
         if loaded.returncode != 0:
             pytest.fail(f"swanctl --load-all --file failed: {loaded_text}")
 
-        after = _run_root_swanctl(list_argv)
+        after = _run_root_swanctl(list_argv, env=swanctl_env)
         after_text = f"{after.stdout}\n{after.stderr}"
         _assert_supported_cli(after_text)
         assert after.returncode == 0, after_text
@@ -225,11 +236,14 @@ def test_real_swanctl_reaches_private_charon_vici() -> None:
 def _run_root_swanctl(
     argv: list[str],
     *,
+    env: dict[str, str],
     timeout: float = 8.0,
 ) -> subprocess.CompletedProcess[str]:
+    assert env.get(STRONGSWAN_CONF_ENV)
     try:
         return subprocess.run(  # noqa: S603
-            argv,
+            _unconfined(argv),
+            env=env,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,

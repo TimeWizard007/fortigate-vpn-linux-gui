@@ -38,10 +38,11 @@ from fortigate_vpn_gui.gui.windowing import (
     clear_transient_parent,
     configure_independent_main_window,
 )
+from fortigate_vpn_gui.helper.ipsec_runtime import inspect_owned_ipsec_state
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
-from fortigate_vpn_gui.vpn.log_buffer import LogBuffer
+from fortigate_vpn_gui.vpn.log_buffer import LogBuffer, LogLevel
 from fortigate_vpn_gui.vpn.models import ConnectionState, VpnErrorCode, VpnSnapshot, state_label
 
 _NAV_ITEMS: tuple[str, ...] = (
@@ -92,6 +93,7 @@ class MainWindow(QMainWindow):
         if vpn_backend is not None and log_buffer is None:
             self._log_buffer = vpn_backend.log_buffer
         self._vpn.set_auto_reconnect(self._prefs.auto_reconnect)
+        self._log_owned_ipsec_leftover()
 
         self._quit_started = False
         self._can_finish_close = False
@@ -206,6 +208,17 @@ class MainWindow(QMainWindow):
             ),
             "autostart_enabled": "Yes" if self._prefs.autostart else "No",
         }
+
+    def _log_owned_ipsec_leftover(self) -> None:
+        leftover = inspect_owned_ipsec_state()
+        if not leftover.has_owned_leftover:
+            return
+        self._log_buffer.append(
+            "vpn",
+            "Leftover application-owned IPsec state was detected. See Diagnostics. "
+            "The next IPsec or SSL connect cleans only that owned state.",
+            severity=LogLevel.WARNING,
+        )
 
     @property
     def profile_manager(self) -> ProfileManager:

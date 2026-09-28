@@ -19,7 +19,9 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_connection_state,
     check_dns,
     check_helper,
+    check_ike_ports,
     check_ipsec_backend,
+    check_ipsec_leftover,
     check_ipsec_tunnel,
     check_openfortivpn,
     check_platform,
@@ -177,6 +179,28 @@ class DiagnosticService:
                             request.profile,
                             is_executable=self._deps.is_executable or default_is_executable,
                         ),
+                    )
+                ),
+            ),
+            (
+                "vpn.ipsec_leftover",
+                lambda: add(
+                    self._safe(
+                        "vpn.ipsec_leftover",
+                        "IPsec leftover state",
+                        GROUP_VPN,
+                        lambda: check_ipsec_leftover(request.snapshot),
+                    )
+                ),
+            ),
+            (
+                "vpn.ike_ports",
+                lambda: add(
+                    self._safe(
+                        "vpn.ike_ports",
+                        "IKE UDP ports",
+                        GROUP_VPN,
+                        lambda: check_ike_ports(request.snapshot),
                     )
                 ),
             ),

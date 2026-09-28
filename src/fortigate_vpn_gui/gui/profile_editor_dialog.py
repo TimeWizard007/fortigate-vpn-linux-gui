@@ -209,7 +209,7 @@ class ProfileEditorDialog(QDialog):
         self._local_lan = QCheckBox("Local LAN access (stored; not fully implemented)")
         self._local_lan.setObjectName("profileLocalLan")
         self._ipsec_note = QLabel(
-            "v1.1.0 connects IKEv1 Aggressive + PSK + XAuth + Mode Config. "
+            "This release connects IKEv1 Aggressive + PSK + XAuth + Mode Config. "
             "Other stored combinations are not started."
         )
         self._ipsec_note.setWordWrap(True)
@@ -248,6 +248,16 @@ class ProfileEditorDialog(QDialog):
         self._psk_status.setObjectName("profilePskStatus")
         self._psk_status.setWordWrap(True)
         self._psk_status.hide()
+        self._forget_psk = QPushButton("Forget saved pre-shared key")
+        self._forget_psk.setObjectName("profileForgetPsk")
+        self._forget_psk.clicked.connect(self._on_forget_psk)
+        self._password_status = QLabel()
+        self._password_status.setObjectName("profilePasswordStatus")
+        self._password_status.setWordWrap(True)
+        self._password_status.hide()
+        self._forget_password = QPushButton("Forget saved XAuth password")
+        self._forget_password.setObjectName("profileForgetPassword")
+        self._forget_password.clicked.connect(self._on_forget_password)
         self._remember_username = QCheckBox("Remember username")
         self._remember_username.setObjectName("profileRememberUsername")
         self._xauth_note = QLabel("User authentication: XAuth username/password")
@@ -257,6 +267,7 @@ class ProfileEditorDialog(QDialog):
         self._ipsec_sso.setObjectName("profileIpsecSso")
         self._ipsec_sso.setEnabled(False)
         self._psk_has_stored = False
+        self._password_has_stored = False
 
         self._clear_trust = False
         self._cert_status = QLabel("No certificate pinned")
@@ -266,7 +277,7 @@ class ProfileEditorDialog(QDialog):
         self._reset_cert.setObjectName("profileResetCert")
         self._reset_cert.clicked.connect(self._on_reset_cert)
 
-        self._basic_box = self._section("Basic", "profileBasicBox")
+        self._basic_box = self._section("Connection", "profileBasicBox")
         basic_form = self._compact_form(self._basic_box)
         basic_form.addRow("Profile name:", self._stack_field(self._name, self._name_error))
         basic_form.addRow("VPN type:", self._vpn_type)
@@ -299,6 +310,7 @@ class ProfileEditorDialog(QDialog):
         self._ipsec_layout.addLayout(psk_form)
         self._ipsec_layout.addWidget(self._save_psk)
         self._ipsec_layout.addWidget(self._psk_status)
+        self._ipsec_layout.addWidget(self._forget_psk)
         self._ipsec_layout.addWidget(self._xauth_note)
         self._ipsec_layout.addWidget(self._ipsec_sso)
         self._ipsec_layout.addLayout(ids_form)
@@ -310,7 +322,7 @@ class ProfileEditorDialog(QDialog):
         cert_layout.addWidget(self._cert_status)
         cert_layout.addWidget(self._reset_cert, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        phase1 = self._section("Phase 1", "profileIpsecPhase1Box")
+        phase1 = self._section("IKE / Phase 1", "profileIpsecPhase1Box")
         phase1_form = self._compact_form(phase1)
         phase1_form.addRow("IKE version:", self._ike_version)
         phase1_form.addRow("IKE mode:", self._ike_mode)
@@ -320,7 +332,7 @@ class ProfileEditorDialog(QDialog):
         phase1_form.addRow("DH group:", self._dh)
         phase1_form.addRow("Phase 1 lifetime (s):", self._p1_life)
 
-        phase2 = self._section("Phase 2", "profileIpsecPhase2Box")
+        phase2 = self._section("Child SA / Phase 2", "profileIpsecPhase2Box")
         phase2_form = self._compact_form(phase2)
         phase2_form.addRow("Phase 2 encryption:", self._p2_enc)
         phase2_form.addRow("Phase 2 integrity:", self._p2_int)
@@ -345,7 +357,7 @@ class ProfileEditorDialog(QDialog):
         right_layout.addStretch(1)
 
         self._advanced_columns = _AdaptiveColumns(phase1, right_column)
-        self._ipsec_advanced = QGroupBox("Advanced IPsec settings")
+        self._ipsec_advanced = QGroupBox("Advanced")
         self._ipsec_advanced.setObjectName("profileIpsecAdvancedBox")
         self._ipsec_advanced.setCheckable(True)
         advanced_layout = QVBoxLayout(self._ipsec_advanced)
@@ -526,17 +538,29 @@ class ProfileEditorDialog(QDialog):
         remember_parent = self._remember_username.parentWidget()
         if remember_parent is not None and remember_parent.layout() is not None:
             remember_parent.layout().removeWidget(self._remember_username)
+        for extra in (self._password_status, self._forget_password):
+            extra_parent = extra.parentWidget()
+            if extra_parent is not None and extra_parent.layout() is not None:
+                extra_parent.layout().removeWidget(extra)
         if ipsec:
             index = self._ipsec_layout.indexOf(self._xauth_note)
+            widgets = (
+                self._username_row,
+                self._remember_username,
+                self._password_status,
+                self._forget_password,
+            )
             if index < 0:
-                self._ipsec_layout.addWidget(self._username_row)
-                self._ipsec_layout.addWidget(self._remember_username)
+                for widget in widgets:
+                    self._ipsec_layout.addWidget(widget)
             else:
-                self._ipsec_layout.insertWidget(index, self._username_row)
-                self._ipsec_layout.insertWidget(index + 1, self._remember_username)
+                for offset, widget in enumerate(widgets):
+                    self._ipsec_layout.insertWidget(index + offset, widget)
             self._remember_username.show()
             return
         self._remember_username.hide()
+        self._password_status.hide()
+        self._forget_password.hide()
         self._ssl_auth_layout.addWidget(self._username_row)
 
     def _stored_username_hint(self) -> str:
@@ -551,30 +575,76 @@ class ProfileEditorDialog(QDialog):
             return
         store = self._manager.psk_store
         self._psk_has_stored = False
+        self._password_has_stored = False
         self._psk.clear()
         if not store.is_available():
             self._save_psk.setChecked(False)
             self._save_psk.setEnabled(False)
-            self._psk_status.setText(store.unavailable_message())
+            self._psk_status.setText("Secure storage unavailable. " + store.unavailable_message())
             self._psk_status.show()
+            self._forget_psk.setEnabled(False)
+            self._password_status.setText(
+                "Secure storage unavailable. " + store.password_unavailable_message()
+            )
+            self._password_status.show()
+            self._forget_password.setEnabled(False)
             self._psk.setPlaceholderText(
                 "Not stored. This key is not the user password and will be asked at connect."
             )
             return
         self._save_psk.setEnabled(True)
         stored = False
+        stored_password = False
         if self._existing is not None:
             stored = store.contains(self._existing.id)
+            stored_password = store.contains_xauth_password(self._existing.id)
         if stored:
             self._save_psk.setChecked(True)
             self._psk_has_stored = True
             self._psk.setPlaceholderText("Saved securely — leave blank to keep")
-            self._psk_status.hide()
-            return
+            self._psk_status.setText("Pre-shared key: stored securely")
+            self._psk_status.show()
+            self._forget_psk.setEnabled(True)
+        else:
+            if self._existing is None:
+                self._save_psk.setChecked(False)
+            self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
+            self._psk_status.setText("Pre-shared key: not stored")
+            self._psk_status.show()
+            self._forget_psk.setEnabled(False)
+        if stored_password:
+            self._password_has_stored = True
+            self._password_status.setText("XAuth password: stored securely")
+            self._password_status.show()
+            self._forget_password.setEnabled(True)
+        else:
+            self._password_status.setText("XAuth password: not stored")
+            self._password_status.show()
+            self._forget_password.setEnabled(False)
+
+    def _on_forget_psk(self) -> None:
         if self._existing is None:
+            self._psk.clear()
+            self._psk_has_stored = False
             self._save_psk.setChecked(False)
-        self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
-        self._psk_status.hide()
+            self._sync_psk_storage_ui()
+            return
+        store = self._manager.psk_store
+        store.delete(self._existing.id)
+        self._psk.clear()
+        self._psk_has_stored = False
+        self._save_psk.setChecked(False)
+        self._sync_psk_storage_ui()
+
+    def _on_forget_password(self) -> None:
+        if self._existing is None:
+            self._password_has_stored = False
+            self._sync_psk_storage_ui()
+            return
+        store = self._manager.psk_store
+        store.delete_xauth_password(self._existing.id)
+        self._password_has_stored = False
+        self._sync_psk_storage_ui()
 
     def _on_psk_reveal(self, checked: bool) -> None:
         if checked:

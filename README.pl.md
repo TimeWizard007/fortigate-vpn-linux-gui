@@ -13,7 +13,7 @@ odpowiednich właścicieli.
 Główny cel wydania: **Ubuntu 24.04 LTS, amd64**. Inne dystrybucje z rodziny
 Debian nie były testowane.
 
-Aktualna wersja to **1.1.0**. Protokół pomocnika to **0.8.0**.
+Aktualna wersja to **1.2.0**. Protokół pomocnika to **0.8.0**.
 
 ## Funkcje
 
@@ -30,12 +30,12 @@ Aktualna wersja to **1.1.0**. Protokół pomocnika to **0.8.0**.
 - Zasobnik systemowy, opcjonalne zamykanie do zasobnika, opcjonalny autostart
 - Opcjonalne ponawianie po nieoczekiwanej utracie tunelu (domyślnie wyłączone)
 - Diagnostyka: DNS, routing, TCP, tunel, pomocnik, IPsec, polkit
-- Kopiowalny, ocenzurowany raport diagnostyczny
+- Kopiowanie i eksport diagnostyki (ocenzurowany tekst lub ZIP do zgłoszenia)
 
 ## Instalacja (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.1.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.2.0-1_amd64.deb
 ```
 
 `apt` dociąga biblioteki runtime, `pkexec`, `ppp`, `iproute2` oraz pakiety
@@ -81,7 +81,9 @@ Profile użytkownika w `~/.config/fortigate-vpn-linux-gui/` zostają.
 5. Nieznany certyfikat FortiGate trzeba jawnie przypiąć do profilu albo
    anulować.
 6. Gdy połączenie nie działa, otwórz Diagnostykę, kliknij **Uruchom
-   diagnostykę**, potem **Kopiuj raport**.
+   diagnostykę**, potem **Kopiuj diagnostykę** albo **Eksportuj diagnostykę**.
+   Eksport jest ocenzurowany i nie może zawierać haseł, PSK, ciasteczek ani
+   tokenów SAML. Sprawdź plik przed załączeniem.
 7. Rozłącz ze strony Connection lub z zasobnika. Quit z zasobnika zawsze
    kończy aplikację (czeka na sprzątnięcie pomocnika/openfortivpn).
 
@@ -114,16 +116,61 @@ Pomocnik uprzywilejowany     root przez polkit (pkexec)
 Nie ma reguł sudoers, setuid pomocnika ani polityki polkit bez hasła.
 Hasła SSL, ciasteczka SAML, PSK IPsec i hasła XAuth nie są zapisywane w
 `profiles.json` i nie trafiają do linii poleceń. Opcjonalne sekrety IPsec
-używają Secret Service tylko po zgodzie użytkownika. Kopiowane raporty
-diagnostyczne są ocenzurowane.
+używają Secret Service tylko po zgodzie użytkownika. Kopiowane i eksportowane
+raporty diagnostyczne są ocenzurowane.
+
+## Obsługiwane typy połączeń
+
+**SSL-VPN** (openfortivpn): hasło albo SAML/SSO w przeglądarce, z jawnym
+pinowaniem certyfikatu.
+
+**IPsec** (dystrybucyjny strongSwan): IKEv1 Aggressive Mode, PSK + XAuth,
+Mode Config / VIP, NAT-T, CHILD_SA/XFRM, FortiGate/Cisco Unity split include
+oraz DNS VPN. IKEv2, Main Mode, certyfikat IPsec, EAP i SAML IPsec mogą być
+zapisane w profilu, ale nie są uruchamiane.
+
+IPsec aplikacji używa **prywatnego** charon (`/run/charon.fvl.conf` i
+`/run/charon.fvl.vici`). Nie zatrzymuje `strongswan-starter`, nie zabija
+obcego charon i nie przejmuje `/run/charon.vici`. Dwa demony IKE nie mogą
+jednocześnie zająć UDP/500 i UDP/4500. Gdy inna usługa IKE już ma te porty,
+IPsec kończy się przed załadowaniem sekretów komunikatem **IKE ports in use**;
+Diagnostyka pokazuje zajętość. SSL VPN działa przy działającym systemowym
+strongSwan. Paczka nigdy nie wyłącza systemowego strongSwan automatycznie.
+
+### Przetestowane
+
+- Ubuntu 24.04 LTS amd64
+- Środowisko FortiGate / FortiOS użyte do walidacji IPsec i SSL w v1.1.0
+- Test zainstalowanej paczki v1.2.0: odmowa IPsec gdy systemowy charon miał
+  UDP/500/4500; prywatny IPsec po zatrzymaniu tego IKE; SSL/SAML po sprzątaniu
+  IPsec z przywróconym systemowym strongSwan
+
+### Potencjalnie zgodne, jeszcze nie testowane
+
+- Inne pulpity z rodziny Debian amd64
+- Inne wersje FortiGate / FortiOS i propozycje IPsec
 
 ## Rozwiązywanie problemów
 
 Najpierw otwórz **Diagnostykę**. Sprawdza instalację pomocnika/polkit, DNS,
-trasę do bramy, TCP i stan tunelu. Samo otwarcie Diagnostyki nie pokazuje
-okna polkit.
+trasę do bramy, TCP, pozostałości IPsec i stan tunelu. Samo otwarcie
+Diagnostyki nie pokazuje okna polkit.
 
-Gdy SSO nie działa, sprawdź, czy `openfortivpn --help` zawiera `--saml-login`.
+Gdy połączenie nie działa, strona Connection pokazuje ostrożny, czytelny
+powód, jeśli wyjście backendu go udowadnia. Szczegóły zostają w Logs i
+Diagnostyce.
+
+**Eksportuj diagnostykę** zapisuje ocenzurowany tekst lub ZIP do zgłoszenia
+GitHub. **Kopiuj diagnostykę** wkleja ten sam tekst. Sprawdź plik przed
+załączeniem: nie może zawierać PSK, haseł, ciasteczek, tokenów SAML ani
+kluczy prywatnych.
+
+Gdy IPsec zgłasza **IKE ports in use**, inny demon IKE (często
+`strongswan-starter` / systemowy charon) już zajmuje UDP/500 lub UDP/4500.
+Aplikacja nie zatrzymuje tej usługi. SSL VPN nadal może się połączyć.
+IPsec aplikacji ruszy dopiero, gdy te porty będą wolne.
+
+Gdy SSO nie działa, sprawdź, czy używany `openfortivpn` obsługuje `--saml-login`.
 
 ## Rozwój
 

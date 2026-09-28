@@ -84,12 +84,16 @@ because query strings can carry session identifiers.
   be written to logs, profile files, diagnostics, or exceptions.
 - Every backend log line passes through `redact_log_line` (case-insensitive)
   before it is shown.
-- Copied diagnostic reports are sanitized the same way. They must not include
+- Copied and exported diagnostic reports are sanitized the same way. They must not include
   passwords, tokens, cookies, SAML payloads, or helper request bodies.
 - Opening Diagnostics does not launch pkexec and does not request interactive
   authorization.
 - Connection profile files contain **no authentication secrets**.
   `trusted_cert_sha256` is a public certificate pin, not a password.
+- Application IPsec credentials are loaded only into the private charon
+  through `/run/charon.fvl.vici`. They must never be sent to the system
+  VICI socket `/run/charon.vici`. Leftover recovery never kills an unrelated
+  charon or deletes `/run/charon.pid`.
 
 ## Trust
 
@@ -116,3 +120,6 @@ replaced automatically.
 - Auto-reconnect never bypasses SAML or certificate validation.
 - Autostart is user-level only (`~/.config/autostart/`); no system-wide
   autostart and no automatic VPN connect at login.
+- The package does not stop, disable, or reconfigure an unrelated system
+  strongSwan installation. Application IPsec uses a private VICI socket and
+  fails if UDP/500 or UDP/4500 is already owned.

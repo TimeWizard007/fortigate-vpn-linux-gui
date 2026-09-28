@@ -13,9 +13,11 @@ from pathlib import Path
 import pytest
 
 from fortigate_vpn_gui.helper.ipsec_runtime import (
+    LIVE_PID_FILE,
     LIVE_STRONGSWAN_CONF,
     LIVE_SWANCTL_DIR,
     LIVE_VICI_SOCKET,
+    SYSTEM_VICI_SOCKET,
     charon_runtime_paths,
     wipe_ipsec_runtime,
     write_ipsec_runtime,
@@ -23,8 +25,10 @@ from fortigate_vpn_gui.helper.ipsec_runtime import (
 from fortigate_vpn_gui.profiles.ipsec import default_ipsec_settings
 from fortigate_vpn_gui.vpn.ipsec.commands import (
     STRONGSWAN_CONF_ENV,
+    SYSTEM_VICI_URI,
     build_charon_argv,
     build_charon_environment,
+    build_swanctl_environment,
     build_swanctl_initiate_argv,
     build_swanctl_list_conns_argv,
     build_swanctl_load_argv,
@@ -36,7 +40,11 @@ from fortigate_vpn_gui.vpn.ipsec.secrets import (
     build_swanctl_secrets,
     secrets_contain_plaintext,
 )
-from fortigate_vpn_gui.vpn.ipsec.swanctl import build_strongswan_conf, build_swanctl_conf
+from fortigate_vpn_gui.vpn.ipsec.swanctl import (
+    build_strongswan_conf,
+    build_swanctl_client_conf,
+    build_swanctl_conf,
+)
 
 
 def test_swanctl_conf_uses_reference_proposals_without_secrets() -> None:
@@ -62,8 +70,15 @@ def test_swanctl_conf_uses_reference_proposals_without_secrets() -> None:
 
 
 def test_strongswan_conf_isolates_vici_socket() -> None:
-    conf = build_strongswan_conf(vici_socket="/run/charon.vici")
-    assert "unix:///run/charon.vici" in conf
+    conf = build_strongswan_conf(
+        vici_socket="/run/charon.fvl.vici",
+        pid_file="/run/charon.fvl.pid",
+    )
+    assert "unix:///run/charon.fvl.vici" in conf
+    assert "unix:///run/charon.vici" not in conf
+    assert SYSTEM_VICI_URI not in conf
+    assert "swanctl {" in conf
+    assert "pidfile = /run/charon.fvl.pid" in conf
     assert "cisco_unity = yes" in conf
     assert "include /etc/strongswan.d/charon/*.conf" in conf
     assert "path = /usr/bin/true" in conf
@@ -72,20 +87,28 @@ def test_strongswan_conf_isolates_vici_socket() -> None:
     assert "filelog" in conf
     assert "stderr" in conf
     assert "secret" not in conf.lower() or "secret =" not in conf.lower()
+    client = build_swanctl_client_conf(vici_socket="/run/charon.fvl.vici")
+    assert "unix:///run/charon.fvl.vici" in client
+    assert "unix:///run/charon.vici" not in client
+    assert SYSTEM_VICI_URI not in client
 
 
 def test_live_charon_paths_are_apparmor_visible() -> None:
-    conf, vici = charon_runtime_paths(LIVE_SWANCTL_DIR)
+    conf, vici, pid_file = charon_runtime_paths(LIVE_SWANCTL_DIR)
     assert conf == LIVE_STRONGSWAN_CONF
     assert vici == LIVE_VICI_SOCKET
+    assert pid_file == LIVE_PID_FILE
     assert str(conf).startswith("/run/charon.")
-    assert str(vici) == "/run/charon.vici"
+    assert str(vici) == "/run/charon.fvl.vici"
+    assert vici != SYSTEM_VICI_SOCKET
+    assert str(pid_file) == "/run/charon.fvl.pid"
 
 
 def test_injected_runtime_keeps_files_together(tmp_path: Path) -> None:
-    conf, vici = charon_runtime_paths(tmp_path / "run")
+    conf, vici, pid_file = charon_runtime_paths(tmp_path / "run")
     assert conf == tmp_path / "run" / "strongswan.conf"
     assert vici == tmp_path / "run" / "charon.vici"
+    assert pid_file == tmp_path / "run" / "charon.pid"
 
 
 def test_split_live_layout_writes_apparmor_paths_and_wipes(
@@ -93,7 +116,8 @@ def test_split_live_layout_writes_apparmor_paths_and_wipes(
 ) -> None:
     live_dir = tmp_path / "swanctl-live"
     strongswan = tmp_path / "charon.fvl.conf"
-    vici = tmp_path / "charon.vici"
+    vici = tmp_path / "charon.fvl.vici"
+    pid_file = tmp_path / "charon.fvl.pid"
     dns_state = tmp_path / "charon.fvl.dns"
     monkeypatch.setattr(
         "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", live_dir
@@ -103,6 +127,9 @@ def test_split_live_layout_writes_apparmor_paths_and_wipes(
     )
     monkeypatch.setattr(
         "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_VICI_SOCKET", vici
+    )
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_PID_FILE", pid_file
     )
     monkeypatch.setattr(
         "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", dns_state
@@ -117,10 +144,15 @@ def test_split_live_layout_writes_apparmor_paths_and_wipes(
     )
     assert files.strongswan_conf == strongswan
     assert files.vici_socket == vici
+    assert files.pid_file == pid_file
     assert files.dns_state == dns_state
     assert files.runtime_dir == live_dir
     text = strongswan.read_text(encoding="utf-8")
     assert f"unix://{vici}" in text
+    assert "unix:///run/charon.vici" not in text
+    client = files.swanctl_client_conf.read_text(encoding="utf-8")
+    assert f"unix://{vici}" in client
+    assert "unix:///run/charon.vici" not in client
     assert "cisco_unity = yes" in text
     assert "super-psk" not in text
     assert files.secrets.stat().st_mode & 0o777 == 0o600
@@ -129,6 +161,8 @@ def test_split_live_layout_writes_apparmor_paths_and_wipes(
     assert not dns_state.exists()
     assert not live_dir.exists()
     assert not files.secrets.exists()
+    assert not vici.exists()
+    assert not pid_file.exists()
 
 
 def test_secrets_file_is_mode_0600_and_conf_has_no_psk(tmp_path: Path) -> None:
@@ -166,9 +200,14 @@ def test_charon_and_swanctl_argv_have_no_secrets() -> None:
     env = build_charon_environment("/tmp/run/strongswan.conf", base_env={"PATH": "/usr/bin"})
     load = build_swanctl_load_argv("/usr/sbin/swanctl", "/tmp/run/swanctl.conf")
     initiate = build_swanctl_initiate_argv("/usr/sbin/swanctl")
+    swanctl_env = build_swanctl_environment(
+        "/tmp/run/vici-client.conf",
+        base_env={"PATH": "/usr/bin"},
+    )
     assert charon == ["/usr/lib/ipsec/charon"]
     assert "--conf" not in charon
     assert env[STRONGSWAN_CONF_ENV] == "/tmp/run/strongswan.conf"
+    assert swanctl_env[STRONGSWAN_CONF_ENV] == "/tmp/run/vici-client.conf"
     assert load == ["/usr/sbin/swanctl", "--load-all", "--file", "/tmp/run/swanctl.conf"]
     assert initiate == ["/usr/sbin/swanctl", "--initiate", "--child", "fortigate"]
     terminate = build_swanctl_terminate_argv("/usr/sbin/swanctl")
@@ -180,6 +219,7 @@ def test_charon_and_swanctl_argv_have_no_secrets() -> None:
     joined = " ".join(charon + load + initiate + terminate + stats + listed)
     assert "--unix" not in joined
     assert "--uri" not in joined
+    assert SYSTEM_VICI_URI not in joined
     assert "--file" not in initiate
     assert "--file" not in terminate
     assert "--file" not in stats

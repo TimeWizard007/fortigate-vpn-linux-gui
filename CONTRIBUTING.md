@@ -7,7 +7,7 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v1.1.0 is the current packaged Ubuntu 24.04 release. The GUI must never
+v1.2.0 is the current packaged Ubuntu 24.04 release. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
 auto-trust certificates or skip SAML. Helper protocol 0.8.0 must stay

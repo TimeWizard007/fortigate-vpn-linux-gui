@@ -1,0 +1,7 @@
+# BEGIN fortigate-vpn-linux-gui vici
+# FortiGate VPN Linux GUI — application-owned strongSwan VICI
+# Allows distro swanctl to reach /run/charon.fvl.vici instead of the system
+# socket /run/charon.vici. Do not grant access to unrelated charon state.
+/run/charon.fvl.conf r,
+/run/charon.fvl.vici rw,
+# END fortigate-vpn-linux-gui vici

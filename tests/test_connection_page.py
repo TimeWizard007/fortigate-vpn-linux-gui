@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
+from fortigate_vpn_gui.profiles.ipsec import default_ipsec_settings
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.vpn.backend import VpnEvent
-from fortigate_vpn_gui.vpn.models import VpnErrorCode
+from fortigate_vpn_gui.vpn.models import ConnectionState, VpnErrorCode
 from tests.vpn_fakes import VpnHarness
 
 _AUTH_URL = "https://vpn.example.com:443/remote/saml/start?redirect=1"
@@ -79,6 +82,31 @@ def test_connection_page_failed_state_is_usable(qapp, profile_manager: ProfileMa
     assert page.reconnect_button_visible() is False
     assert page.failure_hint_visible() is True
     assert "lost" in page.failure_hint_text().lower()
+
+
+def test_connection_page_ipsec_negotiation_failure_is_human_readable(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    profile_manager.add(
+        name="IPsec office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        ipsec=default_ipsec_settings().to_json(),
+    )
+    harness = VpnHarness()
+    page = ConnectionPage(profile_manager, harness.backend, locator=lambda: "/usr/bin/openfortivpn")
+    snapshot = replace(
+        harness.backend.snapshot(),
+        state=ConnectionState.FAILED,
+        error_code=VpnErrorCode.IPSEC_NEGOTIATION_FAILED,
+        error_message="IPsec negotiation failed. See Diagnostics for details.",
+    )
+    page.apply_snapshot(snapshot)
+    assert page.status_text() == "Failed"
+    assert page.failure_hint_visible() is True
+    assert page.failure_hint_text() == "IPsec negotiation failed. See Diagnostics for details."
+
 
 
 def test_connection_page_saml_unsupported_message(qapp, profile_manager: ProfileManager) -> None:

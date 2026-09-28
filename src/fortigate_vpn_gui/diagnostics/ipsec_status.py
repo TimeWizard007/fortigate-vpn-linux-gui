@@ -24,6 +24,11 @@ class XfrmPolicy:
     direction: str
 
 
+def count_xfrm_src_lines(text: str) -> int:
+    """Count XFRM objects that start a ``src ... dst ...`` block."""
+    return sum(1 for line in text.splitlines() if _SRC_DST.match(line.strip()))
+
+
 def parse_xfrm_policies(text: str) -> tuple[XfrmPolicy, ...]:
     """Parse ``ip xfrm policy`` output into src/dst/dir tuples."""
     policies: list[XfrmPolicy] = []

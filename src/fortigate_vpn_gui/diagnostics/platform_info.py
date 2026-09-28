@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import platform
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,6 +33,57 @@ def kernel_release() -> str:
 def architecture() -> str:
     """Return the hardware architecture."""
     return platform.machine() or "unknown"
+
+
+def query_dpkg_version(package: str) -> str:
+    """Return an installed Debian package version without running VPN binaries."""
+    if not package or any(ch in package for ch in " \t\n/;|&"):
+        return ""
+    try:
+        completed = subprocess.run(  # noqa: S603 — argv list, shell False
+            ["dpkg-query", "-W", "-f=${Version}", package],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            shell=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return (completed.stdout or "").strip()
+
+
+def ssl_backend_label(*, version: str | None = None) -> str:
+    """Return a short SSL backend line for About and diagnostics."""
+    detected = (version or packaged_openfortivpn_version() or "").strip()
+    if detected:
+        return f"SSL backend: openfortivpn {detected}"
+    return "SSL backend: openfortivpn (not detected)"
+
+
+def packaged_openfortivpn_version() -> str:
+    """Return the known packaged openfortivpn version when the binary is present.
+
+    Does not execute the binary.
+    """
+    from fortigate_vpn_gui.helper.protocol import PACKAGE_OPENFORTIVPN_PATH
+
+    try:
+        if Path(PACKAGE_OPENFORTIVPN_PATH).is_file():
+            return "1.24.1"
+    except OSError:
+        return ""
+    return ""
+
+
+def ipsec_backend_label(*, version: str | None = None) -> str:
+    """Return a short IPsec backend line. Uses dpkg, not swanctl --version."""
+    detected = (version or query_dpkg_version("strongswan") or "").strip()
+    if detected:
+        return f"IPsec backend: strongSwan {detected}"
+    return "IPsec backend: strongSwan (not detected)"
 
 
 def desktop_session_type() -> str:

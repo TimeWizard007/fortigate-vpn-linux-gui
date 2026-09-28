@@ -18,9 +18,11 @@ STRONGSWAN_CONF_ENV = "STRONGSWAN_CONF"
 
 # Ubuntu 5.9.13 swanctl has no --unix. command_dispatch() selects the VICI URI
 # from swanctl.socket, then swanctl.plugins.vici.socket, then libvici's compiled
-# default unix:///var/run/charon.vici (/run/charon.vici). Live private charon
-# binds that default path, so production argv must not override the socket.
+# default unix:///var/run/charon.vici (/run/charon.vici). Production swanctl
+# MUST run with STRONGSWAN_CONF pointing at an application-owned conf whose
+# swanctl.socket is the private VICI endpoint, never the system default.
 # --file is valid only on --load-all, after the operation (load_all.c).
+SYSTEM_VICI_URI = "unix:///var/run/charon.vici"
 
 
 def build_charon_argv(charon_path: str) -> list[str]:
@@ -41,6 +43,15 @@ def build_charon_environment(
     env = dict(os.environ if base_env is None else base_env)
     env[STRONGSWAN_CONF_ENV] = conf_path
     return env
+
+
+def build_swanctl_environment(
+    conf_path: str,
+    *,
+    base_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Return env that forces swanctl onto the application-owned VICI endpoint."""
+    return build_charon_environment(conf_path, base_env=base_env)
 
 
 def build_swanctl_load_argv(swanctl_path: str, conf_path: str) -> list[str]:
@@ -75,7 +86,7 @@ def build_swanctl_terminate_argv(
 
 
 def build_swanctl_stats_argv(swanctl_path: str) -> list[str]:
-    """Ask the daemon for stats. Harmless probe of the default VICI socket."""
+    """Ask the daemon for stats. Production still requires private STRONGSWAN_CONF."""
     _require_swanctl(swanctl_path)
     return [swanctl_path, "--stats"]
 

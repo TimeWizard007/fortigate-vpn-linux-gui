@@ -62,7 +62,18 @@ Dates are not committed. Order may change as design work proceeds.
 - Helper protocol 0.8.0; Debian package 1.1.0-1
 - Supported platform remains Ubuntu 24.04 LTS amd64 only
 
-## Later (not claimed in v1.1.0)
+## v1.2.0 — hardening, diagnostics, UX
+
+- Conservative Connection-page failure classification
+- Copy diagnostics and Export diagnostics (sanitized text/ZIP)
+- IPsec leftover detection and owned-state recovery on the next connect
+- Application IPsec isolated from system strongSwan (private VICI; IKE port
+  conflict fails with **IKE ports in use**; no automatic stop of
+  `strongswan-starter`)
+- Profile/credential UX (VPN type, stored securely / not stored / unavailable)
+- Application 1.2.0; helper protocol remains 0.8.0; Debian package 1.2.0-1
+
+## Later (not claimed in v1.2.0)
 
 - IKEv1 Main Mode, IKEv2, certificate authentication, EAP, IPsec SAML/SSO
 - Manual-address IPsec

@@ -15,6 +15,7 @@ from fortigate_vpn_gui.diagnostics.ipsec_status import (
 )
 from fortigate_vpn_gui.diagnostics.model import CheckStatus
 from fortigate_vpn_gui.diagnostics.service import DiagnosticRequest, DiagnosticService
+from fortigate_vpn_gui.helper.ike_ports import free_ike_port_report
 from fortigate_vpn_gui.helper.ipsec_dns import (
     DnsState,
     LinkDnsSnapshot,
@@ -341,6 +342,7 @@ def test_helper_applies_and_restores_vpn_dns(tmp_path: Path, monkeypatch) -> Non
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=lambda argv, timeout: SwanctlCommandResult(returncode=0),
         vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
     )
     (tmp_path / "run").mkdir()
     service.connect(
@@ -399,6 +401,7 @@ def test_helper_failed_connect_restores_dns(tmp_path: Path, monkeypatch) -> None
         runtime_dir_factory=lambda: tmp_path / "run",
         swanctl_runner=lambda argv, timeout: SwanctlCommandResult(returncode=1, stderr="failed"),
         vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
     )
     (tmp_path / "run").mkdir()
     service.connect(

@@ -64,14 +64,27 @@ def test_sso_state_machine_path() -> None:
     harness.process.emit("INFO:   Connected to gateway.")
     assert harness.backend.current_state() is ConnectionState.CONNECTING
     assert _vpn_messages(harness).count("Connected to gateway.") == 1
-    assert "VPN tunnel established." not in _vpn_messages(harness)
+    assert "VPN connected." not in _vpn_messages(harness)
     harness.process.emit("INFO:   Authenticated.")
     assert harness.backend.current_state() is ConnectionState.CONNECTING
     harness.process.emit("INFO:   Interface ppp0 is UP.")
     assert harness.backend.current_state() is ConnectionState.CONNECTING
     harness.process.emit(_TUNNEL_READY)
     assert harness.backend.current_state() is ConnectionState.CONNECTED
-    assert _vpn_messages(harness).count("VPN tunnel established.") == 1
+    assert _vpn_messages(harness).count("VPN connected.") == 1
+
+
+def test_ike_established_is_not_marked_connected() -> None:
+    harness = VpnHarness()
+    harness.backend.connect(_sso_profile(use_sso=False))
+    harness.process.emit("13[IKE] IKE_SA fortigate[1] established between 1.2.3.4 and 5.6.7.8")
+    assert harness.backend.current_state() is ConnectionState.CONNECTING
+    messages = _vpn_messages(harness)
+    assert "IKE established." in messages
+    assert "VPN connected." not in messages
+    harness.process.emit(_TUNNEL_READY)
+    assert harness.backend.current_state() is ConnectionState.CONNECTED
+    assert _vpn_messages(harness).count("VPN connected.") == 1
 
 
 def test_certificate_retry_state_machine_path() -> None:
@@ -114,8 +127,8 @@ def test_unexpected_loss_path() -> None:
     assert snapshot.error_code is VpnErrorCode.CONNECTION_LOST
     assert snapshot.error_message == "VPN connection was lost."
     assert snapshot.privileged_pid is None
-    assert "VPN connection lost." in _vpn_messages(harness)
-    assert _vpn_messages(harness).count("VPN connection lost.") == 1
+    assert "Connection lost." in _vpn_messages(harness)
+    assert _vpn_messages(harness).count("Connection lost.") == 1
 
 
 def test_repeated_connect_clicks_do_not_start_second_process() -> None:
@@ -275,7 +288,7 @@ def test_no_duplicate_tunnel_or_disconnect_logs() -> None:
     harness.process.emit(_TUNNEL_READY)
     harness.process.emit(_TUNNEL_READY)
     messages = _vpn_messages(harness)
-    assert messages.count("VPN tunnel established.") == 1
+    assert messages.count("VPN connected.") == 1
     assert messages.count("Connected to gateway.") == 1
     assert harness.backend.current_state() is ConnectionState.CONNECTED
     harness.backend.disconnect(wait=True)

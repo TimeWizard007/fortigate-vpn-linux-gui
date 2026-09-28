@@ -1,6 +1,29 @@
 #!/bin/sh
 set -e
 
+AA_LOCAL="/etc/apparmor.d/local/usr.sbin.swanctl"
+AA_PROFILE="/etc/apparmor.d/usr.sbin.swanctl"
+
+_remove_swanctl_apparmor() {
+  if [ ! -f "${AA_LOCAL}" ]; then
+    return 0
+  fi
+  if ! grep -q "BEGIN fortigate-vpn-linux-gui vici" "${AA_LOCAL}" 2>/dev/null; then
+    return 0
+  fi
+  tmp="$(mktemp)"
+  awk '
+    /BEGIN fortigate-vpn-linux-gui vici/ { skip=1; next }
+    /END fortigate-vpn-linux-gui vici/ { skip=0; next }
+    skip { next }
+    { print }
+  ' "${AA_LOCAL}" > "${tmp}"
+  mv "${tmp}" "${AA_LOCAL}"
+  if command -v apparmor_parser >/dev/null 2>&1 && [ -f "${AA_PROFILE}" ]; then
+    apparmor_parser -r "${AA_PROFILE}" >/dev/null 2>&1 || true
+  fi
+}
+
 case "$1" in
   remove|purge)
     if command -v update-desktop-database >/dev/null 2>&1; then
@@ -8,6 +31,9 @@ case "$1" in
     fi
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
       gtk-update-icon-cache -f /usr/share/icons/hicolor
+    fi
+    if [ "$1" = "purge" ]; then
+      _remove_swanctl_apparmor
     fi
     ;;
 esac

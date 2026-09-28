@@ -8,6 +8,10 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
+from fortigate_vpn_gui.diagnostics.platform_info import (
+    ipsec_backend_label,
+    ssl_backend_label,
+)
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.metadata import (
@@ -47,6 +51,10 @@ class AboutPage(QWidget):
         self._name.setStyleSheet("font-size: 18px; font-weight: 600;")
         self._version = QLabel(f"Version {__version__}")
         self._version.setObjectName("aboutVersion")
+        self._ssl_backend = QLabel(ssl_backend_label())
+        self._ssl_backend.setObjectName("aboutSslBackend")
+        self._ipsec_backend = QLabel(ipsec_backend_label())
+        self._ipsec_backend.setObjectName("aboutIpsecBackend")
         description = QLabel(PROJECT_DESCRIPTION)
         description.setWordWrap(True)
         description.setObjectName("aboutDescription")
@@ -83,6 +91,8 @@ class AboutPage(QWidget):
         layout.addWidget(title)
         layout.addWidget(self._name)
         layout.addWidget(self._version)
+        layout.addWidget(self._ssl_backend)
+        layout.addWidget(self._ipsec_backend)
         layout.addWidget(description)
         layout.addWidget(self._how)
         layout.addWidget(self._author)

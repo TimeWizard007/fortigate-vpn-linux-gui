@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from fortigate_vpn_gui import __version__ as APP_VERSION
+from fortigate_vpn_gui.diagnostics.export import format_diagnostic_bundle, write_diagnostic_zip
 from fortigate_vpn_gui.diagnostics.model import (
     GROUP_ORDER,
     STATUS_LABEL,
@@ -29,9 +32,9 @@ from fortigate_vpn_gui.diagnostics.platform_info import (
     architecture,
     desktop_session_type,
     kernel_release,
+    query_dpkg_version,
     read_os_pretty_name,
 )
-from fortigate_vpn_gui.diagnostics.report import format_diagnostic_report
 from fortigate_vpn_gui.diagnostics.service import (
     DiagnosticDeps,
     DiagnosticRequest,
@@ -110,7 +113,8 @@ class DiagnosticsPage(QWidget):
         intro = QLabel(
             "Troubleshooting checks for why a VPN connection may fail. "
             "Opening this page does not request administrator rights. "
-            "Copied reports never include passwords, tokens, cookies, or SAML payloads."
+            "Copy diagnostics and Export diagnostics never include passwords, "
+            "tokens, cookies, PSKs, or SAML payloads."
         )
         intro.setWordWrap(True)
 
@@ -123,9 +127,13 @@ class DiagnosticsPage(QWidget):
         self._run_button.setObjectName("runDiagnosticsButton")
         self._run_button.clicked.connect(self.start_run)
 
-        self._copy_button = QPushButton("Copy report")
+        self._copy_button = QPushButton("Copy diagnostics")
         self._copy_button.setObjectName("copyDiagnosticsReportButton")
         self._copy_button.clicked.connect(self.copy_report)
+
+        self._export_button = QPushButton("Export diagnostics")
+        self._export_button.setObjectName("exportDiagnosticsButton")
+        self._export_button.clicked.connect(self.export_report)
 
         self._last_run_label = QLabel("Last run: not yet")
         self._last_run_label.setObjectName("diagnosticsLastRun")
@@ -138,6 +146,7 @@ class DiagnosticsPage(QWidget):
         actions = QHBoxLayout()
         actions.addWidget(self._run_button)
         actions.addWidget(self._copy_button)
+        actions.addWidget(self._export_button)
         actions.addWidget(self._last_run_label)
         actions.addStretch(1)
 
@@ -206,6 +215,10 @@ class DiagnosticsPage(QWidget):
         worker.finished.connect(self._clear_worker)
         worker.start()
 
+    def copy_diagnostics(self) -> str:
+        """Copy the sanitized textual summary for a GitHub issue."""
+        return self.copy_report()
+
     def copy_report(self) -> str:
         """Copy the current sanitized report to the clipboard and return it."""
         text = self.report_text()
@@ -214,8 +227,35 @@ class DiagnosticsPage(QWidget):
             clipboard.setText(text)
         return text
 
+    def export_report(self, destination: Path | None = None) -> Path | None:
+        """Write a sanitized diagnostics bundle. Returns the path, or None if cancelled."""
+        text = self.report_text()
+        if not text:
+            text = "FortiGate VPN Linux GUI diagnostics export\nNo diagnostic run yet.\n"
+        target = destination
+        if target is None:
+            chosen, selected_filter = QFileDialog.getSaveFileName(
+                self,
+                "Export diagnostics",
+                "fortigate-vpn-linux-gui-diagnostics.zip",
+                "ZIP archive (*.zip);;Text file (*.txt)",
+            )
+            if not chosen:
+                return None
+            target = Path(chosen)
+            if target.suffix.lower() not in {".zip", ".txt"}:
+                if "ZIP" in (selected_filter or ""):
+                    target = target.with_suffix(".zip")
+                else:
+                    target = target.with_suffix(".txt")
+        if target.suffix.lower() == ".zip":
+            return write_diagnostic_zip(text, target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        return target
+
     def report_text(self) -> str:
-        """Return the current sanitized diagnostic report."""
+        """Return the current sanitized diagnostic bundle."""
         run = self._displayed_run
         if run is None:
             run = self._viewmodel.last_run
@@ -223,18 +263,22 @@ class DiagnosticsPage(QWidget):
             return ""
         profile = self.selected_profile()
         probe = self._vpn.helper.probe()
-        return format_diagnostic_report(
+        snapshot = self._vpn.snapshot()
+        return format_diagnostic_bundle(
             run,
             app_version=APP_VERSION,
             os_name=read_os_pretty_name(),
             kernel=kernel_release(),
-            architecture=architecture(),
+            architecture_name=architecture(),
             profile=profile,
-            snapshot=self._vpn.snapshot(),
+            snapshot=snapshot,
             helper_protocol=HELPER_VERSION,
             detected_helper_protocol=probe.helper_version or "",
             helper_path=probe.helper_path or "",
             session_type=desktop_session_type(),
+            log_buffer=self._vpn.log_buffer,
+            openfortivpn_version=snapshot.openfortivpn_version or "",
+            strongswan_version=query_dpkg_version("strongswan"),
         )
 
     def selected_profile(self) -> ConnectionProfile | None:

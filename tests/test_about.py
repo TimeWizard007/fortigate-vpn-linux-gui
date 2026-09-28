@@ -29,6 +29,9 @@ def test_about_page_metadata(qapp) -> None:
     assert "not affiliated with, sponsored by, or endorsed by Fortinet" in FORTINET_DISCLAIMER
     assert "privileged helper" in page.how_it_works_text()
     assert "unprivileged" in page.how_it_works_text()
+    assert page._ssl_backend.text().startswith("SSL backend:")
+    assert page._ipsec_backend.text().startswith("IPsec backend:")
+    assert "psk" not in page._ssl_backend.text().lower()
     page._open_project()
     page._open_license()
     assert opened == [PROJECT_URL, LICENSE_URL]

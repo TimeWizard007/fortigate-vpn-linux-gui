@@ -57,7 +57,7 @@ def test_unexpected_loss_schedules_auto_reconnect() -> None:
     assert snapshot.reconnect_limit == 3
     assert harness.scheduler.delay == 5.0
     messages = _vpn_messages(harness)
-    assert "VPN connection lost." in messages
+    assert "Connection lost." in messages
     assert "Automatic reconnect scheduled in 5 seconds." in messages
     assert "Reconnect attempt 1 of 3." in messages
     harness.scheduler.fire()
@@ -170,7 +170,7 @@ def test_manual_reconnect_uses_same_profile_without_overlap() -> None:
     assert "Disconnecting current VPN session for reconnect." in _vpn_messages(harness)
     assert "Previous VPN session stopped." in _vpn_messages(harness)
     assert _vpn_messages(harness).count("Starting VPN reconnection.") == 1
-    assert _vpn_messages(harness).count("Starting VPN connection.") == 1
+    assert _vpn_messages(harness).count("Starting connection.") == 1
     assert "Disconnect requested." not in _vpn_messages(harness)
     assert "VPN disconnected." not in _vpn_messages(harness)
     assert "VPN reconnected successfully." in _vpn_messages(harness)

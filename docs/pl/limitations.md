@@ -1,7 +1,7 @@
 # Znane ograniczenia
 
-Wersja v1.1.0 dodaje IPsec remote access na bazie klienta SSL VPN, zasobnika,
-opcjonalnego autostartu i opcjonalnego ponawiania połączenia.
+Wersja v1.2.0 to wydanie utwardzające diagnostykę i UX na bazie klienta SSL
+VPN i IPsec z v1.1.0, zasobnika, opcjonalnego autostartu i ponawiania.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -30,13 +30,19 @@ opcjonalnego autostartu i opcjonalnego ponawiania połączenia.
 - Disconnect/Cancel jest bezpieczny w STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED. Przeglądarka nie
   jest zamykana na siłę; listener SAML znika razem z procesem.
-- IPsec to ogólny typ profilu. v1.1.0 uruchamia IKEv1 Aggressive Mode
+- IPsec to ogólny typ profilu. Ta wersja uruchamia IKEv1 Aggressive Mode
   z PSK, XAuth, Mode Config, NAT-T i FortiGate/Cisco Unity split include.
   IKEv2, Main Mode, certyfikat, EAP, SAML/SSO IPsec i adresacja ręczna nie
   są łączone.
 - IPsec używa dystrybucyjnego strongSwan (`charon`/`swanctl`). Nie jest
   dołączany do paczki. Wsparcie Debian 13, Fedora, Windows i macOS nie jest
   deklarowane.
+- Prywatny IPsec nie może współdzielić UDP/500 i UDP/4500 z innym demonem IKE
+  (w tym `strongswan-starter`). Klient wykrywa konflikt i kończy czysto
+  komunikatem **IKE ports in use**; nie zatrzymuje, nie wyłącza i nie zabija
+  obcej usługi. SSL VPN może działać przy włączonym systemowym strongSwan.
+  Paczka `.deb` nigdy nie zatrzymuje `strongswan-starter`. Dwa demony IKE nie
+  mogą jednocześnie zająć tych samych portów UDP.
 - Klucz pre-shared nie trafia do `profiles.json`. Jeśli użytkownik wyrazi
   zgodę, PSK IPsec i/lub hasło XAuth są zapisywane w Secret Service / GNOME
   Keyring pod stabilnym identyfikatorem profilu, w osobnych nazwach usług.
@@ -47,7 +53,7 @@ opcjonalnego autostartu i opcjonalnego ponawiania połączenia.
 - GUI samo nie instaluje pakietów. Instalacja na Ubuntu 24.04 używa
   pakietu `.deb` `fortigate-vpn-linux-gui`.
 - Logi są tylko w pamięci i są ocenzurowane.
-- Skopiowane raporty diagnostyczne są ocenzurowane i nie zawierają sekretów.
+- Skopiowane i eksportowane raporty diagnostyczne są ocenzurowane i nie zawierają sekretów.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.
 - Profile to lokalny JSON per-użytkownik.
 - Tylko Linux; wspieraną platformą wydania jest Ubuntu 24.04 LTS amd64.

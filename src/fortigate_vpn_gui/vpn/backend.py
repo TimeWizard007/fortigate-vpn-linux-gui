@@ -37,7 +37,12 @@ from fortigate_vpn_gui.vpn.capabilities import (
     OpenfortivpnCapabilities,
     format_saml_unsupported_message,
 )
-from fortigate_vpn_gui.vpn.classify import OutputHint, classify_output
+from fortigate_vpn_gui.vpn.classify import (
+    IKE_PORT_CONFLICT_MESSAGE,
+    OutputHint,
+    classify_output,
+    user_message_for_hint,
+)
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
 from fortigate_vpn_gui.vpn.log_buffer import LogBuffer, LogLevel
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
@@ -77,8 +82,8 @@ _SAML_AUTH_MESSAGE = (
     "SAML sign-in did not complete. Finish authentication in the system browser "
     "or try connecting again."
 )
-_START_MESSAGE = "openfortivpn failed to start. See Logs for details."
-_EXIT_MESSAGE = "The VPN process ended unexpectedly. See Logs for details."
+_EXIT_MESSAGE = "The VPN process ended unexpectedly. See Diagnostics for details."
+_START_MESSAGE = "The VPN process failed to start. See Diagnostics for details."
 _INVALID_PROFILE_MESSAGE = "Select a valid connection profile before connecting."
 _BUSY_MESSAGE = "A VPN operation is already in progress."
 _TIMEOUT_MESSAGE = (
@@ -115,9 +120,10 @@ _CERT_CHANGED_MESSAGE = (
     "was not replaced automatically."
 )
 _CONNECTION_LOST_MESSAGE = "VPN connection was lost."
-_PPP_MESSAGE = "The VPN tunnel could not configure PPP. See Logs for details."
-_ROUTE_MESSAGE = "The VPN tunnel could not update routes. See Logs for details."
-_DNS_MESSAGE = "The VPN tunnel could not update DNS. See Logs for details."
+_PPP_MESSAGE = "The VPN tunnel could not configure PPP. See Diagnostics for details."
+_ROUTE_MESSAGE = "The VPN tunnel could not update routes. See Diagnostics for details."
+_DNS_MESSAGE = "VPN DNS could not be applied. See Diagnostics for details."
+_IPSEC_NEGOTIATION_MESSAGE = "IPsec negotiation failed. See Diagnostics for details."
 _IPSEC_MISSING_MESSAGE = (
     "strongSwan was not found. Install the distribution strongSwan packages "
     "(strongswan, strongswan-swanctl, libcharon-extra-plugins, "
@@ -129,8 +135,8 @@ _IPSEC_DAEMON_START_MESSAGE = (
     "for the daemon output."
 )
 _IPSEC_UNSUPPORTED_MESSAGE = (
-    "This IPsec combination is not implemented yet. v1.1.0 supports IKEv1 "
-    "Aggressive Mode with PSK, XAuth, and Mode Config."
+    "This IPsec combination is not implemented yet. This release connects "
+    "IKEv1 Aggressive Mode with PSK, XAuth, and Mode Config."
 )
 _IPSEC_CREDENTIALS_MESSAGE = (
     "IPsec connect needs a pre-shared key and XAuth username/password. "
@@ -219,6 +225,8 @@ class VpnBackend:
         self._cert_error_emitted = False
         self._tunnel_established_logged = False
         self._gateway_connected_logged = False
+        self._ike_established_logged = False
+        self._child_sa_logged = False
         self._listener_logged = False
         self._disconnect_logged = False
         self._last_disconnect_reason: str | None = None
@@ -604,6 +612,7 @@ class VpnBackend:
                 pass
         if already:
             return
+        self._app_log("Cleanup completed.")
         self._notify(VpnEvent("state", snapshot))
         if callback is not None:
             # May run on the GUI thread (idle shutdown) or on a helper/timeout
@@ -698,6 +707,8 @@ class VpnBackend:
             self._cert_error_emitted = False
             self._tunnel_established_logged = False
             self._gateway_connected_logged = False
+            self._ike_established_logged = False
+            self._child_sa_logged = False
             self._listener_logged = False
             self._disconnect_logged = False
             self._failing = False
@@ -717,7 +728,7 @@ class VpnBackend:
             skip_start_log = self._skip_start_connection_log
             self._skip_start_connection_log = False
         if not skip_start_log:
-            self._app_log("Starting VPN connection.")
+            self._app_log("Starting connection.")
         mode = "SAML/SSO" if profile.use_sso else "standard"
         if profile.is_ipsec():
             self._log.append(
@@ -810,16 +821,30 @@ class VpnBackend:
         hint = classify_output(text)
         snapshots: list[VpnSnapshot] = []
         log_gateway = False
+        log_ike = False
+        log_child = False
         with self._lock:
             if hint is not OutputHint.NONE:
                 self._output_hint = hint
             if hint is OutputHint.GATEWAY_CONNECTED and not self._gateway_connected_logged:
                 self._gateway_connected_logged = True
                 log_gateway = True
+            if hint is OutputHint.IKE_ESTABLISHED and not self._ike_established_logged:
+                self._ike_established_logged = True
+                log_ike = True
+            if hint is OutputHint.CONNECTED and not self._child_sa_logged:
+                ipsec = profile is not None and profile.is_ipsec()
+                if ipsec:
+                    self._child_sa_logged = True
+                    log_child = True
             if hint is OutputHint.CONNECTED:
                 snapshots.extend(self._mark_connected_locked())
         if log_gateway:
             self._app_log("Connected to gateway.")
+        if log_ike:
+            self._app_log("IKE established.")
+        if log_child:
+            self._app_log("CHILD_SA established.")
         for item in snapshots:
             self._notify(VpnEvent("state", item))
 
@@ -891,7 +916,7 @@ class VpnBackend:
         if snapshot is not None:
             if not self._saml_waiting_logged:
                 self._saml_waiting_logged = True
-                self._app_log("Waiting for SAML authentication.")
+                self._app_log("Waiting for authentication.")
             self._notify(VpnEvent("state", snapshot))
             self._arm_saml_timeout()
 
@@ -904,7 +929,7 @@ class VpnBackend:
             else:
                 snapshot = None
         if snapshot is not None:
-            self._app_log("Authenticated.")
+            self._app_log("Authentication succeeded.")
             self._notify(VpnEvent("state", snapshot))
 
     def _handle_helper_error(self, event: HelperEvent) -> None:
@@ -929,7 +954,7 @@ class VpnBackend:
             snapshots.append(self._snapshot_locked())
             if not self._tunnel_established_logged:
                 self._tunnel_established_logged = True
-                self._app_log("VPN tunnel established.")
+                self._app_log("VPN connected.")
                 reconnected = self._reconnect_attempt > 0 or self._was_reconnect
                 self._reconnect_attempt = 0
                 self._reconnect_pending = False
@@ -960,7 +985,7 @@ class VpnBackend:
         self._notify(VpnEvent("state", snapshot))
         if not self._saml_waiting_logged:
             self._saml_waiting_logged = True
-            self._app_log("Waiting for SAML authentication.")
+            self._app_log("Waiting for authentication.")
         self._arm_saml_timeout()
         self._app_log("Opening browser for SAML sign-in.")
         self._log.append(
@@ -1250,8 +1275,9 @@ class VpnBackend:
             snapshot = self._snapshot_locked()
         if disconnected and not reconnecting:
             self._app_log("VPN disconnected.")
+            self._app_log("Cleanup completed.")
         if lost:
-            self._app_log("VPN connection lost.", severity=LogLevel.ERROR)
+            self._app_log("Connection lost.", severity=LogLevel.ERROR)
         self._notify(VpnEvent("state", snapshot, certificate=snapshot.presented_certificate))
         if error is not None:
             self._notify(
@@ -1280,6 +1306,7 @@ class VpnBackend:
         presented: CertificateInfo | None,
         pinned: str | None,
     ) -> tuple[VpnErrorCode, str]:
+        specific = user_message_for_hint(hint)
         if hint is OutputHint.CERTIFICATE or presented is not None:
             if pinned and presented is not None and pinned != presented.sha256:
                 return VpnErrorCode.CERTIFICATE_CHANGED, _CERT_CHANGED_MESSAGE
@@ -1292,11 +1319,48 @@ class VpnBackend:
             return VpnErrorCode.ROUTE_FAILED, _ROUTE_MESSAGE
         if hint is OutputHint.DNS_FAILURE:
             return VpnErrorCode.DNS_FAILED, _DNS_MESSAGE
+        if hint is OutputHint.DNS_RESOLUTION:
+            return VpnErrorCode.DNS_RESOLUTION_FAILED, specific or _DNS_MESSAGE
+        if hint is OutputHint.GATEWAY_UNREACHABLE:
+            return VpnErrorCode.GATEWAY_UNREACHABLE, (
+                specific or "The VPN gateway could not be reached."
+            )
+        if hint is OutputHint.IKE_TIMEOUT:
+            return VpnErrorCode.IKE_NEGOTIATION_TIMEOUT, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.PSK_FAILURE:
+            return VpnErrorCode.IPSEC_PSK_FAILURE, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.XAUTH_FAILURE:
+            return VpnErrorCode.IPSEC_XAUTH_FAILURE, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.EAP_FAILURE:
+            return VpnErrorCode.AUTH_FAILURE, specific or _AUTH_MESSAGE
+        if hint is OutputHint.PROPOSAL_MISMATCH:
+            return VpnErrorCode.IPSEC_PROPOSAL_MISMATCH, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.CHILD_SA_FAILURE:
+            return VpnErrorCode.IPSEC_CHILD_SA_FAILED, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.VIP_FAILURE:
+            return VpnErrorCode.IPSEC_VIP_FAILED, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.CHARON_FAILURE:
+            return VpnErrorCode.IPSEC_DAEMON_START_FAILED, specific or _IPSEC_DAEMON_START_MESSAGE
+        if hint is OutputHint.IKE_PORT_CONFLICT:
+            return VpnErrorCode.IKE_PORT_IN_USE, specific or IKE_PORT_CONFLICT_MESSAGE
+        if hint is OutputHint.SWANCTL_FAILURE:
+            return VpnErrorCode.IPSEC_SWANCTL_FAILED, specific or _IPSEC_NEGOTIATION_MESSAGE
+        if hint is OutputHint.IPSEC_NEGOTIATION:
+            return VpnErrorCode.IPSEC_NEGOTIATION_FAILED, _IPSEC_NEGOTIATION_MESSAGE
         if hint is OutputHint.AUTH_FAILURE or previous is ConnectionState.WAITING_FOR_AUTH:
             if previous is ConnectionState.WAITING_FOR_AUTH:
                 return VpnErrorCode.SAML_FAILED, _SAML_AUTH_MESSAGE
+            if hint is OutputHint.SAML_REJECTED:
+                return VpnErrorCode.SAML_FAILED, "SAML authentication was rejected."
             return VpnErrorCode.AUTH_FAILURE, _AUTH_MESSAGE
+        if hint is OutputHint.SAML_REJECTED:
+            return VpnErrorCode.SAML_FAILED, "SAML authentication was rejected."
         if code != 0:
+            if previous in {
+                ConnectionState.CONNECTING,
+                ConnectionState.STARTING,
+            } and (self._profile is not None and self._profile.is_ipsec()):
+                return VpnErrorCode.IPSEC_NEGOTIATION_FAILED, _IPSEC_NEGOTIATION_MESSAGE
             return VpnErrorCode.VPN_PROCESS_FAILED, _EXIT_MESSAGE
         return VpnErrorCode.UNEXPECTED_EXIT, _EXIT_MESSAGE
 
@@ -1471,6 +1535,7 @@ _CODE_MAP = {
     "VPN_PROCESS_FAILED": VpnErrorCode.VPN_PROCESS_FAILED,
     "IPSEC_BACKEND_MISSING": VpnErrorCode.IPSEC_BACKEND_MISSING,
     "IPSEC_DAEMON_START_FAILED": VpnErrorCode.IPSEC_DAEMON_START_FAILED,
+    "IKE_PORT_IN_USE": VpnErrorCode.IKE_PORT_IN_USE,
     "UNSUPPORTED_IPSEC": VpnErrorCode.IPSEC_UNSUPPORTED,
     "INVALID_CREDENTIALS": VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED,
 }
@@ -1489,6 +1554,7 @@ def _helper_error_to_vpn(exc: HelperError) -> tuple[VpnErrorCode, str]:
         VpnErrorCode.ALREADY_BUSY: _BUSY_MESSAGE,
         VpnErrorCode.IPSEC_BACKEND_MISSING: _IPSEC_MISSING_MESSAGE,
         VpnErrorCode.IPSEC_DAEMON_START_FAILED: _IPSEC_DAEMON_START_MESSAGE,
+        VpnErrorCode.IKE_PORT_IN_USE: IKE_PORT_CONFLICT_MESSAGE,
         VpnErrorCode.IPSEC_UNSUPPORTED: _IPSEC_UNSUPPORTED_MESSAGE,
         VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED: _IPSEC_CREDENTIALS_MESSAGE,
     }

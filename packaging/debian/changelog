@@ -1,3 +1,13 @@
+fortigate-vpn-linux-gui (1.2.0-1) noble; urgency=medium
+
+  * Hardening, diagnostics export, connection failure UX, and IPsec leftover recovery.
+  * Application IPsec uses a private VICI socket and refuses to start when
+    another IKE daemon owns UDP/500 or UDP/4500; it does not stop system
+    strongSwan.
+  * Helper protocol remains 0.8.0.
+
+ -- TimeWizard007 <mwi@mwatkowski.eu>  Mon, 28 Sep 2026 07:00:00 +0200
+
 fortigate-vpn-linux-gui (1.1.0-1) noble; urgency=medium
 
   * IPsec remote access via distro strongSwan (not bundled).

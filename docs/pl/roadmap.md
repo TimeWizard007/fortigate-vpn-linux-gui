@@ -58,7 +58,18 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Protokół pomocnika 0.8.0; paczka Debian 1.1.0-1
 - Wspierana platforma nadal tylko Ubuntu 24.04 LTS amd64
 
-## Później (nie deklarowane w v1.1.0)
+## v1.2.0 — utwardzenie, diagnostyka, UX
+
+- Ostrożna klasyfikacja błędów na stronie Connection
+- Kopiowanie i eksport diagnostyki (ocenzurowany tekst/ZIP)
+- Wykrywanie pozostałości IPsec i sprzątanie tylko stanu należącego do aplikacji
+- IPsec aplikacji odizolowany od systemowego strongSwan (prywatne VICI; konflikt
+  portów IKE kończy się **IKE ports in use**; bez automatycznego zatrzymywania
+  `strongswan-starter`)
+- UX profilu/sekretów (typ VPN, zapisane bezpiecznie / nie zapisane / niedostępne)
+- Aplikacja 1.2.0; protokół pomocnika nadal 0.8.0; paczka Debian 1.2.0-1
+
+## Później (nie deklarowane w v1.2.0)
 
 - IKEv1 Main Mode, IKEv2, uwierzytelnianie certyfikatem, EAP, SAML/SSO IPsec
 - Adresacja ręczna IPsec

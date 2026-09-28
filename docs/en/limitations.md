@@ -1,7 +1,7 @@
 # Known limitations
 
-v1.1.0 adds FortiGate IPsec remote access on top of the SSL VPN desktop
-client, tray, optional autostart, and optional auto-reconnect.
+v1.2.0 is a hardening, diagnostics, and UX release on the v1.1.0 SSL and
+IPsec clients, tray, optional autostart, and optional auto-reconnect.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing
@@ -28,13 +28,19 @@ client, tray, optional autostart, and optional auto-reconnect.
 - Disconnect/Cancel is safe during STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED. The browser is
   not force-closed; the SAML listener goes away with the process.
-- IPsec is a generic profile type. v1.1.0 starts IKEv1 Aggressive Mode with
+- IPsec is a generic profile type. This release starts IKEv1 Aggressive Mode with
   PSK, XAuth, Mode Config, NAT-T, and FortiGate/Cisco Unity split include.
   IKEv2, Main Mode, certificate authentication, EAP, IPsec SAML/SSO, and
   manual-address IPsec are not connected.
 - IPsec uses distribution strongSwan (`charon`/`swanctl`). It is not bundled.
   Ubuntu 24.04 packages it. Debian 13, Fedora, Windows, and macOS are not
   claimed.
+- Application-owned IPsec cannot share UDP/500 and UDP/4500 with another IKE
+  daemon (including `strongswan-starter`). The client detects that conflict
+  and fails cleanly with **IKE ports in use**; it does not stop, disable, or
+  kill the unrelated service. SSL VPN can still connect while system
+  strongSwan is running. The `.deb` never stops `strongswan-starter`. Two
+  IKE daemons cannot both own the same UDP ports.
 - Pre-shared keys are not stored in `profiles.json`. When the user opts in,
   the IPsec PSK and/or XAuth password may be saved in the desktop Secret
   Service / GNOME Keyring, keyed by profile id, in separate Secret Service
@@ -44,8 +50,8 @@ client, tray, optional autostart, and optional auto-reconnect.
 - Packages are never installed automatically by the GUI. Ubuntu 24.04
   installation uses the `fortigate-vpn-linux-gui` `.deb`.
 - Logs are in-memory only and are redacted. They are not written to disk.
-- Copied diagnostic reports are sanitized and must not contain secrets. They
-  are not a substitute for the Logs page.
+- Copied and exported diagnostic reports are sanitized and must not contain
+  secrets. Inspect an export before attaching it to a GitHub issue.
 - The full SAML URL is not shown; copy uses origin+path only.
 - Profiles are local per-user JSON. They are not synced and not encrypted
   beyond ordinary home-directory permissions.

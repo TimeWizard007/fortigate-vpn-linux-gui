@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fortigate-vpn-linux-gui"
-version = "1.1.0"
+version = "1.2.0"
 description = "Native Linux desktop GUI client for FortiGate SSL VPN and IPsec"
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }

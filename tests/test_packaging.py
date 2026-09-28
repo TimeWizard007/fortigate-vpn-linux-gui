@@ -24,8 +24,8 @@ from fortigate_vpn_gui.metadata import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_application_version_is_1_1_0() -> None:
-    assert __version__ == "1.1.0"
+def test_application_version_is_1_2_0() -> None:
+    assert __version__ == "1.2.0"
 
 
 def test_helper_protocol_is_0_8_0() -> None:
@@ -98,7 +98,8 @@ def test_launcher_script_has_no_shell_injection() -> None:
 def test_debian_control_metadata() -> None:
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "Package: fortigate-vpn-linux-gui" in control
-    assert "Version: 1.1.0-1" in control
+    assert "Version: 1.2.0-1" in control
+    assert "1.1.0-1" not in control.split("Depends:", 1)[0]
     assert "1.0.0-2" not in control
     assert "Architecture: amd64" in control
     assert "Depends:" in control
@@ -120,12 +121,30 @@ def test_debian_control_metadata() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "keyring" in pyproject
     changelog = (ROOT / "packaging" / "debian" / "changelog").read_text(encoding="utf-8")
-    assert changelog.startswith("fortigate-vpn-linux-gui (1.1.0-1)")
+    assert changelog.startswith("fortigate-vpn-linux-gui (1.2.0-1)")
     script = (ROOT / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
-    assert 'VERSION="1.1.0"' in script
+    assert 'VERSION="1.2.0"' in script
     assert 'REVISION="1"' in script
     assert "import keyring" in script
     assert 'OPENFORTIVPN_VERSION="1.24.1"' in script
+    assert "apparmor/usr.sbin.swanctl.local" in script
+
+
+def test_apparmor_local_snippet_is_private_vici_only() -> None:
+    snippet = (ROOT / "packaging" / "apparmor" / "usr.sbin.swanctl.local").read_text(
+        encoding="utf-8"
+    )
+    assert "/run/charon.fvl.vici rw," in snippet
+    assert "/run/charon.fvl.conf r," in snippet
+    assert "/run/charon.vici rw" not in snippet
+    postinst = (ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
+    assert "BEGIN fortigate-vpn-linux-gui vici" in postinst
+    postrm = (ROOT / "packaging" / "debian" / "postrm").read_text(encoding="utf-8")
+    assert "BEGIN fortigate-vpn-linux-gui vici" in postrm
+    for text in (postinst, postrm):
+        assert "strongswan-starter" not in text
+        assert "systemctl" not in text
+        assert "charon.pid" not in text
 
 
 def test_dev_helper_install_script_keeps_polkit_path() -> None:

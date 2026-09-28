@@ -82,6 +82,12 @@ class IpsecCredentialsDialog(QDialog):
         psk_layout.addWidget(self._psk, 1)
         psk_layout.addWidget(self._psk_toggle)
 
+        self._psk_replace = QPushButton("Use a different pre-shared key")
+        self._psk_replace.setObjectName("ipsecPskReplace")
+        self._psk_replace.clicked.connect(self._on_replace_psk)
+        self._password_replace = QPushButton("Use a different password")
+        self._password_replace.setObjectName("ipsecPasswordReplace")
+        self._password_replace.clicked.connect(self._on_replace_password)
         self._psk_saved = QLabel(_PSK_SAVED)
         self._psk_saved.setObjectName("ipsecPskSavedHint")
         self._psk_saved.setWordWrap(True)
@@ -129,6 +135,7 @@ class IpsecCredentialsDialog(QDialog):
             self._psk_needed.hide()
         else:
             self._psk_saved.hide()
+            self._psk_replace.hide()
 
         if can_save_password:
             self._save_password.setEnabled(True)
@@ -146,6 +153,7 @@ class IpsecCredentialsDialog(QDialog):
             self._password_status.hide()
         else:
             self._password_saved.hide()
+            self._password_replace.hide()
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -156,10 +164,12 @@ class IpsecCredentialsDialog(QDialog):
         layout.addWidget(heading)
         layout.addWidget(intro)
         layout.addWidget(self._psk_saved)
+        layout.addWidget(self._psk_replace)
         layout.addWidget(self._psk_needed)
         layout.addLayout(form)
         layout.addWidget(self._remember_username)
         layout.addWidget(self._password_saved)
+        layout.addWidget(self._password_replace)
         layout.addWidget(self._save_password)
         layout.addWidget(self._password_status)
         layout.addWidget(buttons)
@@ -177,6 +187,28 @@ class IpsecCredentialsDialog(QDialog):
         if not psk or not username or not password:
             return None
         return IpsecCredentials(psk=psk, username=username, password=password)
+
+    def _on_replace_psk(self) -> None:
+        self._stored_psk = ""
+        self._psk.clear()
+        self._psk.show()
+        self._psk_toggle.show()
+        self._psk_label.show()
+        row = self.findChild(QWidget, "ipsecPskRow")
+        if row is not None:
+            row.show()
+        self._psk_saved.hide()
+        self._psk_replace.hide()
+        self._psk_needed.show()
+
+    def _on_replace_password(self) -> None:
+        self._stored_password = ""
+        self._password.clear()
+        self._password.show()
+        self._password_label.show()
+        self._password_saved.hide()
+        self._password_replace.hide()
+        self._save_password.setChecked(False)
 
     def _on_psk_reveal(self, checked: bool) -> None:
         if checked:

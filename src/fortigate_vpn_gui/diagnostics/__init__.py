@@ -4,5 +4,5 @@
 Collects troubleshooting information that is safe to share: application
 version, helper and polkit status, selected profile metadata (never secrets),
 openfortivpn presence, DNS/routing/TCP reachability, and tunnel state.
-Copied reports are sanitized.
+Copied reports and Export diagnostics are sanitized.
 """

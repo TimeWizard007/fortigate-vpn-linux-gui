@@ -122,11 +122,24 @@ path (`/usr/lib/ipsec/charon` or `/usr/libexec/ipsec/charon`) and a runtime
 `strongswan.conf` selected with the `STRONGSWAN_CONF` environment variable
 (Ubuntu charon does not accept `--conf`). Ubuntu's charon AppArmor profile
 cannot read that file from `/tmp`; the live helper writes it to
-`/run/charon.fvl.conf` and the private vici socket to `/run/charon.vici`
-(the only vici path `swanctl` AppArmor allows). Ubuntu 5.9.13 `swanctl` has no
-`--unix`; it uses the compiled VICI default `unix:///var/run/charon.vici`
-(`/run/charon.vici`) unless `swanctl.socket` is set. The helper therefore does
-not pass a socket CLI option. Configuration is loaded with
+`/run/charon.fvl.conf`, the private VICI socket to `/run/charon.fvl.vici`,
+and a pid file hint to `/run/charon.fvl.pid`. Ubuntu 5.9.13 `swanctl` has no
+`--unix`; it selects the VICI URI from `swanctl.socket`, then
+`swanctl.plugins.vici.socket`, then the compiled default
+`unix:///var/run/charon.vici` (`/run/charon.vici`). The helper therefore
+runs every `swanctl` command with `STRONGSWAN_CONF` pointing at
+`/etc/swanctl/fortigate-vpn-linux-gui/vici-client.conf`, whose
+`swanctl.socket` is the private endpoint. Production `swanctl` refuses to
+run without that private `STRONGSWAN_CONF`, so credentials cannot be loaded
+into the system charon. The package ships an AppArmor local snippet so
+distro `swanctl` may read `/run/charon.fvl.conf` and connect to
+`/run/charon.fvl.vici`; it does not grant access to `/run/charon.vici`.
+Ubuntu charon 5.9.13 still uses the compiled pid path `/var/run/charon.pid`;
+the application never unlinks that file or `/run/charon.vici`. Two IKE
+daemons cannot both bind UDP/500 and UDP/4500. If an unrelated service
+already owns those ports, IPsec fails before secrets are written with a
+port-conflict error; the helper never stops `strongswan-starter` or kills
+an unrelated charon. Configuration is loaded with
 `swanctl --load-all --file /etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf`
 (not `conf.d`, and not by overwriting `/etc/swanctl/swanctl.conf`). Secrets are
 in `secrets.conf` (mode 0600), included from `swanctl.conf`, and wiped on
@@ -146,7 +159,7 @@ strongSwan is a distribution **Depends** on the Ubuntu package
 `libcharon-extauth-plugins`). It is not bundled. PATH is not searched for
 execution. `/etc/strongswan.conf` is not modified.
 
-v1.1.0 starts IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T with
+This release starts IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T with
 FortiGate/Cisco Unity split include. Other combinations may be stored in the
 profile and are rejected at connect.
 
@@ -220,7 +233,7 @@ force-closed.
 Structured failure reasons on FAILED include `PRIVILEGE_DENIED`,
 `HELPER_NOT_AVAILABLE`, `HELPER_STARTUP_FAILED`, `CERTIFICATE_UNTRUSTED`,
 `CERTIFICATE_CHANGED`, `SAML_FAILED`, `VPN_PROCESS_FAILED`, `CONNECTION_LOST`,
-`PPP_FAILED`, `ROUTE_FAILED`, and `DNS_FAILED`.
+`PPP_FAILED`, `ROUTE_FAILED`, `DNS_FAILED`, and `IKE_PORT_IN_USE`.
 
 The browser is opened only after a validated authentication URL is parsed,
 and only once, in the unprivileged GUI process. The SAML timeout is cancelled

@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-28
+
+### Added
+
+- Human-readable Connection-page failures for SSL and IPsec when backend output proves the cause
+- **Copy diagnostics** and **Export diagnostics** (text or ZIP) for GitHub issues
+- IPsec leftover detection in Diagnostics and owned-state cleanup before the next connect
+- Profile credential status: stored securely, not stored, or secure storage unavailable
+- Forget saved PSK / XAuth password without revealing stored secrets
+- About page backend version lines for packaged openfortivpn and distro strongSwan
+
+### Changed
+
+- Application version is 1.2.0; helper protocol remains 0.8.0; Debian package is 1.2.0-1
+- IPsec profile editor groups: Connection, Authentication, IKE / Phase 1, Child SA / Phase 2, Advanced
+- Lifecycle logs use Starting connection / VPN connected / Cleanup completed (CHILD_SA still required for IPsec connected)
+- Diagnostics export reuses centralized redaction (PSK, passwords, cookies, tokens, private keys, helper requests)
+
+### Security
+
+- GUI still never runs as root; helper is not setuid; helper protocol is unchanged
+- Diagnostics export must not contain PSK, passwords, keyring values, SAML cookies/tokens, or private keys
+- Leftover IPsec recovery stops only charon bound to `/run/charon.fvl.conf`
+  and never treats `/run/charon.pid`, `/run/charon.vici`, or occupied UDP/500
+  as proof of ownership. Unrelated charon is never killed.
+- IPsec `swanctl` talks only to the application VICI socket
+  `/run/charon.fvl.vici` via `STRONGSWAN_CONF`; it never uses the system
+  default `unix:///var/run/charon.vici`.
+
+### Fixed
+
+- IPsec no longer binds the system VICI socket or injects PSK/XAuth into a
+  running `strongswan-starter` charon
+- Occupied UDP/500 or UDP/4500 fails with an IKE port-conflict message instead
+  of an authentication or negotiation error
+
 ## [1.1.0] - 2026-09-14
 
 ### Added
@@ -295,7 +331,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[1.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...HEAD
+[1.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.7.1...v0.8.0

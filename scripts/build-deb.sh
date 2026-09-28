@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="fortigate-vpn-linux-gui"
-VERSION="1.1.0"
+VERSION="1.2.0"
 REVISION="1"
 ARCH="amd64"
 DEB_VERSION="${VERSION}-${REVISION}"
@@ -166,6 +166,9 @@ chmod 0755 "${STAGING}${HELPER_PATH}"
 
 install -m 0644 "${ROOT}/packaging/polkit/com.fortigate-vpn-linux-gui.policy" \
   "${STAGING}/usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy"
+install -d -m 0755 "${STAGING}/usr/share/fortigate-vpn-linux-gui/apparmor"
+install -m 0644 "${ROOT}/packaging/apparmor/usr.sbin.swanctl.local" \
+  "${STAGING}/usr/share/fortigate-vpn-linux-gui/apparmor/usr.sbin.swanctl.local"
 install -m 0644 "${ROOT}/packaging/desktop/fortigate-vpn-linux-gui.desktop" \
   "${STAGING}/usr/share/applications/fortigate-vpn-linux-gui.desktop"
 install -m 0644 "${ROOT}/src/fortigate_vpn_gui/resources/icons/fortigate-vpn-linux-gui.svg" \

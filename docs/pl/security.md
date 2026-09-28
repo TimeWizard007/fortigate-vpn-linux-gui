@@ -47,6 +47,9 @@ użytkownika; nigdy w `profiles.json` i bez zapisu jawnego. Skopiowane raporty
 diagnostyczne są ocenzurowane i nie mogą zawierać haseł, tokenów, ciasteczek
 ani ładunków SAML. Otwarcie Diagnostics nie uruchamia pkexec.
 `trusted_cert_sha256` to publiczny pin certyfikatu, nie hasło.
+Poświadczenia IPsec aplikacji ładują się tylko do prywatnego charon przez
+`/run/charon.fvl.vici`, nigdy do systemowego `/run/charon.vici`. Odzyskiwanie
+pozostałości nie zabija obcego charon i nie usuwa `/run/charon.pid`.
 
 ## Zaufanie
 
@@ -70,3 +73,6 @@ automatycznie.
 - Autostart jest tylko na poziomie użytkownika (`~/.config/autostart/`);
   brak autostartu systemowego i brak automatycznego łączenia VPN przy
   logowaniu.
+- Paczka nie zatrzymuje, nie wyłącza i nie rekonfiguruje obcej instalacji
+  strongSwan. IPsec aplikacji używa prywatnego gniazda VICI i kończy się
+  błędem, gdy UDP/500 lub UDP/4500 jest już zajęte.

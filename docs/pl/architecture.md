@@ -81,13 +81,19 @@ paczka dostarcza prywatny **1.24.1**.
 IPsec to drugi backend pomocnika. GUI nie uruchamia charon ani swanctl.
 Prywatny charon dostaje wygenerowany `strongswan.conf` przez `STRONGSWAN_CONF`
 (Ubuntu charon nie przyjmuje `--conf`; AppArmor czyta ten plik z
-`/run/charon.fvl.conf`, gniazdo vici to `/run/charon.vici`). Ubuntu 5.9.13
-`swanctl` nie ma `--unix`; ładuje
-`/etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf` przez `--load-all --file`
-i łączy się z domyślnym gniazdem VICI `/run/charon.vici`. strongSwan pochodzi
+`/run/charon.fvl.conf`, prywatne gniazdo VICI to `/run/charon.fvl.vici`).
+Ubuntu 5.9.13 `swanctl` nie ma `--unix`; pomocnik ustawia `STRONGSWAN_CONF`
+na `/etc/swanctl/fortigate-vpn-linux-gui/vici-client.conf` z
+`swanctl.socket = unix:///run/charon.fvl.vici` i nigdy nie używa
+domyślnego gniazda systemu `/run/charon.vici`. Pakiet dodaje lokalny
+fragment AppArmor dla tego gniazda. Dwa demony IKE nie mogą jednocześnie
+zająć UDP/500 i UDP/4500; przy konflikcie IPsec kończy się błędem portów
+i nie zatrzymuje `strongswan-starter`. Konfiguracja jest ładowana z
+`/etc/swanctl/fortigate-vpn-linux-gui/swanctl.conf` przez `--load-all --file`.
+strongSwan pochodzi
 z dystrybucji (`Depends`: `strongswan`, `strongswan-swanctl`,
 `libcharon-extra-plugins`, `libcharon-extauth-plugins`) i nie jest
-dołączany do paczki. `/etc/strongswan.conf` nie jest zmieniany. v1.1.0 łączy
+dołączany do paczki. `/etc/strongswan.conf` nie jest zmieniany. Ta wersja łączy
 IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T z FortiGate/Cisco Unity
 split include. Sekrety idą
 osobną operacją `credentials` i plikiem 0600, nigdy przez argv. PSK i hasło
@@ -127,7 +133,7 @@ Listener SAML znika razem z procesem; przeglądarka nie jest zamykana na siłę.
 Powody błędu przy FAILED obejmują m.in. `PRIVILEGE_DENIED`,
 `HELPER_NOT_AVAILABLE`, `CERTIFICATE_UNTRUSTED`, `CERTIFICATE_CHANGED`,
 `SAML_FAILED`, `VPN_PROCESS_FAILED`, `CONNECTION_LOST`, `PPP_FAILED`,
-`ROUTE_FAILED` i `DNS_FAILED`.
+`ROUTE_FAILED`, `DNS_FAILED` i `IKE_PORT_IN_USE`.
 
 Przeglądarka otwierana jest tylko raz, w nieuprzywilejowanym procesie GUI.
 Timeout SAML jest anulowany po udanym logowaniu, Disconnect i oczekiwaniu na

@@ -1,6 +1,29 @@
 #!/bin/sh
 set -e
 
+AA_LOCAL="/etc/apparmor.d/local/usr.sbin.swanctl"
+AA_SNIPPET="/usr/share/fortigate-vpn-linux-gui/apparmor/usr.sbin.swanctl.local"
+AA_PROFILE="/etc/apparmor.d/usr.sbin.swanctl"
+
+_install_swanctl_apparmor() {
+  if [ ! -f "${AA_SNIPPET}" ]; then
+    return 0
+  fi
+  mkdir -p /etc/apparmor.d/local
+  if [ ! -f "${AA_LOCAL}" ]; then
+    touch "${AA_LOCAL}"
+  fi
+  if grep -q "BEGIN fortigate-vpn-linux-gui vici" "${AA_LOCAL}" 2>/dev/null; then
+    :
+  else
+    printf '\n' >> "${AA_LOCAL}"
+    cat "${AA_SNIPPET}" >> "${AA_LOCAL}"
+  fi
+  if command -v apparmor_parser >/dev/null 2>&1 && [ -f "${AA_PROFILE}" ]; then
+    apparmor_parser -r "${AA_PROFILE}" >/dev/null 2>&1 || true
+  fi
+}
+
 case "$1" in
   configure)
     if command -v update-desktop-database >/dev/null 2>&1; then
@@ -9,6 +32,7 @@ case "$1" in
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
       gtk-update-icon-cache -f /usr/share/icons/hicolor
     fi
+    _install_swanctl_apparmor
     ;;
 esac
 

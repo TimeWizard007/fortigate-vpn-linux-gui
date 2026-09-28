@@ -28,6 +28,7 @@ _EXTRA_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(Authorization:\s*(?:Bearer|Basic)\s+)\S+",
         re.IGNORECASE,
     ),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
 )
 
 _JSON_SECRET_RE = re.compile(
@@ -52,7 +53,10 @@ def sanitize_diagnostic_text(text: str | None, *, limit: int = MAX_OUTPUT_CHARS)
     redacted = _HELPER_REQUEST_RE.sub("[redacted helper request]", redacted)
     redacted = _JSON_SECRET_RE.sub(rf"\g<prefix>{_REDACTED}\g<suffix>", redacted)
     for pattern in _EXTRA_PATTERNS:
-        redacted = pattern.sub(rf"\g<1>{_REDACTED}", redacted)
+        if pattern.groups == 0:
+            redacted = pattern.sub("[redacted private key]", redacted)
+        else:
+            redacted = pattern.sub(rf"\g<1>{_REDACTED}", redacted)
     if len(redacted) > limit:
         return redacted[:limit].rstrip() + "…"
     return redacted

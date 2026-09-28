@@ -16,6 +16,7 @@ from pathlib import Path
 from fortigate_vpn_gui import __version__ as APP_VERSION
 from fortigate_vpn_gui.diagnostics.ipsec_status import (
     UNUSABLE_SELECTOR_WARNING,
+    count_xfrm_src_lines,
     is_gateway_only_remote_ts,
     local_selectors,
     parse_xfrm_policies,
@@ -50,6 +51,12 @@ from fortigate_vpn_gui.helper.executables import (
     resolve_approved_executable,
 )
 from fortigate_vpn_gui.helper.handshake import is_valid_helper_version, parse_helper_hello_output
+from fortigate_vpn_gui.helper.ike_ports import (
+    IkePortReport,
+    format_ike_port_lines,
+    inspect_ike_udp_ports,
+)
+from fortigate_vpn_gui.helper.ipsec_runtime import inspect_owned_ipsec_state
 from fortigate_vpn_gui.helper.protocol import (
     APPROVED_OPENFORTIVPN_PATHS,
     HELPER_VERSION,
@@ -505,6 +512,125 @@ def check_ipsec_backend(
         label="IPsec backend",
         status=CheckStatus.INFO,
         summary="strongSwan is not installed. SSL VPN does not require it.",
+        group=GROUP_VPN,
+    )
+
+
+def check_ipsec_leftover(snapshot: VpnSnapshot) -> DiagnosticCheck:
+    """Report leftover application-owned IPsec state without destroying it."""
+    leftover = inspect_owned_ipsec_state()
+    connected = snapshot.state is ConnectionState.CONNECTED and snapshot.vpn_backend == "ipsec"
+    pids = leftover.owned_charon_pids
+    pid_text = ",".join(str(pid) for pid in pids) if pids else "none"
+    detail = (
+        f"owned conf={leftover.owned_conf_present}; "
+        f"owned DNS overlay={leftover.owned_dns_state_present}; "
+        f"owned swanctl dir={leftover.owned_swanctl_dir_present}; "
+        f"owned charon pid={pid_text}; "
+        f"other charon running={leftover.other_charon_running}"
+    )
+    if connected:
+        return _check(
+            check_id="vpn.ipsec_leftover",
+            label="IPsec leftover state",
+            status=CheckStatus.PASS,
+            summary="Application-owned IPsec runtime is active for the current session.",
+            detail=detail,
+            group=GROUP_VPN,
+        )
+    if leftover.has_owned_leftover:
+        return _check(
+            check_id="vpn.ipsec_leftover",
+            label="IPsec leftover state",
+            status=CheckStatus.WARNING,
+            summary=(
+                "Leftover application-owned IPsec files or charon were found while "
+                "disconnected. The next IPsec connect cleans only that owned state."
+            ),
+            detail=detail,
+            hint=(
+                "Unrelated system IPsec tunnels are not removed. Use Disconnect or "
+                "connect IPsec again through this application to clean owned leftovers."
+            ),
+            group=GROUP_VPN,
+        )
+    if leftover.other_charon_running:
+        return _check(
+            check_id="vpn.ipsec_leftover",
+            label="IPsec leftover state",
+            status=CheckStatus.INFO,
+            summary=(
+                "A charon process is running that is not this application's private "
+                "instance. It will not be stopped automatically."
+            ),
+            detail=detail,
+            group=GROUP_VPN,
+        )
+    return _check(
+        check_id="vpn.ipsec_leftover",
+        label="IPsec leftover state",
+        status=CheckStatus.PASS,
+        summary="No leftover application-owned IPsec state was detected.",
+        detail=detail,
+        group=GROUP_VPN,
+    )
+
+
+def check_ike_ports(
+    snapshot: VpnSnapshot,
+    *,
+    report: IkePortReport | None = None,
+) -> DiagnosticCheck:
+    """Report UDP/500 and UDP/4500 occupancy. Never kills an IKE daemon."""
+    del snapshot
+    try:
+        observed = report if report is not None else inspect_ike_udp_ports()
+    except OSError:
+        return _check(
+            check_id="vpn.ike_ports",
+            label="IKE UDP ports",
+            status=CheckStatus.INFO,
+            summary="IKE UDP port occupancy could not be read.",
+            group=GROUP_VPN,
+        )
+    lines = format_ike_port_lines(observed)
+    detail = "; ".join(lines)
+    if observed.unrelated_conflict():
+        owner = observed.primary_unrelated()
+        summary = (
+            "IPsec cannot start because another IKE service is using UDP ports 500/4500."
+        )
+        hint = "This application does not stop an unrelated strongSwan or IKE daemon."
+        if owner is not None and owner.pid is not None:
+            summary = (
+                f"{summary} Owner PID {owner.pid}"
+                + (f" ({owner.service})" if owner.service else "")
+                + "."
+            )
+        return _check(
+            check_id="vpn.ike_ports",
+            label="IKE UDP ports",
+            status=CheckStatus.FAIL,
+            summary=summary,
+            detail=detail,
+            hint=hint,
+            group=GROUP_VPN,
+        )
+    if observed.occupied:
+        return _check(
+            check_id="vpn.ike_ports",
+            label="IKE UDP ports",
+            status=CheckStatus.INFO,
+            summary="Application-owned IKE ports are in use.",
+            detail=detail,
+            group=GROUP_VPN,
+        )
+    return _check(
+        check_id="vpn.ike_ports",
+        label="IKE UDP ports",
+        status=CheckStatus.PASS,
+        summary="IKE UDP ports 500 and 4500 are available.",
+        detail=detail,
         group=GROUP_VPN,
     )
 
@@ -1279,6 +1405,14 @@ def check_ipsec_tunnel(
         )
     text = result.stdout or ""
     policies = parse_xfrm_policies(text)
+    policy_count = count_xfrm_src_lines(text)
+    state_result = run_command([ip_bin, "xfrm", "state"], timeout=ROUTE_TIMEOUT_SECONDS)
+    state_count = (
+        count_xfrm_src_lines(state_result.stdout or "")
+        if not (state_result.timed_out or state_result.missing)
+        else None
+    )
+    leftover = inspect_owned_ipsec_state()
     vips = virtual_ips_from_policies(policies)
     local_ts = local_selectors(policies)
     remote_ts = remote_selectors(policies)
@@ -1289,9 +1423,13 @@ def check_ipsec_tunnel(
         run_command=run_command,
     )
     details = [
+        f"charon running: {'yes' if leftover.owned_charon_pids else 'unknown'}",
+        f"charon pid: {','.join(str(pid) for pid in leftover.owned_charon_pids) or 'unknown'}",
         f"IKE_SA: {'ESTABLISHED' if policies else 'unknown'}",
         f"CHILD_SA: {'ESP policies installed' if policies else 'no ESP policies'}",
         f"virtual IP: {', '.join(vips) if vips else 'unknown'}",
+        f"XFRM policies: {policy_count}",
+        f"XFRM states: {state_count if state_count is not None else 'unavailable'}",
         f"local TS: {', '.join(local_ts) if local_ts else 'unknown'}",
         f"remote TS: {', '.join(remote_ts) if remote_ts else 'unknown'}",
         f"received DNS: {', '.join(dns_servers) if dns_servers else 'none observed'}",

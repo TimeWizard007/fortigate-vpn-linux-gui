@@ -13,7 +13,7 @@ their respective owner(s).
 Primary release target: **Ubuntu 24.04 LTS, amd64**. Other Debian-family
 distributions are untested.
 
-The current version is **1.1.0**. Helper protocol is **0.8.0**.
+The current version is **1.2.0**. Helper protocol is **0.8.0**.
 
 ## Features
 
@@ -30,12 +30,12 @@ The current version is **1.1.0**. Helper protocol is **0.8.0**.
 - System tray, optional close-to-tray, optional user autostart
 - Optional auto-reconnect after unexpected tunnel loss (off by default)
 - Diagnostics with DNS, routing, TCP, tunnel, helper, IPsec, and polkit checks
-- Copyable sanitized diagnostic report
+- Copy diagnostics and Export diagnostics (sanitized text or ZIP for GitHub issues)
 
 ## Install (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.1.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.2.0-1_amd64.deb
 ```
 
 `apt` resolves runtime libraries, `pkexec`, `ppp`, `iproute2`, and the
@@ -82,8 +82,10 @@ gone.
 4. For SSO, complete sign-in in the system browser.
 5. If FortiGate presents an unknown certificate, pin it explicitly for that
    profile or cancel.
-6. Use Diagnostics if a connection fails. **Run diagnostics** then
-   **Copy report** for a sanitized text summary.
+6. Use Diagnostics if a connection fails. **Run diagnostics**, then
+   **Copy diagnostics** to paste into a GitHub issue, or **Export diagnostics**
+   for a ZIP/text bundle. Exports are sanitized and must not contain passwords,
+   PSKs, cookies, or SAML tokens. Inspect the file before attaching it.
 7. Disconnect from the Connection page or the tray. Quit from the tray always
    shuts the application down (it waits for helper/openfortivpn cleanup).
 
@@ -116,17 +118,63 @@ Privileged helper            root via polkit (pkexec)
 are no sudoers rules, no setuid helper, and no passwordless polkit policy.
 SSL passwords, SAML cookies, IPsec PSKs, and XAuth passwords are not stored
 in `profiles.json` and are not passed on the command line. Optional IPsec
-secrets use Secret Service only when the user opts in. Copied diagnostic
-reports are sanitized.
+secrets use Secret Service only when the user opts in. Copied and exported
+diagnostic reports are sanitized.
+
+## Supported connection types
+
+**SSL-VPN** (openfortivpn): username/password or SAML/SSO via the system
+browser, with explicit certificate pinning.
+
+**IPsec remote access** (distribution strongSwan): IKEv1 Aggressive Mode,
+PSK + XAuth, Mode Config / VIP, NAT-T, CHILD_SA/XFRM, FortiGate/Cisco Unity
+split include, and VPN DNS overlay. IKEv2, Main Mode, certificate IPsec,
+EAP, and IPsec SAML are stored in the profile for later work and are not
+connected.
+
+Application IPsec uses a **private** charon (`/run/charon.fvl.conf` and
+`/run/charon.fvl.vici`). It does not stop `strongswan-starter`, kill an
+unrelated charon, or take over `/run/charon.vici`. Two IKE daemons cannot
+both bind UDP/500 and UDP/4500. If another IKE service already owns those
+ports, IPsec fails before secrets are loaded with **IKE ports in use**;
+Diagnostics shows occupancy. SSL VPN still works while system strongSwan
+is running. This package never disables system strongSwan automatically.
+
+### Tested
+
+- Ubuntu 24.04 LTS amd64
+- The FortiGate / FortiOS environment used to validate v1.1.0 IPsec and SSL
+- v1.2.0 installed-package smoke: IPsec refused while system charon owned
+  UDP/500/4500; private IPsec after that IKE was stopped; SSL/SAML after IPsec
+  cleanup with system strongSwan restored
+
+### Potentially compatible but not yet tested
+
+- Other Debian-family amd64 desktops
+- Other FortiGate / FortiOS builds and IPsec proposals
 
 ## Troubleshooting
 
 Open **Diagnostics** in the application first. It checks helper/polkit
-install, DNS, the route to the gateway, TCP reachability, and tunnel state
-without starting a VPN by itself. Opening Diagnostics does not show a polkit
-prompt.
+install, DNS, the route to the gateway, TCP reachability, IPsec leftover
+state, and tunnel state without starting a VPN by itself. Opening
+Diagnostics does not show a polkit prompt.
 
-If SSO fails, confirm `openfortivpn --help` lists `--saml-login`.
+If a connection fails, the Connection page shows a conservative human-readable
+reason when backend output proves it. Raw details stay in Logs and
+Diagnostics. Do not guess from incomplete logs.
+
+**Export diagnostics** writes a sanitized text or ZIP bundle suitable for a
+GitHub issue. **Copy diagnostics** copies the same sanitized summary to the
+clipboard. Inspect the file before attaching it: it must not contain PSK,
+passwords, cookies, SAML tokens, or private keys.
+
+If IPsec reports **IKE ports in use**, another IKE daemon (often Ubuntu's
+`strongswan-starter` / system charon) already owns UDP/500 or UDP/4500.
+The application will not stop that service. SSL VPN can still connect.
+Application IPsec can start only after those ports are free.
+
+If SSO fails, confirm the effective `openfortivpn` supports `--saml-login`.
 
 ## Development
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Protocol
 
 from fortigate_vpn_gui.helper.handshake import is_valid_helper_version, parse_helper_hello_output
+from fortigate_vpn_gui.helper.ike_ports import free_ike_port_report
 from fortigate_vpn_gui.helper.protocol import (
     HELPER_VERSION,
     INSTALLED_HELPER_PATH,
@@ -86,6 +87,7 @@ class InProcessHelperClient:
         swanctl_runner=None,
         vici_wait=None,
         runtime_dir_factory=None,
+        ike_port_probe=None,
     ) -> None:
         self._probe_installed = installed
         self._probe_version = helper_version
@@ -100,6 +102,7 @@ class InProcessHelperClient:
             swanctl_runner=swanctl_runner or _noop_swanctl,
             vici_wait=vici_wait or (lambda path, timeout: True),
             runtime_dir_factory=runtime_dir_factory,
+            ike_port_probe=ike_port_probe or free_ike_port_report,
         )
         self._listener: HelperListener | None = None
 

@@ -22,6 +22,11 @@ from fortigate_vpn_gui.helper.certificate import (
     is_certificate_validation_failure,
 )
 from fortigate_vpn_gui.helper.executables import resolve_approved_executable
+from fortigate_vpn_gui.helper.ike_ports import (
+    IkePortReport,
+    format_ike_port_lines,
+    inspect_ike_udp_ports,
+)
 from fortigate_vpn_gui.helper.ipsec_dns import (
     apply_temporary_vpn_dns,
     lookup_interface_for_address,
@@ -32,7 +37,10 @@ from fortigate_vpn_gui.helper.ipsec_dns import (
 from fortigate_vpn_gui.helper.ipsec_runtime import (
     IpsecRuntimeFiles,
     create_runtime_dir,
+    owned_charon_pids,
+    recover_owned_ipsec_leftovers,
     settings_from_request,
+    stop_owned_leftover_charon,
     wipe_ipsec_runtime,
     write_ipsec_runtime,
 )
@@ -51,10 +59,16 @@ from fortigate_vpn_gui.vpn.capabilities import (
     OpenfortivpnCapabilities,
     format_saml_unsupported_message,
 )
-from fortigate_vpn_gui.vpn.classify import OutputHint, classify_output
+from fortigate_vpn_gui.vpn.classify import (
+    IKE_PORT_CONFLICT_MESSAGE,
+    OutputHint,
+    classify_output,
+)
 from fortigate_vpn_gui.vpn.ipsec.commands import (
+    STRONGSWAN_CONF_ENV,
     build_charon_argv,
     build_charon_environment,
+    build_swanctl_environment,
     build_swanctl_initiate_argv,
     build_swanctl_load_argv,
     build_swanctl_terminate_argv,
@@ -72,8 +86,9 @@ from fortigate_vpn_gui.vpn.url_safety import InvalidAuthUrl, validate_auth_url
 
 Selector = Callable[[bool], OpenfortivpnCapabilities | None]
 HelperListener = Callable[[HelperEvent], None]
-SwanctlRunner = Callable[[list[str], float], "SwanctlCommandResult"]
+SwanctlRunner = Callable[..., "SwanctlCommandResult"]
 ViciWait = Callable[[Path, float], bool]
+IkePortProbe = Callable[..., IkePortReport]
 CHARON_VICI_WAIT_SECONDS = 5.0
 CHARON_READY_POLL_SECONDS = 0.05
 _IPSEC_STARTUP_LOG_LIMIT = 32
@@ -102,6 +117,7 @@ class HelperService:
         runtime_dir_factory: Callable[[], object] | None = None,
         swanctl_runner: SwanctlRunner | None = None,
         vici_wait: ViciWait | None = None,
+        ike_port_probe: IkePortProbe | None = None,
     ) -> None:
         self._factory = process_factory
         self._selector = selector if selector is not None else _default_selector
@@ -111,6 +127,7 @@ class HelperService:
         self._runtime_dir_factory = runtime_dir_factory or create_runtime_dir
         self._swanctl_runner = swanctl_runner or default_swanctl_runner
         self._vici_wait = vici_wait or wait_for_unix_socket
+        self._ike_port_probe = ike_port_probe or inspect_ike_udp_ports
         self._lock = threading.Lock()
         self._process: VpnProcess | None = None
         self._argv: tuple[str, ...] = ()
@@ -232,6 +249,11 @@ class HelperService:
                     "ALREADY_CONNECTED",
                     "A privileged VPN process is already running.",
                 )
+        leftover = recover_owned_ipsec_leftovers()
+        if leftover.has_owned_leftover:
+            self._on_output(
+                "Found leftover application-owned IPsec state before connect."
+            )
         if request.backend == BACKEND_IPSEC:
             self._connect_ipsec(request, credentials)
             return
@@ -317,6 +339,7 @@ class HelperService:
                 "INVALID_EXECUTABLE",
                 "Refusing to execute a binary that is not an approved IPsec path.",
             )
+        self._fail_if_unrelated_ike_ports()
         runtime_dir = Path(str(self._runtime_dir_factory()))
         files = write_ipsec_runtime(
             gateway=request.gateway,
@@ -394,6 +417,7 @@ class HelperService:
             files = self._ipsec_files
         if process is None:
             wipe_ipsec_runtime(files)
+            stop_owned_leftover_charon()
             with self._lock:
                 self._ipsec_runtime = None
                 self._ipsec_files = None
@@ -507,6 +531,12 @@ class HelperService:
             connected = self._connected_emitted
             cancelled = self._ipsec_cancel.is_set()
             startup_logs = list(self._ipsec_startup_logs)
+            already_emitted = self._ipsec_start_error_emitted
+            should_fail = (
+                was_ipsec and not connected and not cancelled and not already_emitted
+            )
+            if should_fail:
+                self._ipsec_start_error_emitted = True
             self._ipsec_runtime = None
             self._ipsec_files = None
             self._ipsec_swanctl = None
@@ -516,8 +546,15 @@ class HelperService:
             self._ipsec_dns_applied = False
         self._restore_ipsec_dns(files)
         wipe_ipsec_runtime(files)
-        if was_ipsec and not connected and not cancelled:
-            self._emit_ipsec_daemon_start_failed(_charon_exit_message(code, startup_logs))
+        stop_owned_leftover_charon()
+        if should_fail:
+            self._emit(
+                HelperEvent(
+                    kind=HelperEventKind.ERROR,
+                    code="IPSEC_DAEMON_START_FAILED",
+                    message=_charon_exit_message(code, startup_logs),
+                )
+            )
         self._emit(HelperEvent(kind=HelperEventKind.EXIT, exit_code=code, argv=argv))
 
     def _ipsec_bring_up(self, files: IpsecRuntimeFiles, swanctl: str) -> None:
@@ -546,13 +583,9 @@ class HelperService:
         if outcome == "cancelled":
             return
         if outcome == "exited":
-            code = poll_exit()
-            with self._lock:
-                logs = list(self._ipsec_startup_logs)
-            self._emit_ipsec_daemon_start_failed(
-                _charon_exit_message(1 if code is None else code, logs)
-            )
-            self.disconnect(wait=False)
+            # `_on_exit` owns IPSEC_DAEMON_START_FAILED so last charon output is
+            # kept. Emitting here raced: poll() becomes non-None before `_on_exit`
+            # copies startup logs, and disconnect() could mark the exit cancelled.
             return
         if outcome == "timeout":
             self._emit_ipsec_daemon_start_failed(
@@ -617,8 +650,32 @@ class HelperService:
             return
         self._run_swanctl(argv, timeout=5.0)
 
+    def _fail_if_unrelated_ike_ports(self) -> None:
+        """Fail before writing secrets when an unrelated IKE daemon owns 500/4500."""
+        owned = owned_charon_pids()
+        try:
+            report = self._ike_port_probe(owned_pids=owned)
+        except TypeError:
+            report = self._ike_port_probe()
+        if not report.unrelated_conflict(owned):
+            return
+        for line in format_ike_port_lines(report):
+            self._on_output(line)
+        raise HelperError("IKE_PORT_IN_USE", IKE_PORT_CONFLICT_MESSAGE)
+
     def _run_swanctl(self, argv: list[str], *, timeout: float) -> SwanctlCommandResult:
-        result = self._swanctl_runner(argv, timeout)
+        env = None
+        with self._lock:
+            files = self._ipsec_files
+        if files is not None:
+            try:
+                env = build_swanctl_environment(str(files.swanctl_client_conf))
+            except ValueError:
+                env = None
+        try:
+            result = self._swanctl_runner(argv, timeout, env=env)
+        except TypeError:
+            result = self._swanctl_runner(argv, timeout)
         useful = [
             line
             for stream in (result.stdout, result.stderr)
@@ -729,8 +786,21 @@ def _default_selector(require_saml: bool) -> OpenfortivpnCapabilities | None:
     return resolve_approved_executable(require_saml=require_saml)
 
 
-def default_swanctl_runner(argv: list[str], timeout: float) -> SwanctlCommandResult:
-    """Run allowlisted swanctl with a list argv. Never uses a shell."""
+def default_swanctl_runner(
+    argv: list[str],
+    timeout: float,
+    env: dict[str, str] | None = None,
+) -> SwanctlCommandResult:
+    """Run allowlisted swanctl with a list argv. Never uses a shell.
+
+    Requires STRONGSWAN_CONF so swanctl cannot fall back to the system VICI
+    socket at unix:///var/run/charon.vici.
+    """
+    if env is None or not env.get(STRONGSWAN_CONF_ENV):
+        return SwanctlCommandResult(
+            returncode=78,
+            stderr="Refusing to run swanctl without a private STRONGSWAN_CONF.",
+        )
     try:
         completed = subprocess.run(  # noqa: S603 — list argv, shell=False
             argv,
@@ -740,6 +810,7 @@ def default_swanctl_runner(argv: list[str], timeout: float) -> SwanctlCommandRes
             timeout=timeout,
             shell=False,
             check=False,
+            env=env,
         )
     except FileNotFoundError:
         return SwanctlCommandResult(returncode=127, stderr="swanctl executable was not found.")

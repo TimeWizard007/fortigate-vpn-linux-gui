@@ -92,21 +92,30 @@ def build_swanctl_conf(
     return "\n".join(lines)
 
 
-def build_strongswan_conf(*, vici_socket: str) -> str:
+def build_strongswan_conf(*, vici_socket: str, pid_file: str | None = None) -> str:
     """Private charon config: distro plugins, isolated vici socket, stderr logs.
+
+    Ubuntu 5.9.13 ``swanctl`` has no ``--unix``. Both ``charon.plugins.vici.socket``
+    and ``swanctl.socket`` must name the application-owned VICI path so the
+    helper never falls back to the compiled default ``unix:///var/run/charon.vici``.
 
     ``remote_ts = dynamic`` is not set here; swanctl.conf uses ``0.0.0.0/0`` so
     FortiGate/Unity can narrow. ``cisco_unity = yes`` sends the Cisco Unity
     vendor ID so IKEv1 Mode Config can return UNITY_SPLIT_INCLUDE.
     """
     socket = vici_socket.replace("\\", "\\\\")
-    return "\n".join(
+    lines = [
+        "charon {",
+        "    load_modular = yes",
+        "    cisco_unity = yes",
+        "    install_routes = yes",
+        "    install_virtual_ip = yes",
+    ]
+    if pid_file:
+        pid = pid_file.replace("\\", "\\\\")
+        lines.append(f"    pidfile = {pid}")
+    lines.extend(
         [
-            "charon {",
-            "    load_modular = yes",
-            "    cisco_unity = yes",
-            "    install_routes = yes",
-            "    install_virtual_ip = yes",
             "    filelog {",
             "        stderr {",
             "            default = 1",
@@ -124,6 +133,34 @@ def build_strongswan_conf(*, vici_socket: str) -> str:
             "            resolvconf {",
             "                path = /usr/bin/true",
             "            }",
+            "        }",
+            "    }",
+            "}",
+            "",
+            "swanctl {",
+            f"    socket = unix://{socket}",
+            "    plugins {",
+            "        vici {",
+            f"            socket = unix://{socket}",
+            "        }",
+            "    }",
+            "}",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def build_swanctl_client_conf(*, vici_socket: str) -> str:
+    """STRONGSWAN_CONF for swanctl only. Must never name the system VICI socket."""
+    socket = vici_socket.replace("\\", "\\\\")
+    return "\n".join(
+        [
+            "swanctl {",
+            f"    socket = unix://{socket}",
+            "    plugins {",
+            "        vici {",
+            f"            socket = unix://{socket}",
             "        }",
             "    }",
             "}",

@@ -119,6 +119,7 @@ class VpnHarness:
         ipsec_available: bool = False,
         runtime_dir_factory=None,
         vici_wait=None,
+        ike_port_probe=None,
     ) -> None:
         self._process: FakeVpnProcess | None = None
         self.log = LogBuffer()
@@ -158,6 +159,7 @@ class VpnHarness:
             ipsec_discover=ipsec_discover,
             runtime_dir_factory=runtime_dir_factory,
             vici_wait=vici_wait,
+            ike_port_probe=ike_port_probe,
         )
         self.backend = VpnBackend(
             log_buffer=self.log,
