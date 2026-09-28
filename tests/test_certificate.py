@@ -37,9 +37,7 @@ def test_parser_extracts_subject_issuer_sha256() -> None:
 
 
 def test_validation_failed_detection() -> None:
-    assert is_certificate_validation_failure(
-        _FAIL
-    )
+    assert is_certificate_validation_failure(_FAIL)
     assert not is_certificate_validation_failure("INFO: Connected to gateway.")
 
 

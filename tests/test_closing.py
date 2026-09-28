@@ -57,10 +57,7 @@ def _window(profile_manager, tmp_path, harness, *, tray_available: bool = False)
 def _wait_finalized(qapp, window: MainWindow, *, timeout_ms: int = 1000) -> None:
     clock = QElapsedTimer()
     clock.start()
-    flags = (
-        QEventLoop.ProcessEventsFlag.AllEvents
-        | QEventLoop.ProcessEventsFlag.WaitForMoreEvents
-    )
+    flags = QEventLoop.ProcessEventsFlag.AllEvents | QEventLoop.ProcessEventsFlag.WaitForMoreEvents
     while clock.elapsed() < timeout_ms:
         if window.close_finalized():
             return

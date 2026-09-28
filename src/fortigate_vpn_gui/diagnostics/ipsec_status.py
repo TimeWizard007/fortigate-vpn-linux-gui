@@ -10,9 +10,7 @@ from dataclasses import dataclass
 
 _SRC_DST = re.compile(r"^src\s+(\S+)\s+dst\s+(\S+)\s*$")
 _DIR = re.compile(r"^\s*dir\s+(in|out|fwd)\b")
-UNUSABLE_SELECTOR_WARNING = (
-    "Tunnel established but no internal traffic selectors are installed."
-)
+UNUSABLE_SELECTOR_WARNING = "Tunnel established but no internal traffic selectors are installed."
 
 
 @dataclass(frozen=True)

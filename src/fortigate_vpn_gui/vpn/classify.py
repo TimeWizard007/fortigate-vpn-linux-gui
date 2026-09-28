@@ -241,8 +241,7 @@ def user_message_for_hint(hint: OutputHint) -> str | None:
         OutputHint.GATEWAY_UNREACHABLE: "The VPN gateway could not be reached.",
         OutputHint.DNS_RESOLUTION: "The gateway hostname could not be resolved.",
         OutputHint.CERTIFICATE: (
-            "The FortiGate gateway certificate could not be validated. "
-            "See Diagnostics for details."
+            "The FortiGate gateway certificate could not be validated. See Diagnostics for details."
         ),
         OutputHint.SAML_REJECTED: "SAML authentication was rejected.",
         OutputHint.AUTH_FAILURE: "Authentication failed.",

@@ -10,9 +10,7 @@ from fortigate_vpn_gui.vpn.models import ConnectionState
 from tests.vpn_fakes import VpnHarness
 
 
-def test_connect_from_profiles_uses_existing_backend(
-    qapp, profile_manager: ProfileManager
-) -> None:
+def test_connect_from_profiles_uses_existing_backend(qapp, profile_manager: ProfileManager) -> None:
     profile = profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
     harness = VpnHarness()
     connection = ConnectionPage(
@@ -65,9 +63,7 @@ def test_connect_disabled_while_busy(qapp, profile_manager: ProfileManager) -> N
     assert harness.process is first_process
 
 
-def test_connect_prevented_while_disconnecting(
-    qapp, profile_manager: ProfileManager
-) -> None:
+def test_connect_prevented_while_disconnecting(qapp, profile_manager: ProfileManager) -> None:
     profile = profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
     other = profile_manager.add(name="Home", gateway="home.example", use_sso=False)
     harness = VpnHarness()
@@ -81,26 +77,20 @@ def test_connect_prevented_while_disconnecting(
     assert page.connect_profile(other.id) is False
 
 
-def test_edit_does_not_mutate_active_session(
-    qapp, profile_manager: ProfileManager
-) -> None:
+def test_edit_does_not_mutate_active_session(qapp, profile_manager: ProfileManager) -> None:
     profile = profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
     harness = VpnHarness()
     page = ProfilesPage(profile_manager, harness.backend)
     page.connect_profile(profile.id)
     harness.process.emit("INFO:   Tunnel is up and running.")
-    profile_manager.update(
-        profile.id, name="Renamed", gateway="other.example", use_sso=False
-    )
+    profile_manager.update(profile.id, name="Renamed", gateway="other.example", use_sso=False)
     snapshot = harness.backend.snapshot()
     assert snapshot.state is ConnectionState.CONNECTED
     assert snapshot.profile_name == "Office"
     assert snapshot.profile_id == profile.id
 
 
-def test_delete_profile_does_not_disconnect(
-    qapp, profile_manager: ProfileManager
-) -> None:
+def test_delete_profile_does_not_disconnect(qapp, profile_manager: ProfileManager) -> None:
     profile = profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=False)
     harness = VpnHarness()
     page = ProfilesPage(profile_manager, harness.backend)

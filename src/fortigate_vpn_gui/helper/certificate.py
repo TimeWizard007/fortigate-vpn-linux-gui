@@ -45,9 +45,7 @@ class CertificateFailureParser:
         lowered = stripped.lower()
         if _VALIDATION_FAILED.search(line):
             self._failed = True
-        if not self._failed and not (
-            "gateway certificate" in lowered or "trusted-cert" in lowered
-        ):
+        if not self._failed and not ("gateway certificate" in lowered or "trusted-cert" in lowered):
             return None
 
         if self._expect_subject_value and stripped and "issuer:" not in lowered:

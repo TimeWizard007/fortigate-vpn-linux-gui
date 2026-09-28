@@ -200,8 +200,7 @@ def test_helper_ipsec_argv_has_no_secrets(tmp_path: Path) -> None:
     assert any("--initiate" in call for call in swanctl_calls)
     conf_path = str(tmp_path / "run" / "swanctl.conf")
     assert any(
-        call == ["/usr/sbin/swanctl", "--load-all", "--file", conf_path]
-        for call in swanctl_calls
+        call == ["/usr/sbin/swanctl", "--load-all", "--file", conf_path] for call in swanctl_calls
     )
     assert any(
         call == ["/usr/sbin/swanctl", "--initiate", "--child", "fortigate"]
@@ -329,11 +328,7 @@ def test_early_charon_exit_is_daemon_start_failed_not_backend_missing(
     service.wait_for_ipsec_setup(timeout=2.0)
     elapsed = time.monotonic() - started
     assert elapsed < 1.0
-    errors = [
-        event
-        for event in events
-        if getattr(event, "kind", None) is HelperEventKind.ERROR
-    ]
+    errors = [event for event in events if getattr(event, "kind", None) is HelperEventKind.ERROR]
     assert errors
     assert all(getattr(event, "code", None) != "IPSEC_BACKEND_MISSING" for event in errors)
     assert any(getattr(event, "code", None) == "IPSEC_DAEMON_START_FAILED" for event in errors)

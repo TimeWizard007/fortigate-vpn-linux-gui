@@ -167,8 +167,7 @@ def test_polkit_client_version_mismatch() -> None:
 
 def test_polkit_client_crash_is_startup_failed_not_version() -> None:
     traceback = (
-        "Traceback (most recent call last):\n"
-        "ImportError: cannot import name 'HelperService'\n"
+        "Traceback (most recent call last):\nImportError: cannot import name 'HelperService'\n"
     )
     client = PolkitHelperClient(
         helper_path="/usr/libexec/fortigate-vpn-linux-gui/vpn-helper",

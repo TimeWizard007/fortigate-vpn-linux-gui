@@ -597,9 +597,7 @@ def check_ike_ports(
     detail = "; ".join(lines)
     if observed.unrelated_conflict():
         owner = observed.primary_unrelated()
-        summary = (
-            "IPsec cannot start because another IKE service is using UDP ports 500/4500."
-        )
+        summary = "IPsec cannot start because another IKE service is using UDP ports 500/4500."
         hint = "This application does not stop an unrelated strongSwan or IKE daemon."
         if owner is not None and owner.pid is not None:
             summary = (
@@ -1469,8 +1467,7 @@ def check_ipsec_tunnel(
         label="IPsec tunnel",
         status=CheckStatus.PASS,
         summary=(
-            f"VIP {', '.join(vips) or 'unknown'}; "
-            f"remote TS {', '.join(remote_ts) or 'unknown'}"
+            f"VIP {', '.join(vips) or 'unknown'}; remote TS {', '.join(remote_ts) or 'unknown'}"
         ),
         detail=detail,
         group=GROUP_TUNNEL,

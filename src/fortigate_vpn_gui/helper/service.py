@@ -251,9 +251,7 @@ class HelperService:
                 )
         leftover = recover_owned_ipsec_leftovers()
         if leftover.has_owned_leftover:
-            self._on_output(
-                "Found leftover application-owned IPsec state before connect."
-            )
+            self._on_output("Found leftover application-owned IPsec state before connect.")
         if request.backend == BACKEND_IPSEC:
             self._connect_ipsec(request, credentials)
             return
@@ -532,9 +530,7 @@ class HelperService:
             cancelled = self._ipsec_cancel.is_set()
             startup_logs = list(self._ipsec_startup_logs)
             already_emitted = self._ipsec_start_error_emitted
-            should_fail = (
-                was_ipsec and not connected and not cancelled and not already_emitted
-            )
+            should_fail = was_ipsec and not connected and not cancelled and not already_emitted
             if should_fail:
                 self._ipsec_start_error_emitted = True
             self._ipsec_runtime = None
@@ -895,9 +891,7 @@ def wait_for_charon_ready(
 
 def _charon_exit_message(code: int, logs: list[str]) -> str:
     """Describe an early charon exit using already-redacted startup output."""
-    message = (
-        f"The IPsec daemon exited before opening its control socket (status {code})."
-    )
+    message = f"The IPsec daemon exited before opening its control socket (status {code})."
     detail = ""
     for line in reversed(logs):
         text = line.strip()

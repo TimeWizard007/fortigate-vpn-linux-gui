@@ -114,9 +114,7 @@ def test_repeated_certificate_lines_are_one_logical_event() -> None:
     harness.process.finish(1)
     assert errors.count(VpnErrorCode.CERTIFICATE_UNTRUSTED) == 1
     assert harness.backend.current_state() is ConnectionState.WAITING_FOR_CERTIFICATE_TRUST
-    assert (
-        _vpn_messages(harness).count("Gateway certificate requires explicit trust.") == 1
-    )
+    assert _vpn_messages(harness).count("Gateway certificate requires explicit trust.") == 1
 
 
 def test_trust_retries_once_after_cleanup() -> None:

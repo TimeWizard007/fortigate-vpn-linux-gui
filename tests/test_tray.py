@@ -71,9 +71,7 @@ def test_tray_actions_are_state_aware() -> None:
     assert idle["connect"] is True
     assert idle["disconnect"] is False
     assert idle["reconnect"] is True
-    connected = tray_action_enabled(
-        _snapshot(state=ConnectionState.CONNECTED, profile_id="p1")
-    )
+    connected = tray_action_enabled(_snapshot(state=ConnectionState.CONNECTED, profile_id="p1"))
     assert connected["connect"] is False
     assert connected["disconnect"] is True
     assert connected["reconnect"] is True

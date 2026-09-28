@@ -99,9 +99,11 @@ def format_ike_port_lines(report: IkePortReport) -> list[str]:
         f"IKE port 500: {_occupancy_word(report.occupied_500)}",
         f"IKE NAT-T port 4500: {_occupancy_word(report.occupied_4500)}",
     ]
-    owner = report.primary_unrelated() or (
-        report.port_500[0] if report.port_500 else None
-    ) or (report.port_4500[0] if report.port_4500 else None)
+    owner = (
+        report.primary_unrelated()
+        or (report.port_500[0] if report.port_500 else None)
+        or (report.port_4500[0] if report.port_4500 else None)
+    )
     if owner is None:
         return lines
     service = owner.service or owner.comm or "unknown"

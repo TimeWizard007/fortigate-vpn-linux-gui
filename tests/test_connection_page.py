@@ -108,7 +108,6 @@ def test_connection_page_ipsec_negotiation_failure_is_human_readable(
     assert page.failure_hint_text() == "IPsec negotiation failed. See Diagnostics for details."
 
 
-
 def test_connection_page_saml_unsupported_message(qapp, profile_manager: ProfileManager) -> None:
     profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
     harness = VpnHarness(executable="/usr/bin/openfortivpn", version="1.21.0", supports_saml=False)
@@ -223,9 +222,7 @@ def test_connection_page_trust_saves_and_retries(qapp, profile_manager: ProfileM
     assert digest in harness.process.argv
 
 
-def test_connection_page_trust_cancel_does_not_save(
-    qapp, profile_manager: ProfileManager
-) -> None:
+def test_connection_page_trust_cancel_does_not_save(qapp, profile_manager: ProfileManager) -> None:
     digest = "aa" * 32
     profile = profile_manager.add(name="Office", gateway="vpn.example.com", use_sso=True)
     harness = VpnHarness()
@@ -375,4 +372,3 @@ def test_reconnect_button_is_wired_and_starts_reconnect(
     harness.process.finish(0)
     page.apply_snapshot(harness.backend.snapshot())
     assert page.status_text() == "Connecting"
-

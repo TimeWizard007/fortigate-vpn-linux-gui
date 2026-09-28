@@ -212,9 +212,7 @@ def test_system_charon_pid_is_not_proof_of_app_ownership(monkeypatch, tmp_path: 
     monkeypatch.setattr(
         "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", missing / "dns"
     )
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", missing / "swan"
-    )
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", missing / "swan")
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.owned_charon_pids", lambda: ())
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime._charon_pids", lambda: (3615,))
     leftover = inspect_owned_ipsec_state()
@@ -350,9 +348,7 @@ def test_diagnostics_report_ike_port_conflict() -> None:
     assert "available" in free.summary.lower()
 
 
-def test_connection_page_shows_ike_port_conflict_not_auth_failure(
-    qapp, tmp_path: Path
-) -> None:
+def test_connection_page_shows_ike_port_conflict_not_auth_failure(qapp, tmp_path: Path) -> None:
     manager = ProfileManager(config_dir=tmp_path / "cfg")
     manager.add(
         name="IPsec",

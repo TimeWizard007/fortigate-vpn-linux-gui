@@ -111,29 +111,17 @@ def test_injected_runtime_keeps_files_together(tmp_path: Path) -> None:
     assert pid_file == tmp_path / "run" / "charon.pid"
 
 
-def test_split_live_layout_writes_apparmor_paths_and_wipes(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_split_live_layout_writes_apparmor_paths_and_wipes(tmp_path: Path, monkeypatch) -> None:
     live_dir = tmp_path / "swanctl-live"
     strongswan = tmp_path / "charon.fvl.conf"
     vici = tmp_path / "charon.fvl.vici"
     pid_file = tmp_path / "charon.fvl.pid"
     dns_state = tmp_path / "charon.fvl.dns"
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", live_dir
-    )
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_STRONGSWAN_CONF", strongswan
-    )
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_VICI_SOCKET", vici
-    )
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_PID_FILE", pid_file
-    )
-    monkeypatch.setattr(
-        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", dns_state
-    )
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", live_dir)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_STRONGSWAN_CONF", strongswan)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_VICI_SOCKET", vici)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_PID_FILE", pid_file)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", dns_state)
     credentials = IpsecCredentials(psk="super-psk", username="ada", password="hunter2")
     files = write_ipsec_runtime(
         gateway="vpn.example.com",
