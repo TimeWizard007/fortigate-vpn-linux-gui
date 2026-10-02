@@ -171,6 +171,8 @@ def test_helper_installed_compatible() -> None:
     assert "compatible" in check.summary.lower()
     assert HELPER_VERSION in check.detail
     assert "Expected protocol:" in check.detail
+    assert "capabilities:" in check.detail
+    assert "ipsec_ikev2_eap" in (check.detail or "")
     assert "effective path: /tmp/vpn-helper" in check.detail
 
 
@@ -195,6 +197,29 @@ def test_helper_protocol_mismatch_reports_path_and_versions() -> None:
     assert "Expected protocol: 0.8.0" in (check.detail or "")
     assert "detected protocol: 0.7.0" in (check.detail or "")
     assert "effective path: /usr/libexec/fortigate-vpn-linux-gui/vpn-helper" in (check.detail or "")
+
+
+def test_helper_matching_version_without_ikev2_capability_is_warning() -> None:
+    from fortigate_vpn_gui.helper.handshake import encode_hello_line
+    from fortigate_vpn_gui.helper.protocol import CAPABILITY_IPSEC_IKEV1_PSK_XAUTH
+
+    hello = encode_hello_line(capabilities=(CAPABILITY_IPSEC_IKEV1_PSK_XAUTH,))
+
+    def run_command(argv, timeout=3.0):
+        del argv, timeout
+        return CommandResult(returncode=0, stdout=hello + "\n")
+
+    check = check_helper(
+        helper_path="/usr/libexec/fortigate-vpn-linux-gui/vpn-helper",
+        path_exists=lambda path: True,
+        is_executable=lambda path: True,
+        run_command=run_command,
+        expected_version=HELPER_VERSION,
+        probe_version=True,
+    )
+    assert check.status is CheckStatus.WARNING
+    assert "IKEv2 EAP" in check.summary
+    assert "install-dev-helper.sh" in (check.hint or "")
 
 
 def test_helper_missing() -> None:

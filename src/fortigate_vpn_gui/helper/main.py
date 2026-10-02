@@ -12,6 +12,7 @@ import sys
 
 from fortigate_vpn_gui.helper.handshake import encode_hello_line
 from fortigate_vpn_gui.helper.protocol import (
+    HELPER_CAPABILITIES,
     HELPER_VERSION,
     PROTOCOL_VERSION,
     HelperError,
@@ -45,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             kind=HelperEventKind.HELLO,
             helper_version=HELPER_VERSION,
             protocol_version=PROTOCOL_VERSION,
+            capabilities=HELPER_CAPABILITIES,
             message="unprivileged" if not is_running_as_root() else None,
         )
     )

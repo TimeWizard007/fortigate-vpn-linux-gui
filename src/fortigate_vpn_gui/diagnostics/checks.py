@@ -18,9 +18,11 @@ from fortigate_vpn_gui.diagnostics.ipsec_status import (
     UNUSABLE_SELECTOR_WARNING,
     count_xfrm_src_lines,
     is_gateway_only_remote_ts,
+    is_wildcard_remote_ts,
     local_selectors,
     parse_xfrm_policies,
     remote_selectors,
+    split_remote_selectors,
     virtual_ips_from_policies,
 )
 from fortigate_vpn_gui.diagnostics.model import (
@@ -56,9 +58,11 @@ from fortigate_vpn_gui.helper.ike_ports import (
     format_ike_port_lines,
     inspect_ike_udp_ports,
 )
+from fortigate_vpn_gui.helper.ipsec_dns import parse_resolvectl_link_values
 from fortigate_vpn_gui.helper.ipsec_runtime import inspect_owned_ipsec_state
 from fortigate_vpn_gui.helper.protocol import (
     APPROVED_OPENFORTIVPN_PATHS,
+    CAPABILITY_IPSEC_IKEV2_EAP,
     HELPER_VERSION,
     INSTALLED_HELPER_PATH,
     POLKIT_ACTION_ID,
@@ -72,6 +76,14 @@ from fortigate_vpn_gui.vpn.capabilities import (
     default_is_executable,
 )
 from fortigate_vpn_gui.vpn.ipsec.detect import discover_ipsec_backend
+from fortigate_vpn_gui.vpn.ipsec.forticlient_vid import (
+    GOLDEN_CP_REQUEST_TYPES_TEXT,
+    PLUGINDIR_PATH,
+    SYSTEM_PLUGIN_CONF,
+    plugin_is_installed,
+    should_emit_forticlient_vids,
+    system_plugin_conf_present,
+)
 from fortigate_vpn_gui.vpn.models import ConnectionState, VpnSnapshot, state_label
 
 Which = Callable[[str], str | None]
@@ -354,12 +366,27 @@ def check_helper(
     )
     version = hello.helper_version
     detected = version if is_valid_helper_version(version) else "unknown"
+    caps = ", ".join(hello.capabilities) if hello.capabilities else "none"
     detail = (
         f"Expected protocol: {expected_version}; "
         f"detected protocol: {detected}; "
+        f"capabilities: {caps}; "
         f"effective path: {helper_path}"
     )
     if is_valid_helper_version(version) and version == expected_version:
+        if CAPABILITY_IPSEC_IKEV2_EAP not in hello.capabilities:
+            return _check(
+                check_id="vpn.helper",
+                label="VPN helper",
+                status=CheckStatus.WARNING,
+                summary="Helper version matches but IKEv2 EAP is not advertised.",
+                detail=detail,
+                hint=(
+                    "This looks like an older helper. From a Git checkout run: "
+                    "sudo ./scripts/install-dev-helper.sh"
+                ),
+                group=GROUP_VPN,
+            )
         return _check(
             check_id="vpn.helper",
             label="VPN helper",
@@ -516,6 +543,76 @@ def check_ipsec_backend(
     )
 
 
+def check_forticlient_vid_plugin(
+    profile: ConnectionProfile | None,
+    *,
+    path_exists: PathExists | None = None,
+) -> DiagnosticCheck:
+    """Report the private IKEv2 SSO Vendor ID plugin without exposing secrets."""
+    exists = path_exists or os.path.exists
+    installed = plugin_is_installed() if path_exists is None else bool(exists(str(PLUGINDIR_PATH)))
+    system_conf = (
+        system_plugin_conf_present()
+        if path_exists is None
+        else bool(exists(str(SYSTEM_PLUGIN_CONF)))
+    )
+    detail = (
+        f"plugin={PLUGINDIR_PATH}; "
+        f"installed={'yes' if installed else 'no'}; "
+        f"system charon plugin conf={'present' if system_conf else 'absent'}"
+    )
+    settings = profile.ipsec if profile is not None and profile.is_ipsec() else None
+    if settings is None or not should_emit_forticlient_vids(settings):
+        return _check(
+            check_id="vpn.ipsec.forticlient_vid",
+            label="FortiClient Vendor IDs",
+            status=CheckStatus.INFO,
+            summary="FortiClient compatibility Vendor IDs are not used for this profile.",
+            detail=detail,
+            group=GROUP_VPN,
+        )
+    if system_conf:
+        return _check(
+            check_id="vpn.ipsec.forticlient_vid",
+            label="FortiClient Vendor IDs",
+            status=CheckStatus.WARNING,
+            summary="A system-wide Vendor ID plugin snippet is present.",
+            detail=detail,
+            hint=(
+                "Remove /etc/strongswan.d/charon/fvl-forticlient-vid.conf "
+                "so system charon stays unchanged."
+            ),
+            group=GROUP_VPN,
+        )
+    if not installed:
+        return _check(
+            check_id="vpn.ipsec.forticlient_vid",
+            label="FortiClient Vendor IDs",
+            status=CheckStatus.WARNING,
+            summary="FortiClient compatibility Vendor ID plugin is missing.",
+            detail=detail,
+            hint="From a Git checkout run: sudo ./scripts/install-dev-helper.sh",
+            group=GROUP_VPN,
+        )
+    return _check(
+        check_id="vpn.ipsec.forticlient_vid",
+        label="FortiClient Vendor IDs",
+        status=CheckStatus.PASS,
+        summary=(
+            "FortiClient compatibility Vendor IDs enabled for private "
+            "IKEv2 SSO runtime; CFG_REPLY split-include consumed."
+        ),
+        detail=(
+            detail + "; 3 Vendor IDs configured for IKE_SA_INIT; "
+            "EAP_ONLY and MSG_ID_SYN_SUP omitted; INITIAL_CONTACT added; "
+            "0xF100 added and repositioned before CFG_REQUEST; "
+            "AUTH omitted from first IKE_AUTH; EAP-only local auth; "
+            f"CP16 types {GOLDEN_CP_REQUEST_TYPES_TEXT}"
+        ),
+        group=GROUP_VPN,
+    )
+
+
 def check_ipsec_leftover(snapshot: VpnSnapshot) -> DiagnosticCheck:
     """Report leftover application-owned IPsec state without destroying it."""
     leftover = inspect_owned_ipsec_state()
@@ -526,6 +623,7 @@ def check_ipsec_leftover(snapshot: VpnSnapshot) -> DiagnosticCheck:
         f"owned conf={leftover.owned_conf_present}; "
         f"owned DNS overlay={leftover.owned_dns_state_present}; "
         f"owned swanctl dir={leftover.owned_swanctl_dir_present}; "
+        f"owned license-info file={'yes' if leftover.owned_license_info_present else 'no'}; "
         f"owned charon pid={pid_text}; "
         f"other charon running={leftover.other_charon_running}"
     )
@@ -1414,12 +1512,19 @@ def check_ipsec_tunnel(
     vips = virtual_ips_from_policies(policies)
     local_ts = local_selectors(policies)
     remote_ts = remote_selectors(policies)
-    dns_servers = _vpn_dns_from_resolvectl(
+    split_ts = split_remote_selectors(policies)
+    dns_servers, dns_domains = _vpn_dns_from_resolvectl(
         vips,
         include_network=include_network,
         which=locator,
         run_command=run_command,
     )
+    if is_wildcard_remote_ts(policies) and not split_ts:
+        split_summary = "full-tunnel remote TS 0.0.0.0/0"
+    elif split_ts:
+        split_summary = f"split-include count={len(split_ts)} prefixes={', '.join(split_ts)}"
+    else:
+        split_summary = "split-include count=0"
     details = [
         f"charon running: {'yes' if leftover.owned_charon_pids else 'unknown'}",
         f"charon pid: {','.join(str(pid) for pid in leftover.owned_charon_pids) or 'unknown'}",
@@ -1430,7 +1535,9 @@ def check_ipsec_tunnel(
         f"XFRM states: {state_count if state_count is not None else 'unavailable'}",
         f"local TS: {', '.join(local_ts) if local_ts else 'unknown'}",
         f"remote TS: {', '.join(remote_ts) if remote_ts else 'unknown'}",
+        split_summary,
         f"received DNS: {', '.join(dns_servers) if dns_servers else 'none observed'}",
+        f"DNS domains: {', '.join(dns_domains) if dns_domains else 'none observed'}",
     ]
     policy_lines = [
         line
@@ -1480,20 +1587,21 @@ def _vpn_dns_from_resolvectl(
     include_network: bool,
     which: Which,
     run_command: RunArgv,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    empty: tuple[str, ...] = ()
     if not include_network or not vips:
-        return ()
+        return empty, empty
     resolvectl = which("resolvectl")
     ip_bin = which("ip")
     if not resolvectl or not ip_bin:
-        return ()
+        return empty, empty
     iface_result = run_command(
         [ip_bin, "-o", "addr", "show", "to", f"{vips[0]}/32"],
         timeout=ROUTE_TIMEOUT_SECONDS,
     )
     parts = (iface_result.stdout or "").split()
     if len(parts) < 2:
-        return ()
+        return empty, empty
     interface = parts[1]
     dns_result = run_command(
         [resolvectl, "dns", interface],
@@ -1508,4 +1616,9 @@ def _vpn_dns_from_resolvectl(
             continue
         if parsed.version == 4:
             found.append(str(parsed))
-    return tuple(found)
+    domain_result = run_command(
+        [resolvectl, "domain", interface],
+        timeout=ROUTE_TIMEOUT_SECONDS,
+    )
+    domains = parse_resolvectl_link_values(domain_result.stdout or "")
+    return tuple(found), domains

@@ -10,10 +10,10 @@ network.
 ./scripts/build-deb.sh
 ```
 
-Builds `dist/fortigate-vpn-linux-gui_1.2.0-1_amd64.deb` from this checkout.
+Builds `dist/fortigate-vpn-linux-gui_1.3.0-1_amd64.deb` from this checkout.
 Fails on errors. Does not install, publish, or modify user configuration.
 
-## Development helper (protocol 0.8.0)
+## Development helper
 
 ```bash
 sudo ./scripts/install-dev-helper.sh
@@ -21,5 +21,11 @@ sudo ./scripts/install-dev-helper.sh
 ```
 
 Installs this checkout's helper into `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`
-without changing the polkit action and without setuid. Restore the released
-helper with `sudo ./scripts/install-dev-helper.sh restore`.
+without changing the polkit action, without setuid, and without modifying
+the system strongSwan daemon. It also builds the application-owned
+FortiClient Vendor ID plugin (`libstrongswan-fvl-forticlient-vid.so`) and
+installs that uniquely named file into `/usr/lib/ipsec/plugins` **without**
+writing `/etc/strongswan.d/charon/fvl-forticlient-vid.conf`, so Ubuntu's
+system charon does not load it. `status` prints install kind, helper
+version, protocol version, capabilities, and plugin presence. Restore the
+released helper with `sudo ./scripts/install-dev-helper.sh restore`.

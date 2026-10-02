@@ -360,21 +360,18 @@ def test_profile_editor_ipsec_controls_reachable_in_scroll_area(
     names = (
         "profileLocalId",
         "profilePeerId",
-        "profileIpsecAuth",
+        "profileIpsecUserAuth",
         "profileIpsecPsk",
         "profileSavePsk",
         "profileRememberUsername",
         "profileXauthNote",
-        "profileIpsecSso",
         "profileIkeVersion",
         "profileIkeMode",
         "profileIpsecAddress",
-        "profilePhase1Enc",
-        "profilePhase1Int",
-        "profileDhGroup",
+        "profileIkeProposals",
+        "profileIkeDhGroups",
         "profilePhase1Lifetime",
-        "profilePhase2Enc",
-        "profilePhase2Int",
+        "profileChildProposals",
         "profilePfs",
         "profilePfsDh",
         "profilePhase2Lifetime",
@@ -540,23 +537,75 @@ def test_editor_uncheck_remember_username_clears_hint(
     assert updated.username_hint == ""
 
 
-def test_ipsec_sso_checkbox_is_disabled_ssl_saml_unchanged(
+def test_ipsec_legacy_auth_fields_shown_sso_hides_xauth(
     qapp, profile_manager: ProfileManager
 ) -> None:
     ipsec = ProfileEditorDialog(profile_manager)
     vpn_type = ipsec.findChild(QComboBox, "profileVpnType")
     assert vpn_type is not None
     vpn_type.setCurrentIndex(1)
-    sso = ipsec.findChild(QCheckBox, "profileIpsecSso")
-    assert sso is not None
-    assert sso.isEnabled() is False
-    assert "not implemented" in sso.text().lower()
+    user_auth = ipsec.findChild(QComboBox, "profileIpsecUserAuth")
+    xauth = ipsec.findChild(QLabel, "profileXauthNote")
+    username = ipsec.findChild(QLineEdit, "profileUsernameHint")
+    remember = ipsec.findChild(QCheckBox, "profileRememberUsername")
+    browser = ipsec.findChild(QLabel, "profileIpsecSsoBrowserNote")
+    ssl_saml = ipsec.findChild(QRadioButton, "profileAuthSaml")
+    ssl_password = ipsec.findChild(QRadioButton, "profileAuthPassword")
+    assert user_auth is not None
+    assert xauth is not None and not xauth.isHidden()
+    assert username is not None and not username.isHidden()
+    assert remember is not None and not remember.isHidden()
+    assert browser is not None and browser.isHidden()
+    assert ssl_saml is not None and ssl_saml.isEnabled()
+    assert ssl_password is not None and ssl_password.isEnabled()
     ssl = ProfileEditorDialog(profile_manager)
     saml = ssl.findChild(QRadioButton, "profileAuthSaml")
     password = ssl.findChild(QRadioButton, "profileAuthPassword")
     assert saml is not None and saml.isEnabled()
     assert password is not None and password.isEnabled()
     assert saml.isChecked()
+    ipsec.close()
+    ssl.close()
+
+
+def test_ipsec_sso_user_auth_forces_ikev2_and_hides_xauth(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    dialog = ProfileEditorDialog(profile_manager)
+    vpn_type = dialog.findChild(QComboBox, "profileVpnType")
+    assert vpn_type is not None
+    vpn_type.setCurrentIndex(1)
+    user_auth = dialog.findChild(QComboBox, "profileIpsecUserAuth")
+    ike = dialog.findChild(QComboBox, "profileIkeVersion")
+    ike_mode_row = dialog.findChild(QWidget, "profileIkeModeRow")
+    xauth = dialog.findChild(QLabel, "profileXauthNote")
+    browser = dialog.findChild(QLabel, "profileIpsecSsoBrowserNote")
+    protocol = dialog.findChild(QLabel, "profileIpsecSsoProtocolNote")
+    port = dialog.findChild(QSpinBox, "profileIpsecSamlPort")
+    assert user_auth is not None and ike is not None
+    user_auth.setCurrentIndex(user_auth.findData("saml"))
+    assert ike.currentData() == "ikev2"
+    assert ike.isEnabled() is False
+    assert ike_mode_row is not None and ike_mode_row.isHidden()
+    assert xauth is not None and xauth.isHidden()
+    assert browser is not None and not browser.isHidden()
+    assert "system browser" in browser.text().lower()
+    assert protocol is not None and "EAP-MSCHAPv2" in protocol.text()
+    assert port is not None and port.value() == 1001
+    dialog.findChild(QLineEdit, "profileName").setText("SAML PoC")
+    dialog.findChild(QLineEdit, "profileGateway").setText("vpn.example.com")
+    assert dialog.submit() is True
+    saved = profile_manager.list_profiles()[0]
+    assert saved.is_ipsec_saml_preauth() is True
+    assert saved.ipsec is not None
+    assert saved.ipsec.saml_port == 1001
+    assert saved.ipsec.ike_version == "ikev2"
+    assert saved.ipsec.auth_method == "eap"
+    assert [item.to_json() for item in saved.ipsec.ike_proposals] == [
+        {"encryption": "aes128", "integrity": "sha256"},
+        {"encryption": "aes256", "integrity": "sha256"},
+    ]
+    assert saved.ipsec.ike_dh_groups == (20, 21)
 
 
 def test_more_duplicate_and_delete_secret_lifecycle(

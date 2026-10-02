@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 from subprocess import TimeoutExpired
 
-from fortigate_vpn_gui.helper.protocol import HELPER_VERSION
+from fortigate_vpn_gui.helper.protocol import HELPER_CAPABILITIES, HELPER_VERSION
 from fortigate_vpn_gui.system.helper_client import InProcessHelperClient
 from fortigate_vpn_gui.vpn.backend import VpnBackend
 from fortigate_vpn_gui.vpn.browser import BrowserLaunchError
@@ -116,10 +116,12 @@ class VpnHarness:
         privilege_denied: bool = False,
         helper_version: str = HELPER_VERSION,
         version_mismatch: bool = False,
+        helper_capabilities: tuple[str, ...] | None = None,
         ipsec_available: bool = False,
         runtime_dir_factory=None,
         vici_wait=None,
         ike_port_probe=None,
+        ipsec_saml_session=None,
     ) -> None:
         self._process: FakeVpnProcess | None = None
         self.log = LogBuffer()
@@ -155,6 +157,9 @@ class VpnHarness:
             polkit_available=polkit_available,
             denied=privilege_denied,
             version_mismatch=version_mismatch,
+            capabilities=(
+                HELPER_CAPABILITIES if helper_capabilities is None else helper_capabilities
+            ),
             grace_seconds=0.05,
             ipsec_discover=ipsec_discover,
             runtime_dir_factory=runtime_dir_factory,
@@ -170,6 +175,8 @@ class VpnHarness:
             schedule_timeout=self.scheduler,
             grace_seconds=0.05,
             saml_timeout_seconds=120.0,
+            ipsec_saml_timeout_seconds=0.4,
+            ipsec_saml_session=ipsec_saml_session,
         )
 
     @property

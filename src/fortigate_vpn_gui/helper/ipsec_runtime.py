@@ -20,7 +20,20 @@ from fortigate_vpn_gui.helper.ipsec_dns import (
     LIVE_DNS_STATE,
     restore_from_state_path,
 )
+from fortigate_vpn_gui.helper.ipsec_gateway_route import (
+    LIVE_GATEWAY_ROUTE_STATE,
+    gateway_route_state_path,
+    restore_from_gateway_route_path,
+)
 from fortigate_vpn_gui.profiles.ipsec import IpsecSettings, parse_ipsec_settings
+from fortigate_vpn_gui.vpn.ipsec.forticlient_vid import should_emit_forticlient_vids
+from fortigate_vpn_gui.vpn.ipsec.license_info import (
+    LICENSE_INFO_FILENAME,
+    LicenseInfoFields,
+    build_license_info,
+    collect_license_info_fields,
+    write_license_info_file,
+)
 from fortigate_vpn_gui.vpn.ipsec.secrets import IpsecCredentials, build_swanctl_secrets
 from fortigate_vpn_gui.vpn.ipsec.swanctl import (
     CHILD_NAME,
@@ -37,12 +50,31 @@ LIVE_PID_FILE = Path("/run/charon.fvl.pid")
 LIVE_DNS_STATE_PATH = LIVE_DNS_STATE
 # Application-owned VICI. Never the system default /run/charon.vici.
 LIVE_VICI_SOCKET = Path("/run/charon.fvl.vici")
+# Charon AppArmor allows /run/charon.* rw. The plugin reads this 0600 blob
+# from the private charon process; it is not passed on argv.
+LIVE_LICENSE_INFO = Path("/run/charon.fvl.license-info")
 # Ubuntu swanctl may read /etc/swanctl/** ; not conf.d, so the distro daemon
 # does not auto-load these secrets.
 LIVE_SWANCTL_DIR = Path("/etc/swanctl/fortigate-vpn-linux-gui")
 SYSTEM_VICI_SOCKET = Path("/run/charon.vici")
 SYSTEM_CHARON_PID = Path("/run/charon.pid")
 SYSTEM_CHARON_PID_VARRUN = Path("/var/run/charon.pid")
+# swanctl --load-all scans these relative to the --file directory.
+SWANCTL_CREDENTIAL_DIRS = (
+    "x509",
+    "x509ca",
+    "x509ocsp",
+    "x509aa",
+    "x509ac",
+    "x509crl",
+    "pubkey",
+    "private",
+    "rsa",
+    "ecdsa",
+    "bliss",
+    "pkcs8",
+    "pkcs12",
+)
 _PROTECTED_SYSTEM_PATHS = (
     SYSTEM_VICI_SOCKET,
     Path("/var/run/charon.vici"),
@@ -63,6 +95,8 @@ class IpsecRuntimeFiles:
     vici_socket: Path
     pid_file: Path
     dns_state: Path
+    license_info: Path | None = None
+    gateway_route: Path | None = None
 
 
 def create_runtime_dir() -> Path:
@@ -78,7 +112,7 @@ def charon_runtime_paths(runtime_dir: Path) -> tuple[Path, Path, Path]:
     The live helper directory is split across AppArmor-visible paths. Injected
     test directories keep every file inside *runtime_dir*.
     """
-    if _is_live_swanctl_dir(runtime_dir):
+    if is_live_swanctl_dir(runtime_dir):
         return LIVE_STRONGSWAN_CONF, LIVE_VICI_SOCKET, LIVE_PID_FILE
     return (
         runtime_dir / "strongswan.conf",
@@ -89,9 +123,16 @@ def charon_runtime_paths(runtime_dir: Path) -> tuple[Path, Path, Path]:
 
 def dns_state_path(runtime_dir: Path) -> Path:
     """Return the helper-owned DNS revert record for *runtime_dir*."""
-    if _is_live_swanctl_dir(runtime_dir):
+    if is_live_swanctl_dir(runtime_dir):
         return LIVE_DNS_STATE_PATH
     return runtime_dir / "dns.state"
+
+
+def license_info_path(runtime_dir: Path) -> Path:
+    """Return the 0600 license-info blob path readable by private charon."""
+    if is_live_swanctl_dir(runtime_dir):
+        return LIVE_LICENSE_INFO
+    return runtime_dir / LICENSE_INFO_FILENAME
 
 
 def write_ipsec_runtime(
@@ -101,20 +142,39 @@ def write_ipsec_runtime(
     settings: IpsecSettings,
     credentials: IpsecCredentials,
     runtime_dir: Path,
+    license_fields: LicenseInfoFields | None = None,
 ) -> IpsecRuntimeFiles:
-    """Write strongswan.conf, swanctl.conf, and secrets.conf."""
+    """Write strongswan.conf, swanctl.conf, secrets.conf, and optional 0600 license-info."""
     runtime_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(runtime_dir, stat.S_IRWXU)
+    _ensure_swanctl_credential_dirs(runtime_dir)
     strongswan_path, vici_socket, pid_file = charon_runtime_paths(runtime_dir)
     dns_path = dns_state_path(runtime_dir)
+    gw_path = gateway_route_state_path(runtime_dir)
     restore_from_state_path(dns_path)
     _prepare_unix_socket_path(vici_socket)
     strongswan_path.parent.mkdir(parents=True, exist_ok=True)
     conf_path = runtime_dir / "swanctl.conf"
     client_conf_path = runtime_dir / "vici-client.conf"
     secrets_path = runtime_dir / "secrets.conf"
+    info_path: Path | None = None
+    if should_emit_forticlient_vids(settings):
+        info_path = license_info_path(runtime_dir)
+        info_path.parent.mkdir(parents=True, exist_ok=True)
+        fields = license_fields or collect_license_info_fields(
+            uid=credentials.username,
+            gateway=gateway,
+            port=port,
+        )
+        write_license_info_file(info_path, build_license_info(fields))
     strongswan_path.write_text(
-        build_strongswan_conf(vici_socket=str(vici_socket), pid_file=str(pid_file)),
+        build_strongswan_conf(
+            vici_socket=str(vici_socket),
+            pid_file=str(pid_file),
+            cisco_unity=settings.ike_version != "ikev2",
+            forticlient_vids=should_emit_forticlient_vids(settings),
+            license_info_path=str(info_path) if info_path is not None else None,
+        ),
         encoding="utf-8",
     )
     os.chmod(strongswan_path, stat.S_IRUSR | stat.S_IWUSR)
@@ -138,6 +198,7 @@ def write_ipsec_runtime(
             credentials,
             local_id=settings.local_id,
             peer_id=settings.peer_id,
+            eap=settings.auth_method == "eap",
         ),
         encoding="utf-8",
     )
@@ -151,20 +212,29 @@ def write_ipsec_runtime(
         vici_socket=vici_socket,
         pid_file=pid_file,
         dns_state=dns_path,
+        license_info=info_path,
+        gateway_route=gw_path,
     )
 
 
 def wipe_ipsec_runtime(files: IpsecRuntimeFiles | None) -> None:
-    """Remove helper-owned IPsec runtime files, including split live paths."""
+    """Remove helper-owned IPsec runtime files, including split live paths.
+
+    Does not restore DNS or the gateway host route. Callers that own
+    teardown must restore networking first, then wipe files.
+    """
     if files is None:
         return
-    restore_from_state_path(files.dns_state)
     for extra in (
         files.strongswan_conf,
         files.vici_socket,
         files.pid_file,
         files.dns_state,
+        files.license_info,
+        files.gateway_route,
     ):
+        if extra is None:
+            continue
         if extra.parent != files.runtime_dir:
             _unlink_if_exists(extra)
     wipe_runtime_dir(files.runtime_dir)
@@ -183,6 +253,8 @@ def wipe_runtime_dir(path: Path | None) -> None:
         _unlink_if_exists(LIVE_VICI_SOCKET)
         _unlink_if_exists(LIVE_PID_FILE)
         _unlink_if_exists(LIVE_DNS_STATE_PATH)
+        _unlink_if_exists(LIVE_LICENSE_INFO)
+        _unlink_if_exists(LIVE_GATEWAY_ROUTE_STATE)
 
 
 def settings_from_request(payload: dict[str, object] | None) -> IpsecSettings:
@@ -193,7 +265,8 @@ def child_name() -> str:
     return CHILD_NAME
 
 
-def _is_live_swanctl_dir(path: Path) -> bool:
+def is_live_swanctl_dir(path: Path) -> bool:
+    """Return True when *path* is the live helper swanctl directory."""
     try:
         return path.resolve() == LIVE_SWANCTL_DIR.resolve()
     except OSError:
@@ -238,6 +311,8 @@ class OwnedIpsecStaleState:
     owned_swanctl_dir_present: bool
     owned_charon_pids: tuple[int, ...]
     other_charon_running: bool
+    owned_license_info_present: bool = False
+    owned_gateway_route_present: bool = False
 
     @property
     def has_owned_leftover(self) -> bool:
@@ -246,6 +321,8 @@ class OwnedIpsecStaleState:
             or self.owned_dns_state_present
             or self.owned_swanctl_dir_present
             or self.owned_charon_pids
+            or self.owned_license_info_present
+            or self.owned_gateway_route_present
         )
 
 
@@ -264,6 +341,8 @@ def inspect_owned_ipsec_state() -> OwnedIpsecStaleState:
         owned_swanctl_dir_present=_path_exists(LIVE_SWANCTL_DIR),
         owned_charon_pids=owned,
         other_charon_running=other,
+        owned_license_info_present=_path_exists(LIVE_LICENSE_INFO),
+        owned_gateway_route_present=_path_exists(LIVE_GATEWAY_ROUTE_STATE),
     )
 
 
@@ -296,11 +375,13 @@ def recover_owned_ipsec_leftovers() -> OwnedIpsecStaleState:
         return leftover
     stop_owned_leftover_charon()
     restore_from_state_path(LIVE_DNS_STATE_PATH)
+    restore_from_gateway_route_path(LIVE_GATEWAY_ROUTE_STATE)
     wipe_runtime_dir(LIVE_SWANCTL_DIR)
     _unlink_if_exists(LIVE_STRONGSWAN_CONF)
     _unlink_if_exists(LIVE_VICI_SOCKET)
     _unlink_if_exists(LIVE_PID_FILE)
     _unlink_if_exists(LIVE_DNS_STATE_PATH)
+    _unlink_if_exists(LIVE_LICENSE_INFO)
     return leftover
 
 
@@ -381,6 +462,19 @@ def _same_path(left: Path, right: Path) -> bool:
         return left.resolve() == right.resolve()
     except OSError:
         return str(left) == str(right)
+
+
+def _ensure_swanctl_credential_dirs(runtime_dir: Path) -> None:
+    """Create empty application-owned swanctl credential directories.
+
+    ``swanctl --load-all --file`` uses the conf file's directory as
+    ``swanctl_dir`` and otherwise logs ERROR for missing x509/private/...
+    trees. Directories stay empty; no fake certificates are written.
+    """
+    for name in SWANCTL_CREDENTIAL_DIRS:
+        path = runtime_dir / name
+        path.mkdir(parents=True, exist_ok=True)
+        os.chmod(path, stat.S_IRWXU)
 
 
 def _unlink_if_exists(path: Path) -> None:

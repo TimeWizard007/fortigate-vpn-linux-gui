@@ -101,6 +101,14 @@ def test_diagnostics_do_not_include_stored_psk(psk_store) -> None:
     )
     assert "tunnel-psk-secret" not in leaked
     assert "ad-directory-password" not in leaked
+    uid = "0123456789abcdef0123456789abcdef"
+    token = "TEST_ONLY_TOKEN_DO_NOT_USE"
+    cleaned = sanitize_diagnostic_text(
+        f'{{"tokenid":"{token}","fct_uid":"{uid}","username":"test-user"}} '
+        f"http://127.0.0.1:9/?tokenid={token}&username=test-user"
+    )
+    assert token not in cleaned
+    assert uid not in cleaned
 
 
 def test_ipsec_daemon_start_failed_is_not_backend_missing() -> None:

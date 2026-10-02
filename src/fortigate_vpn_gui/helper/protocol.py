@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-HELPER_VERSION = "0.8.0"  # helper protocol; independent of GUI patch releases
-PROTOCOL_VERSION = 1
+HELPER_VERSION = "0.9.0"  # helper capability token; independent of GUI patch releases
+PROTOCOL_VERSION = 1  # JSON-lines wire schema; additive hello fields do not bump this
 POLKIT_ACTION_ID = "com.fortigate-vpn-linux-gui.manage-vpn"
 INSTALLED_HELPER_PATH = "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper"
 PACKAGE_OPENFORTIVPN_PATH = "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
@@ -25,6 +25,13 @@ APPROVED_OPENFORTIVPN_PATHS: tuple[str, ...] = (
 BACKEND_OPENFORTIVPN = "openfortivpn"
 BACKEND_IPSEC = "ipsec"
 ALLOWED_BACKENDS = frozenset({BACKEND_OPENFORTIVPN, BACKEND_IPSEC})
+
+CAPABILITY_IPSEC_IKEV1_PSK_XAUTH = "ipsec_ikev1_psk_xauth"
+CAPABILITY_IPSEC_IKEV2_EAP = "ipsec_ikev2_eap"
+HELPER_CAPABILITIES: tuple[str, ...] = (
+    CAPABILITY_IPSEC_IKEV1_PSK_XAUTH,
+    CAPABILITY_IPSEC_IKEV2_EAP,
+)
 
 ALLOWED_OPERATIONS = frozenset({"hello", "connect", "disconnect", "status", "credentials"})
 ALLOWED_AUTH_MODES = frozenset({"saml", "standard"})
@@ -53,6 +60,7 @@ FORBIDDEN_REQUEST_KEYS = frozenset(
         "extra_args",
         "cookie",
         "token",
+        "tokenid",
         "saml",
     }
 )
@@ -133,6 +141,7 @@ class HelperEvent:
     openfortivpn_version: str | None = None
     supports_saml: bool | None = None
     backend: str | None = None
+    capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -147,6 +156,7 @@ class HelperProbe:
     status: str
     version_mismatch: bool = False
     startup_detail: str | None = None
+    capabilities: tuple[str, ...] = ()
 
 
 def encode_event(event: HelperEvent) -> dict[str, Any]:
@@ -188,6 +198,8 @@ def encode_event(event: HelperEvent) -> dict[str, Any]:
         payload["supports_saml"] = event.supports_saml
     if event.backend is not None:
         payload["backend"] = event.backend
+    if event.kind is HelperEventKind.HELLO or event.capabilities:
+        payload["capabilities"] = list(event.capabilities)
     return payload
 
 
@@ -227,6 +239,7 @@ def event_from_payload(payload: dict[str, Any]) -> HelperEvent:
         openfortivpn_version=_optional_str(payload.get("openfortivpn_version")),
         supports_saml=_optional_bool(payload.get("supports_saml")),
         backend=_optional_str(payload.get("backend")),
+        capabilities=advertised_helper_capabilities(payload.get("capabilities")),
     )
 
 
@@ -240,3 +253,24 @@ def _optional_int(value: object) -> int | None:
 
 def _optional_bool(value: object) -> bool | None:
     return value if isinstance(value, bool) else None
+
+
+def advertised_helper_capabilities(value: object) -> tuple[str, ...]:
+    """Return advertised capability tokens. Missing or malformed values are empty."""
+    if isinstance(value, (list, tuple, set, frozenset)):
+        items = value
+    else:
+        return ()
+    seen: list[str] = []
+    for item in items:
+        if isinstance(item, str) and item and item not in seen:
+            seen.append(item)
+    return tuple(seen)
+
+
+def helper_has_capabilities(advertised: object, required: object) -> bool:
+    """Return True when every required capability is present in *advertised*."""
+    need = set(advertised_helper_capabilities(required))
+    if not need:
+        return True
+    return need <= set(advertised_helper_capabilities(advertised))

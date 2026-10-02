@@ -1,7 +1,7 @@
 # Znane ograniczenia
 
-Wersja v1.2.0 to wydanie utwardzające diagnostykę i UX na bazie klienta SSL
-VPN i IPsec z v1.1.0, zasobnika, opcjonalnego autostartu i ponawiania.
+Wersja v1.3.0 dodaje FortiGate IPsec IKEv2 + SAML/SSO na bazie klienta SSL
+VPN i IPsec IKEv1, zasobnika, opcjonalnego autostartu i ponawiania.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -31,9 +31,10 @@ VPN i IPsec z v1.1.0, zasobnika, opcjonalnego autostartu i ponawiania.
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING i CONNECTED. Przeglądarka nie
   jest zamykana na siłę; listener SAML znika razem z procesem.
 - IPsec to ogólny typ profilu. Ta wersja uruchamia IKEv1 Aggressive Mode
-  z PSK, XAuth, Mode Config, NAT-T i FortiGate/Cisco Unity split include.
-  IKEv2, Main Mode, certyfikat, EAP, SAML/SSO IPsec i adresacja ręczna nie
-  są łączone.
+  z PSK, XAuth, Mode Config, NAT-T i FortiGate/Cisco Unity split include
+  oraz IKEv2 + SAML/SSO z kompatybilnym EAP-MSCHAPv2 FortiClient i
+  negocjowanym split-tunnel `INTERNAL_IP4_SUBNET`. Main Mode, certyfikat
+  i adresacja ręczna nie są łączone.
 - IPsec używa dystrybucyjnego strongSwan (`charon`/`swanctl`). Nie jest
   dołączany do paczki. Wsparcie Debian 13, Fedora, Windows i macOS nie jest
   deklarowane.

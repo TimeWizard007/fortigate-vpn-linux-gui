@@ -13,6 +13,7 @@ from fortigate_vpn_gui.helper.protocol import (
     INSTALLED_HELPER_PATH,
     PACKAGE_OPENFORTIVPN_PATH,
     POLKIT_ACTION_ID,
+    PROTOCOL_VERSION,
 )
 from fortigate_vpn_gui.metadata import (
     DESKTOP_FILENAME,
@@ -24,18 +25,24 @@ from fortigate_vpn_gui.metadata import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_application_version_is_1_2_0() -> None:
-    assert __version__ == "1.2.0"
+def test_application_version_is_1_3_0() -> None:
+    assert __version__ == "1.3.0"
 
 
-def test_helper_protocol_is_0_8_0() -> None:
-    assert HELPER_VERSION == "0.8.0"
+def test_helper_protocol_is_0_9_0() -> None:
+    assert HELPER_VERSION == "0.9.0"
+    assert PROTOCOL_VERSION == 1
 
 
-def test_production_helper_path() -> None:
+def test_production_helper_path(monkeypatch) -> None:
+    from fortigate_vpn_gui.system.helper_client import default_helper_client, resolve_helper_path
+
+    monkeypatch.delenv("FORTIGATE_VPN_HELPER", raising=False)
     assert INSTALLED_HELPER_PATH == "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper"
     assert PACKAGE_OPENFORTIVPN_PATH == "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
     assert APPROVED_OPENFORTIVPN_PATHS[0] == PACKAGE_OPENFORTIVPN_PATH
+    assert resolve_helper_path() == INSTALLED_HELPER_PATH
+    assert type(default_helper_client()).__name__ == "PolkitHelperClient"
 
 
 def test_production_launcher_path() -> None:
@@ -98,8 +105,8 @@ def test_launcher_script_has_no_shell_injection() -> None:
 def test_debian_control_metadata() -> None:
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "Package: fortigate-vpn-linux-gui" in control
-    assert "Version: 1.2.0-1" in control
-    assert "1.1.0-1" not in control.split("Depends:", 1)[0]
+    assert "Version: 1.3.0-1" in control
+    assert "1.2.0-1" not in control.split("Depends:", 1)[0]
     assert "1.0.0-2" not in control
     assert "Architecture: amd64" in control
     assert "Depends:" in control
@@ -121,17 +128,26 @@ def test_debian_control_metadata() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "keyring" in pyproject
     changelog = (ROOT / "packaging" / "debian" / "changelog").read_text(encoding="utf-8")
-    assert changelog.startswith("fortigate-vpn-linux-gui (1.2.0-1)")
+    assert changelog.startswith("fortigate-vpn-linux-gui (1.3.0-1)")
     script = (ROOT / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
-    assert 'VERSION="1.2.0"' in script
+    assert 'VERSION="1.3.0"' in script
     assert 'REVISION="1"' in script
     assert "import keyring" in script
     assert 'OPENFORTIVPN_VERSION="1.24.1"' in script
     assert "apparmor/usr.sbin.swanctl.local" in script
     assert 'SYSTEM_PYTHON="/usr/bin/python3.12"' in script
+    assert "build-fvl-forticlient-vid.sh" in script
+    assert "libstrongswan-fvl-forticlient-vid.so" in script
+    assert "build_package_forticlient_vid" in script
+    assert "/usr/lib/ipsec/plugins" in script
     assert '"${SYSTEM_PYTHON}" -m venv' in script
     assert "python3.12 -m venv" not in script
     assert "staging still contains the development checkout path" in script
+    postinst = (ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
+    postrm = (ROOT / "packaging" / "debian" / "postrm").read_text(encoding="utf-8")
+    for text in (postinst, postrm):
+        assert "fvl-forticlient-vid.conf" not in text
+        assert "/etc/strongswan.conf" not in text
 
 
 def test_apparmor_local_snippet_is_private_vici_only() -> None:
@@ -161,6 +177,13 @@ def test_dev_helper_install_script_keeps_polkit_path() -> None:
     assert "pkexec" in script
     assert "restore" in script
     assert "apt install --reinstall fortigate-vpn-linux-gui" in script
+    assert "Install kind" in script
+    assert "capabilities" in script
+    assert "system strongSwan" in script
+    assert "/usr/lib/ipsec/plugins" in script
+    assert "libstrongswan-fvl-forticlient-vid.so" in script
+    assert "/etc/strongswan.d/charon/fvl-forticlient-vid.conf" in script
+    assert "systemctl" not in script
     assert "/home/" not in script
     assert (ROOT / "scripts" / "install-dev-helper.sh").stat().st_mode & 0o111
 

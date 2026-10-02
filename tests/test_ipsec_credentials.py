@@ -6,7 +6,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QGroupBox, QLabel, QLineEdit, QPushButton
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 from fortigate_vpn_gui.gui.connection_page import ConnectionPage
 from fortigate_vpn_gui.gui.ipsec_credentials_dialog import (
@@ -183,7 +191,7 @@ def test_connection_page_looks_up_stored_psk(
         return None
 
     monkeypatch.setattr(
-        "fortigate_vpn_gui.gui.connection_page.prompt_ipsec_credentials",
+        "fortigate_vpn_gui.gui.ipsec_connect.prompt_ipsec_credentials",
         fake_prompt,
     )
     harness = VpnHarness()
@@ -214,7 +222,7 @@ def test_profiles_page_ipsec_connect_uses_same_prompt(
         return None
 
     monkeypatch.setattr(
-        "fortigate_vpn_gui.gui.profiles_page.prompt_ipsec_credentials",
+        "fortigate_vpn_gui.gui.ipsec_connect.prompt_ipsec_credentials",
         fake_prompt,
     )
     harness = VpnHarness()
@@ -445,3 +453,67 @@ def test_connect_replace_psk_does_not_show_stored_secret(qapp) -> None:
     assert credentials.psk == "new-psk"
     assert credentials.password == "new-password"
     assert _PSK not in credentials.psk
+
+
+def test_switching_editor_to_sso_keeps_stored_psk(
+    qapp, profile_manager: ProfileManager, psk_store
+) -> None:
+    profile = profile_manager.add(
+        name="IPsec office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        username_hint="mwi",
+        ipsec=default_ipsec_settings().to_json(),
+    )
+    psk_store.set(profile.id, _PSK)
+    psk_store.set_xauth_password(profile.id, _XAUTH_PASSWORD)
+    dialog = ProfileEditorDialog(profile_manager, profile)
+    user_auth = dialog.findChild(QComboBox, "profileIpsecUserAuth")
+    assert user_auth is not None
+    user_auth.setCurrentIndex(user_auth.findData("saml"))
+    psk_field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    assert psk_field is not None
+    assert psk_field.text() == ""
+    assert _PSK not in psk_field.placeholderText()
+    assert _PSK not in psk_field.text()
+    assert dialog.submit() is True
+    assert psk_store.get(profile.id) == _PSK
+    raw = profile_manager.storage_path.read_text(encoding="utf-8")
+    assert _PSK not in raw
+    assert _XAUTH_PASSWORD not in raw
+    updated = profile_manager.get(profile.id)
+    assert updated is not None
+    assert updated.is_ipsec_saml_preauth() is True
+
+
+def test_ikev2_hides_aggressive_main_even_for_psk_xauth(
+    qapp, profile_manager: ProfileManager
+) -> None:
+    dialog = ProfileEditorDialog(profile_manager)
+    vpn_type = dialog.findChild(QComboBox, "profileVpnType")
+    advanced = dialog.findChild(QGroupBox, "profileIpsecAdvancedBox")
+    assert vpn_type is not None and advanced is not None
+    vpn_type.setCurrentIndex(1)
+    advanced.setChecked(True)
+    ike = dialog.findChild(QComboBox, "profileIkeVersion")
+    mode_row = dialog.findChild(QWidget, "profileIkeModeRow")
+    assert ike is not None and mode_row is not None
+    assert not mode_row.isHidden()
+    ike.setCurrentIndex(ike.findData("ikev2"))
+    assert mode_row.isHidden()
+
+
+def test_psk_only_dialog_hides_xauth_fields(qapp) -> None:
+    dialog = IpsecCredentialsDialog("IPsec SSO", psk_only=True)
+    username = dialog.findChild(QLineEdit, "ipsecUsername")
+    password = dialog.findChild(QLineEdit, "ipsecPassword")
+    assert username is not None and username.isHidden()
+    assert password is not None and password.isHidden()
+    dialog.findChild(QLineEdit, "ipsecPsk").setText("TEST_ONLY_PSK_DO_NOT_USE")
+    credentials = dialog.credentials()
+    assert credentials is not None
+    assert credentials.psk == "TEST_ONLY_PSK_DO_NOT_USE"
+    assert credentials.username == ""
+    assert credentials.password == ""
+    assert "TEST_ONLY_PSK_DO_NOT_USE" not in repr(credentials)

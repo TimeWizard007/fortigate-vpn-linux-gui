@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from fortigate_vpn_gui.gui.certificate_dialog import CertificateTrustDialog
-from fortigate_vpn_gui.gui.ipsec_credentials_dialog import prompt_ipsec_credentials
+from fortigate_vpn_gui.gui.ipsec_connect import collect_ipsec_connect_credentials
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.helper.protocol import CertificateInfo
@@ -440,7 +440,9 @@ class ConnectionPage(QWidget):
             self._action_button.setText("Connect again")
             self._action_button.setEnabled(has_profile)
             return
-        if profile is not None and profile.use_sso:
+        if profile is not None and (
+            profile.is_ipsec_saml_preauth() or (profile.is_ssl() and profile.use_sso)
+        ):
             self._action_button.setText("Connect with SSO")
         else:
             self._action_button.setText("Connect")
@@ -481,18 +483,17 @@ class ConnectionPage(QWidget):
             self._vpn.disconnect()
             return
         profile = self.selected_profile()
-        if profile is not None and profile.is_ipsec():
-            credentials = prompt_ipsec_credentials(
-                profile,
-                parent=dialog_parent_for(self),
-                psk_store=self._manager.psk_store,
-                manager=self._manager,
-            )
-            if credentials is None:
-                return
-            self._vpn.connect(profile, credentials=credentials)
+        if profile is None:
             return
-        self._vpn.connect(profile)
+        proceed, credentials = collect_ipsec_connect_credentials(
+            profile,
+            parent=dialog_parent_for(self),
+            psk_store=self._manager.psk_store,
+            manager=self._manager,
+        )
+        if not proceed:
+            return
+        self._vpn.connect(profile, credentials=credentials)
 
     def _copy_safe_auth_url(self) -> None:
         """Copy origin+path only. Query values are never placed on the clipboard."""
@@ -544,6 +545,7 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.PRIVILEGE_DENIED: "Authorization denied",
         VpnErrorCode.HELPER_NOT_AVAILABLE: "Privileged helper missing",
         VpnErrorCode.HELPER_VERSION_MISMATCH: "Helper version mismatch",
+        VpnErrorCode.HELPER_CAPABILITY_MISMATCH: "Helper cannot start this IPsec combination",
         VpnErrorCode.HELPER_STARTUP_FAILED: "Privileged helper failed to start",
         VpnErrorCode.POLKIT_UNAVAILABLE: "polkit unavailable",
         VpnErrorCode.CERTIFICATE_UNTRUSTED: "Gateway certificate",
@@ -557,8 +559,11 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.DNS_RESOLUTION_FAILED: "DNS resolution failed",
         VpnErrorCode.GATEWAY_UNREACHABLE: "Gateway unreachable",
         VpnErrorCode.IKE_NEGOTIATION_TIMEOUT: "IKE negotiation timed out",
+        VpnErrorCode.IKE_SA_INIT_TIMEOUT: "IKE_SA_INIT timed out",
+        VpnErrorCode.IKE_AUTH_TIMEOUT: "IKE_AUTH timed out",
         VpnErrorCode.IPSEC_PSK_FAILURE: "IPsec pre-shared key failed",
         VpnErrorCode.IPSEC_XAUTH_FAILURE: "XAuth authentication failed",
+        VpnErrorCode.IPSEC_EAP_FAILURE: "IKEv2 authentication failed",
         VpnErrorCode.IPSEC_PROPOSAL_MISMATCH: "IPsec proposal mismatch",
         VpnErrorCode.IPSEC_CHILD_SA_FAILED: "CHILD_SA failed",
         VpnErrorCode.IPSEC_VIP_FAILED: "Virtual IP assignment failed",
@@ -569,6 +574,9 @@ def _error_title(code: VpnErrorCode | None) -> str:
         VpnErrorCode.IKE_PORT_IN_USE: "IKE ports in use",
         VpnErrorCode.IPSEC_UNSUPPORTED: "IPsec combination not supported",
         VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED: "IPsec credentials required",
+        VpnErrorCode.IPSEC_SAML_HTTP_UNKNOWN: "IPsec SAML bootstrap blocked",
+        VpnErrorCode.IPSEC_SAML_CONNECT_FAILED: "IPsec SAML service unreachable",
+        VpnErrorCode.IPSEC_SAML_HTTP_REJECTED: "IPsec SAML bootstrap rejected",
     }
     if code is None:
         return "VPN"

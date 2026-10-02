@@ -69,10 +69,20 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - UX profilu/sekretów (typ VPN, zapisane bezpiecznie / nie zapisane / niedostępne)
 - Aplikacja 1.2.0; protokół pomocnika nadal 0.8.0; paczka Debian 1.2.0-1
 
-## Później (nie deklarowane w v1.2.0)
+## v1.3.0 — IKEv2 + SAML IPsec
 
-- IKEv1 Main Mode, IKEv2, uwierzytelnianie certyfikatem, EAP, SAML/SSO IPsec
-- Adresacja ręczna IPsec
+- FortiGate IKEv2 + SAML/SSO w przeglądarce systemowej
+- Kompatybilne EAP-MSCHAPv2 FortiClient
+- Izolacja prywatnego charon i wtyczka kompatybilności FortiClient
+- Negocjowany split-tunnel (`INTERNAL_IP4_SUBNET`) i split DNS
+- Bezpieczny Connect → Disconnect → Connect z zachowaniem jawnego `/32` bramy
+- Aplikacja 1.3.0; wersja możliwości pomocnika 0.9.0; `protocol_version` 1; paczka Debian 1.3.0-1
+- Istniejące SSL/SAML i IKEv1 PSK+XAuth pozostają wspierane
+- Historia badań (EN): [docs/research/ipsec-saml-sso.md](../research/ipsec-saml-sso.md)
+
+## Później (nie deklarowane w v1.3.0)
+
+- IKEv1 Main Mode, uwierzytelnianie certyfikatem, adresacja ręczna IPsec
 - Debian 13, Fedora, Windows, macOS
 
 ## v1.0.0 — pakietowanie i wydanie stabilne

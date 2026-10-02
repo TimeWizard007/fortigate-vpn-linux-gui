@@ -13,7 +13,8 @@ odpowiednich właścicieli.
 Główny cel wydania: **Ubuntu 24.04 LTS, amd64**. Inne dystrybucje z rodziny
 Debian nie były testowane.
 
-Aktualna wersja to **1.2.0**. Protokół pomocnika to **0.8.0**.
+Aktualna wersja to **1.3.0**. Wersja możliwości pomocnika to **0.9.0**
+(`protocol_version` pozostaje **1**).
 
 ## Funkcje
 
@@ -21,8 +22,9 @@ Aktualna wersja to **1.2.0**. Protokół pomocnika to **0.8.0**.
 - Łączenie ze strony Profiles lub Connection
 - SAML/SSO przez `openfortivpn --saml-login` i systemową przeglądarkę
 - Profile SSL z hasłem, gdy SSO nie jest używane
-- IPsec: IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T, FortiGate/Cisco
-  Unity split include (dystrybucyjny strongSwan, nie dołączany do paczki)
+- IPsec przez dystrybucyjny strongSwan (nie dołączany do paczki):
+  - IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T, FortiGate/Cisco Unity split include
+  - IKEv2 + SAML/SSO z kompatybilnym EAP-MSCHAPv2 FortiClient, negocjowanym split-tunnel i split DNS
 - Jawne przypinanie certyfikatu FortiGate dla SSL (nigdy automatycznie)
 - Pomocnik uprzywilejowany przez polkit (`pkexec` uruchamia tylko pomocnika)
 - Opcjonalny zapis PSK IPsec i hasła XAuth w Secret Service (nigdy w
@@ -35,7 +37,7 @@ Aktualna wersja to **1.2.0**. Protokół pomocnika to **0.8.0**.
 ## Instalacja (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.2.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.3.0-1_amd64.deb
 ```
 
 `apt` dociąga biblioteki runtime, `pkexec`, `ppp`, `iproute2` oraz pakiety
@@ -126,8 +128,10 @@ pinowaniem certyfikatu.
 
 **IPsec** (dystrybucyjny strongSwan): IKEv1 Aggressive Mode, PSK + XAuth,
 Mode Config / VIP, NAT-T, CHILD_SA/XFRM, FortiGate/Cisco Unity split include
-oraz DNS VPN. IKEv2, Main Mode, certyfikat IPsec, EAP i SAML IPsec mogą być
-zapisane w profilu, ale nie są uruchamiane.
+oraz DNS VPN; oraz IKEv2 + SAML/SSO z kompatybilnym EAP-MSCHAPv2 FortiClient,
+negocjowanym split-tunnel `INTERNAL_IP4_SUBNET` i split DNS. Main Mode,
+certyfikat IPsec i adresacja ręczna mogą być zapisane w profilu, ale nie są
+uruchamiane.
 
 IPsec aplikacji używa **prywatnego** charon (`/run/charon.fvl.conf` i
 `/run/charon.fvl.vici`). Nie zatrzymuje `strongswan-starter`, nie zabija
@@ -140,7 +144,8 @@ strongSwan. Paczka nigdy nie wyłącza systemowego strongSwan automatycznie.
 ### Przetestowane
 
 - Ubuntu 24.04 LTS amd64
-- Środowisko FortiGate / FortiOS użyte do walidacji IPsec i SSL w v1.1.0
+- Środowisko FortiGate / FortiOS użyte do walidacji SSL, IPsec IKEv1 oraz
+  v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, trzy udane cykle)
 - Test zainstalowanej paczki v1.2.0: odmowa IPsec gdy systemowy charon miał
   UDP/500/4500; prywatny IPsec po zatrzymaniu tego IKE; SSL/SAML po sprzątaniu
   IPsec z przywróconym systemowym strongSwan

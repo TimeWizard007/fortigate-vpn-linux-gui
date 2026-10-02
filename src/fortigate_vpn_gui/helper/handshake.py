@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass
 
 from fortigate_vpn_gui.helper.protocol import (
+    HELPER_CAPABILITIES,
     HELPER_VERSION,
     PROTOCOL_VERSION,
     HelperEvent,
@@ -33,6 +34,7 @@ class HelperHelloResult:
     protocol_version: int | None
     status: str
     detail: str
+    capabilities: tuple[str, ...] = ()
 
 
 def is_valid_helper_version(value: object) -> bool:
@@ -44,12 +46,14 @@ def encode_hello_line(
     *,
     helper_version: str = HELPER_VERSION,
     protocol_version: int = PROTOCOL_VERSION,
+    capabilities: tuple[str, ...] | None = None,
 ) -> str:
     """Return one JSON-lines hello event."""
     event = HelperEvent(
         kind=HelperEventKind.HELLO,
         helper_version=helper_version,
         protocol_version=protocol_version,
+        capabilities=HELPER_CAPABILITIES if capabilities is None else capabilities,
     )
     return json.dumps(encode_event(event), separators=(",", ":"))
 
@@ -65,12 +69,13 @@ def parse_helper_hello_output(
     stdout_text = stdout or ""
     parsed = _parse_stdout_hello(stdout_text)
     if parsed is not None:
-        version, protocol = parsed
+        version, protocol, capabilities = parsed
         return HelperHelloResult(
             helper_version=version,
             protocol_version=protocol,
             status="ok",
             detail=detail,
+            capabilities=capabilities,
         )
     if _looks_like_crash(stdout_text, stderr, returncode):
         return HelperHelloResult(
@@ -94,7 +99,7 @@ def parse_helper_hello_output(
     )
 
 
-def _parse_stdout_hello(stdout: str) -> tuple[str, int | None] | None:
+def _parse_stdout_hello(stdout: str) -> tuple[str, int | None, tuple[str, ...]] | None:
     for raw in stdout.splitlines():
         line = raw.strip()
         if not line:
@@ -114,10 +119,10 @@ def _parse_stdout_hello(stdout: str) -> tuple[str, int | None] | None:
                 continue
             version = event.helper_version
             if is_valid_helper_version(version) and version is not None:
-                return version, event.protocol_version
+                return version, event.protocol_version, event.capabilities
             return None
         if is_valid_helper_version(line):
-            return line.strip(), None
+            return line.strip(), None, ()
         # First non-empty line was neither hello JSON nor a version token.
         return None
     return None

@@ -36,6 +36,12 @@ _SENSITIVE_QUERY_KEYS = frozenset(
         "password",
         "passwd",
         "authorization",
+        "tokenid",
+        "username",
+        "fct_token_id",
+        "fct_uid",
+        "eap_id",
+        "eap_identity",
     }
 )
 
@@ -63,6 +69,39 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(refresh[-_]?token\s*[=:]\s*)\S+", re.IGNORECASE),
     re.compile(r"(id[-_]?token\s*[=:]\s*)\S+", re.IGNORECASE),
     re.compile(r"(client[-_]?secret\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(tokenid\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(FCT_TOKEN_ID\s*[=:]\s*)\S+"),
+    re.compile(r"(FCT_UID\s*[=:]\s*)\S+"),
+    re.compile(r"(eap_id\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(eap_identity\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(eap identity\s*[=:]\s*)\S+", re.IGNORECASE),
+    re.compile(r"(received eap identity\s+['\"]?)[^\s'\"]+", re.IGNORECASE),
+    re.compile(
+        r"(server requested\b[^\n]{0,160}sending\s+['\"])[^'\"]+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(sending\s+['\"])[0-9a-fA-F]{32}(?=['\"])"),
+    re.compile(r"(sending\s+)[0-9a-fA-F]{32}\b"),
+    re.compile(r"(authentication of\s+['\"])[0-9a-fA-F]{32}(?=['\"])"),
+    re.compile(r"(ID_KEY_ID\s+['\"])[0-9a-fA-F]{32}(?=['\"])"),
+    re.compile(
+        r'(["\'](?:password|passwd|secret|psk|tokenid|eap_id|eap_identity|'
+        r'fct_uid|fct_token_id|username)["\']\s*:\s*["\'])[^"\']+',
+        re.IGNORECASE,
+    ),
+    re.compile(r"(eap shared key\s+'[^']*'\s+for\s+['\"]?)[^\s'\"]+", re.IGNORECASE),
+    re.compile(
+        r"(shared key with id '[^']*' for:\s*['\"]?)[^\s'\"]+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(loaded eap secret for\s+['\"]?)[^\s'\"]+", re.IGNORECASE),
+    re.compile(r"((?:^|[?&;\s])username\s*[=:]\s*)[^\s&;]+", re.IGNORECASE),
+    re.compile(r"(UID=)[^\r\n]+"),
+    re.compile(r"(MAC=)[^\r\n]+"),
+    re.compile(r"(HOST=)[^\r\n]+"),
+    re.compile(r"(USER=)[^\r\n]+"),
+    re.compile(r"(OSVER=)[^\r\n]+"),
+    re.compile(r"(IP=)[^\r\n]+"),
 )
 
 _URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)

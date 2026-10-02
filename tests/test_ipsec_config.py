@@ -17,12 +17,13 @@ from fortigate_vpn_gui.helper.ipsec_runtime import (
     LIVE_STRONGSWAN_CONF,
     LIVE_SWANCTL_DIR,
     LIVE_VICI_SOCKET,
+    SWANCTL_CREDENTIAL_DIRS,
     SYSTEM_VICI_SOCKET,
     charon_runtime_paths,
     wipe_ipsec_runtime,
     write_ipsec_runtime,
 )
-from fortigate_vpn_gui.profiles.ipsec import default_ipsec_settings
+from fortigate_vpn_gui.profiles.ipsec import default_ikev2_saml_settings, default_ipsec_settings
 from fortigate_vpn_gui.vpn.ipsec.commands import (
     STRONGSWAN_CONF_ENV,
     SYSTEM_VICI_URI,
@@ -57,7 +58,9 @@ def test_swanctl_conf_uses_reference_proposals_without_secrets() -> None:
     )
     assert "version = 1" in conf
     assert "aggressive = yes" in conf
-    assert "aes256-sha256-modp2048" in conf
+    assert "local-psk" in conf
+    assert "remote-psk" in conf
+    assert conf.count("auth = psk") == 2
     assert "auth = xauth" in conf
     assert "vips = 0.0.0.0" in conf
     assert "local_ts = dynamic" in conf
@@ -80,17 +83,31 @@ def test_strongswan_conf_isolates_vici_socket() -> None:
     assert "swanctl {" in conf
     assert "pidfile = /run/charon.fvl.pid" in conf
     assert "cisco_unity = yes" in conf
-    assert "include /etc/strongswan.d/charon/*.conf" in conf
+    assert "load_modular = no" in conf
+    assert "include /etc/strongswan.d/charon/*.conf" not in conf
+    assert "kernel-netlink" in conf
+    assert "kernel-libipsec" not in conf
+    assert "test-vectors" not in conf
+    assert "ldap" not in conf
     assert "path = /usr/bin/true" in conf
     assert "ike = 2" in conf
     assert "cfg = 2" in conf
     assert "filelog" in conf
     assert "stderr" in conf
     assert "secret" not in conf.lower() or "secret =" not in conf.lower()
+    assert "fvl-forticlient-vid" not in conf
     client = build_swanctl_client_conf(vici_socket="/run/charon.fvl.vici")
     assert "unix:///run/charon.fvl.vici" in client
     assert "unix:///run/charon.vici" not in client
     assert SYSTEM_VICI_URI not in client
+    assert "load_modular = no" in client
+    assert "load = vici" in client
+    assert "libstrongswan {" in client
+    assert "swanctl {" in client
+    assert client.count("load = vici") >= 3
+    assert "include /etc/strongswan.d/charon/*.conf" not in client
+    assert "test-vectors" not in client
+    assert "ldap" not in client
 
 
 def test_live_charon_paths_are_apparmor_visible() -> None:
@@ -142,8 +159,14 @@ def test_split_live_layout_writes_apparmor_paths_and_wipes(tmp_path: Path, monke
     assert f"unix://{vici}" in client
     assert "unix:///run/charon.vici" not in client
     assert "cisco_unity = yes" in text
+    assert "fvl-forticlient-vid" not in text
     assert "super-psk" not in text
     assert files.secrets.stat().st_mode & 0o777 == 0o600
+    for name in SWANCTL_CREDENTIAL_DIRS:
+        cred_dir = live_dir / name
+        assert cred_dir.is_dir()
+        assert cred_dir.stat().st_mode & 0o777 == 0o700
+        assert not any(cred_dir.iterdir())
     wipe_ipsec_runtime(files)
     assert not strongswan.exists()
     assert not dns_state.exists()
@@ -354,3 +377,56 @@ def test_ubuntu_swanctl_socket_setting_is_commented() -> None:
         stripped = line.strip()
         if stripped.startswith("socket"):
             pytest.fail("swanctl.socket is set; Ubuntu 5.9.13 should leave the default")
+
+
+def test_ikev2_eap_swanctl_uses_mschapv2_and_cartesian_proposals() -> None:
+    settings = default_ikev2_saml_settings()
+    uid = "0123456789abcdef0123456789abcdef"
+    token = "TEST_ONLY_TOKEN_DO_NOT_USE"
+    psk = "TEST_ONLY_PSK_DO_NOT_USE"
+    conf = build_swanctl_conf(
+        gateway="vpn.example.com",
+        port=500,
+        settings=settings,
+        xauth_id=uid,
+    )
+    secrets = build_swanctl_secrets(
+        IpsecCredentials(psk=psk, username=uid, password=token),
+        local_id="",
+        peer_id="",
+        eap=True,
+    )
+    assert "version = 2" in conf
+    assert "auth = eap-mschapv2" in conf
+    assert "local-eap" in conf
+    assert "local-psk" not in conf
+    assert "remote-psk" in conf
+    assert "auth = psk" in conf
+    assert conf.count("auth = psk") == 1
+    assert f'eap_id = "{uid}"' in conf
+    assert "auth = xauth" not in conf
+    assert "aes128-sha256-ecp384" in conf
+    assert "aes128-sha256-ecp521" in conf
+    assert "aes256-sha256-ecp384" in conf
+    assert "aes256-sha256-ecp521" in conf
+    assert "aes128-sha1-ecp384" in conf
+    assert "aes256-sha256-ecp384" in conf
+    assert token not in conf
+    assert psk not in conf
+    assert "eap {" in secrets
+    assert "ike-psk" in secrets
+    assert "xauth-user" not in secrets
+    assert f'secret = "{token}"' in secrets
+    assert f'secret = "{psk}"' in secrets
+    strongswan = build_strongswan_conf(
+        vici_socket="/run/charon.fvl.vici",
+        cisco_unity=False,
+        forticlient_vids=True,
+    )
+    assert "cisco_unity = no" in strongswan
+    assert "fvl-forticlient-vid {" in strongswan
+    assert "load = yes" in strongswan
+    credentials = IpsecCredentials(psk=psk, username=uid, password=token)
+    assert token not in repr(credentials)
+    assert uid not in repr(credentials)
+    assert psk not in repr(credentials)

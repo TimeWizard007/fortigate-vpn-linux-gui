@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-02
+
+### Added
+
+- FortiGate IPsec IKEv2 + SAML/SSO with unprivileged external-browser bootstrap
+- FortiClient-compatible EAP-MSCHAPv2 after SAML (`tokenid` as EAP password; FCT UID as EAP identity)
+- Application-owned FortiClient compatibility plugin for the private IKEv2 SSO charon only (Vendor IDs, AUTH omission, INITIAL_CONTACT, Notify `0xF100`, CP16, CFG_REPLY split-include)
+- Negotiated split-tunnel from FortiGate `INTERNAL_IP4_SUBNET` (table 220 / XFRM; no default route in table 220)
+- Split DNS (VPN DNS on the VIP link without hijacking public resolution)
+- Explicit main-table gateway `/32` snapshot and restore so Connect → Disconnect → Connect keeps the pre-VPN endpoint path
+- Deterministic IPsec teardown ownership: IKE/CHILD terminate, private charon exit, DNS/`nmcli reapply`, then `/32` restore and kernel verification
+
+### Changed
+
+- Application version is 1.3.0; helper capability version is 0.9.0; JSON-lines `protocol_version` remains 1; Debian package is 1.3.0-1
+- Packaged helper now advertises `ipsec_ikev2_eap` and ships the uniquely named FortiClient compatibility plugin
+- Every production `swanctl` invocation uses the private `STRONGSWAN_CONF` client conf (`load = vici`); distro plugin lists are not requested
+- Existing SSL/SAML and IKEv1 PSK+XAuth paths remain supported
+
+### Security
+
+- GUI still never runs as root; helper is not setuid; JSON-lines protocol_version is unchanged
+- EAP identity / FCT UID, `tokenid`, PSK, EAP password, and SAML URL/query/cookie/session data stay redacted in application logs
+- The FortiClient compatibility plugin is not given a `/etc/strongswan.d/charon/` snippet; system charon does not load it
+- `/etc/strongswan.conf` is not modified; `strongswan-starter` is not stopped
+- Gateway-route restore never invents a `/32`, never copies table 220, and never writes `src`
+
+### Fixed
+
+- Disconnect DNS restore / `nmcli device reapply` no longer leaves the FortiGate endpoint `/32` missing on dual-homed hosts
+- Overlapping `disconnect()` and charon `_on_exit` no longer race network restoration
+- Private `swanctl` no longer logs distro optional-plugin load failures (`test-vectors`, `ldap`, `pkcs11`, …)
+
 ## [1.2.0] - 2026-09-28
 
 ### Added
@@ -331,7 +364,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[1.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.1.0...HEAD
+[1.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.8.0...v0.9.0

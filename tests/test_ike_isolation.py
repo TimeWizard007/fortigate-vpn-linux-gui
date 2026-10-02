@@ -213,6 +213,9 @@ def test_system_charon_pid_is_not_proof_of_app_ownership(monkeypatch, tmp_path: 
         "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", missing / "dns"
     )
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", missing / "swan")
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.helper.ipsec_runtime.LIVE_LICENSE_INFO", missing / "license"
+    )
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.owned_charon_pids", lambda: ())
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime._charon_pids", lambda: (3615,))
     leftover = inspect_owned_ipsec_state()
@@ -227,7 +230,14 @@ def test_system_vici_socket_is_not_the_application_endpoint() -> None:
     assert SYSTEM_VICI_URI not in conf
     assert SYSTEM_VICI_URI not in client
     assert "unix:///run/charon.vici" not in conf
+    assert "fvl-forticlient-vid" not in conf
     assert "unix:///run/charon.vici" not in client
+    assert "load_modular = no" in client
+    assert "load = vici" in client
+    assert "libstrongswan {" in client
+    assert client.count("load = vici") >= 3
+    assert "test-vectors" not in client
+    assert "include /etc/strongswan.d/charon/*.conf" not in client
     env = build_swanctl_environment("/etc/swanctl/fortigate-vpn-linux-gui/vici-client.conf")
     assert env["STRONGSWAN_CONF"].endswith("vici-client.conf")
     assert "/run/charon.vici" not in env["STRONGSWAN_CONF"]

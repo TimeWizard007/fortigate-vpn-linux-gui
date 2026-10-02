@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from fortigate_vpn_gui.helper.argv import build_helper_argv
-from fortigate_vpn_gui.helper.protocol import HelperProtocolError
+from fortigate_vpn_gui.helper.protocol import FORBIDDEN_REQUEST_KEYS, HelperProtocolError
 from fortigate_vpn_gui.helper.validation import (
     connect_request_from_fields,
     normalize_sha256_fingerprint,
@@ -141,3 +141,17 @@ def test_helper_argv_accepts_package_owned_path() -> None:
     assert argv[0] == "/usr/libexec/fortigate-vpn-linux-gui/openfortivpn"
     assert argv[1] == "vpn.example.com:443"
     assert argv[2] == "--saml-login"
+
+
+def test_tokenid_is_a_forbidden_request_key() -> None:
+    assert "tokenid" in FORBIDDEN_REQUEST_KEYS
+    with pytest.raises(HelperProtocolError, match="UNSUPPORTED_FIELD"):
+        parse_request_payload(
+            {
+                "operation": "connect",
+                "gateway": "vpn.example.com",
+                "port": 500,
+                "auth_mode": "standard",
+                "tokenid": "TEST_ONLY_TOKEN_DO_NOT_USE",
+            }
+        )

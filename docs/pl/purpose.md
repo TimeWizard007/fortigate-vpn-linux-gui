@@ -14,7 +14,8 @@ Ten projekt ma dać jasne, nowoczesne GUI, które:
 
 Aplikacja używa [openfortivpn](https://github.com/adrienverge/openfortivpn)
 dla SSL VPN i dystrybucyjnego strongSwan dla IPsec. Oba uruchamia minimalny
-pomocnik uprzywilejowany (protokół 0.8.0 w v1.2.0). GUI pozostaje
+pomocnik uprzywilejowany (wersja możliwości 0.9.0 / protokół JSON-lines 1
+w v1.3.0). GUI pozostaje
 nieuprzywilejowane. SSL SAML otwiera systemową przeglądarkę. Opcjonalne
 ponawianie po utracie tunelu jest domyślnie wyłączone i nigdy nie pomija
 zatwierdzenia certyfikatu ani SAML.

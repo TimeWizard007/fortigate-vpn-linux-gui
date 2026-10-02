@@ -31,13 +31,19 @@ def test_inspect_owned_state_ignores_unrelated_charon(monkeypatch, tmp_path: Pat
     conf = tmp_path / "charon.fvl.conf"
     dns = tmp_path / "charon.fvl.dns"
     swan = tmp_path / "swanctl"
+    license_info = tmp_path / "missing-license-info"
+    gwroute = tmp_path / "missing-gwroute"
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_STRONGSWAN_CONF", conf)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", dns)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", swan)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_LICENSE_INFO", license_info)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_GATEWAY_ROUTE_STATE", gwroute)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.owned_charon_pids", lambda: ())
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime._charon_pids", lambda: (999,))
     leftover = inspect_owned_ipsec_state()
     assert leftover.has_owned_leftover is False
+    assert leftover.owned_license_info_present is False
+    assert leftover.owned_gateway_route_present is False
     assert leftover.other_charon_running is True
 
 
@@ -49,16 +55,21 @@ def test_recover_owned_leftovers_does_not_signal_unrelated_charon(
     swan = tmp_path / "swanctl"
     vici = tmp_path / "charon.fvl.vici"
     pid_file = tmp_path / "charon.fvl.pid"
+    license_info = tmp_path / "charon.fvl.license-info"
+    gwroute = tmp_path / "charon.fvl.gwroute"
     conf.write_text("owned", encoding="utf-8")
     dns.write_text("dns", encoding="utf-8")
     swan.mkdir()
     (swan / "secrets.conf").write_text("psk=super-secret", encoding="utf-8")
+    license_info.write_bytes(b"VER=1\nUID=0123456789abcdef0123456789abcdef\n\x00")
     killed: list[int] = []
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_STRONGSWAN_CONF", conf)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_DNS_STATE_PATH", dns)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_SWANCTL_DIR", swan)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_VICI_SOCKET", vici)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_PID_FILE", pid_file)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_LICENSE_INFO", license_info)
+    monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.LIVE_GATEWAY_ROUTE_STATE", gwroute)
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime.owned_charon_pids", lambda: (111,))
     monkeypatch.setattr("fortigate_vpn_gui.helper.ipsec_runtime._charon_pids", lambda: (111, 999))
     monkeypatch.setattr(
@@ -70,6 +81,10 @@ def test_recover_owned_leftovers_does_not_signal_unrelated_charon(
         "fortigate_vpn_gui.helper.ipsec_runtime.restore_from_state_path",
         lambda path: None,
     )
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.helper.ipsec_runtime.restore_from_gateway_route_path",
+        lambda path, run=None: False,
+    )
     leftover = recover_owned_ipsec_leftovers()
     assert leftover.has_owned_leftover is True
     assert 111 in killed
@@ -77,6 +92,8 @@ def test_recover_owned_leftovers_does_not_signal_unrelated_charon(
     assert not conf.exists()
     assert not swan.exists()
     assert not dns.exists()
+    assert not license_info.exists()
+    assert not gwroute.exists()
 
 
 def test_recover_skips_live_paths_when_unprivileged(monkeypatch, tmp_path: Path) -> None:

@@ -204,9 +204,16 @@ def apply_resolved_dns(
     interface: str,
     servers: Sequence[str],
     *,
+    domains: Sequence[str] = (),
+    catch_all: bool = True,
     run: RunArgv | None = None,
 ) -> None:
-    """Overlay VPN nameservers on *interface* via resolvectl (runtime only)."""
+    """Overlay VPN nameservers on *interface* via resolvectl (runtime only).
+
+    ``catch_all=True`` installs routing domain ``~.`` (full-tunnel DNS).
+    Split-tunnel DNS uses negotiated domains only and sets
+    ``default-route no`` so ordinary queries stay on the local resolver.
+    """
     if not interface or not servers:
         raise ValueError("VPN DNS apply requires an interface and at least one server.")
     runner = run or _run
@@ -215,10 +222,26 @@ def apply_resolved_dns(
         ["resolvectl", "dns", interface, *servers],
         "resolvectl dns failed",
     )
-    completed = _try_run(runner, ["resolvectl", "domain", interface, _ROUTING_ALL])
+    if catch_all:
+        completed = _try_run(runner, ["resolvectl", "domain", interface, _ROUTING_ALL])
+        if completed is not None and completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise RuntimeError(detail or "resolvectl domain failed")
+        return
+    domain_args = [item for item in domains if item and item != _ROUTING_ALL and item != "."]
+    if domain_args:
+        completed = _try_run(runner, ["resolvectl", "domain", interface, *domain_args])
+        if completed is not None and completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise RuntimeError(detail or "resolvectl domain failed")
+    else:
+        completed = _try_run(runner, ["resolvectl", "domain", interface, ""])
+        if completed is not None and completed.returncode != 0:
+            _try_run(runner, ["resolvectl", "domain", interface])
+    completed = _try_run(runner, ["resolvectl", "default-route", interface, "no"])
     if completed is not None and completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
-        raise RuntimeError(detail or "resolvectl domain failed")
+        raise RuntimeError(detail or "resolvectl default-route failed")
 
 
 def apply_temporary_vpn_dns(
@@ -226,6 +249,8 @@ def apply_temporary_vpn_dns(
     servers: Sequence[str],
     state_path: Path,
     *,
+    domains: Sequence[str] = (),
+    catch_all: bool = True,
     run: RunArgv | None = None,
 ) -> DnsState:
     """Snapshot pre-VPN DNS, persist it, then overlay FortiGate DNS."""
@@ -240,7 +265,13 @@ def apply_temporary_vpn_dns(
     )
     write_dns_state(state_path, state)
     try:
-        apply_resolved_dns(interface, servers, run=runner)
+        apply_resolved_dns(
+            interface,
+            servers,
+            domains=domains,
+            catch_all=catch_all,
+            run=runner,
+        )
     except Exception:
         restore_from_state_path(state_path, run=runner)
         raise

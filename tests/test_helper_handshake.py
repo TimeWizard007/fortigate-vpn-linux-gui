@@ -12,12 +12,14 @@ def test_valid_hello_json() -> None:
     assert result.status == "ok"
     assert result.helper_version == HELPER_VERSION
     assert result.protocol_version == 1
+    assert "ipsec_ikev2_eap" in result.capabilities
 
 
 def test_valid_plain_version_line() -> None:
     result = parse_helper_hello_output(stdout="0.5.0\n", returncode=0)
     assert result.status == "ok"
     assert result.helper_version == "0.5.0"
+    assert result.capabilities == ()
 
 
 def test_crash_traceback_is_startup_failed_not_version() -> None:

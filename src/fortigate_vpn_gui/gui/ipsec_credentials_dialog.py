@@ -32,6 +32,10 @@ _INTRO = (
     "Username and Password are the XAuth user credentials (for example your "
     "directory / FortiGate login)."
 )
+_PSK_ONLY_INTRO = (
+    "The pre-shared key authenticates the IPsec tunnel. It is not your SAML "
+    "or directory password. Sign-in continues in the system browser."
+)
 _PSK_NEEDED = "This pre-shared key was not saved. Enter it to connect."
 _PSK_SAVED = "Using the saved pre-shared key."
 _PASSWORD_SAVED = "Using the saved XAuth password."
@@ -50,16 +54,18 @@ class IpsecCredentialsDialog(QDialog):
         remember_username: bool = True,
         can_save_password: bool = False,
         password_unavailable_message: str = PASSWORD_UNAVAILABLE_MESSAGE,
+        psk_only: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._stored_psk = stored_psk or ""
         self._stored_password = stored_password or ""
+        self._psk_only = psk_only
         self.setWindowTitle("IPsec credentials")
         self.setModal(True)
         self.setWindowModality(Qt.WindowModality.WindowModal)
         self.setMinimumWidth(420)
-        intro = QLabel(_INTRO)
+        intro = QLabel(_PSK_ONLY_INTRO if psk_only else _INTRO)
         intro.setObjectName("ipsecCredentialsIntro")
         intro.setWordWrap(True)
         heading = QLabel(f'Connect "{profile_name}"')
@@ -155,6 +161,17 @@ class IpsecCredentialsDialog(QDialog):
             self._password_saved.hide()
             self._password_replace.hide()
 
+        if psk_only:
+            self._username.hide()
+            self._username_label.hide()
+            self._remember_username.hide()
+            self._password.hide()
+            self._password_label.hide()
+            self._password_saved.hide()
+            self._password_replace.hide()
+            self._save_password.hide()
+            self._password_status.hide()
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -182,6 +199,10 @@ class IpsecCredentialsDialog(QDialog):
 
     def credentials(self) -> IpsecCredentials | None:
         psk = self._stored_psk or self._psk.text()
+        if self._psk_only:
+            if not psk:
+                return None
+            return IpsecCredentials(psk=psk, username="", password="")
         username = self._username.text().strip()
         password = self._stored_password or self._password.text()
         if not psk or not username or not password:
@@ -309,4 +330,39 @@ def prompt_ipsec_credentials(
                 pass
         elif not dialog.save_password():
             psk_store.delete_xauth_password(profile_obj.id)
+    return credentials
+
+
+def prompt_ipsec_tunnel_psk(
+    profile: ConnectionProfile | str,
+    parent: QWidget | None = None,
+    *,
+    psk_store: PskStore | None = None,
+    stored_psk: str | None = None,
+) -> IpsecCredentials | None:
+    """Return the tunnel PSK for IKEv2 SSO, or None when cancelled.
+
+    Never asks for XAuth username/password. EAP secrets come from SAML.
+    """
+    if isinstance(profile, ConnectionProfile):
+        profile_name = profile.name
+        resolved_psk = stored_psk
+        if resolved_psk is None:
+            resolved_psk = lookup_stored_psk(psk_store, profile.id)
+    else:
+        profile_name = profile
+        resolved_psk = stored_psk
+    if resolved_psk:
+        return IpsecCredentials(psk=resolved_psk, username="", password="")
+    dialog = IpsecCredentialsDialog(
+        profile_name,
+        stored_psk=resolved_psk,
+        psk_only=True,
+        parent=parent,
+    )
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    credentials = dialog.credentials()
+    if credentials is None or not credentials.psk:
+        return None
     return credentials

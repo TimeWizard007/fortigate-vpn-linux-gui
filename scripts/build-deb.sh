@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="fortigate-vpn-linux-gui"
-VERSION="1.2.0"
+VERSION="1.3.0"
 REVISION="1"
 ARCH="amd64"
 DEB_VERSION="${VERSION}-${REVISION}"
@@ -78,6 +78,21 @@ build_package_openfortivpn() {
   fi
   "${STAGING}${PACKAGE_OPENFORTIVPN_PATH}" --help 2>&1 | grep -q -- '--saml-login' \
     || die "packaged openfortivpn is missing --saml-login"
+}
+
+build_package_forticlient_vid() {
+  local soname="libstrongswan-fvl-forticlient-vid.so"
+  local built="${ROOT}/native/fvl-forticlient-vid/${soname}"
+  "${ROOT}/scripts/build-fvl-forticlient-vid.sh" build
+  [[ -f "${built}" ]] || die "FortiClient compatibility plugin was not built"
+  install -d -m 0755 \
+    "${STAGING}/usr/lib/ipsec/plugins" \
+    "${STAGING}/usr/libexec/${PACKAGE_NAME}/plugins"
+  install -m 0644 "${built}" "${STAGING}/usr/lib/ipsec/plugins/${soname}"
+  install -m 0644 "${built}" "${STAGING}/usr/libexec/${PACKAGE_NAME}/plugins/${soname}"
+  if [[ -e "${STAGING}/etc/strongswan.d/charon/fvl-forticlient-vid.conf" ]]; then
+    die "refusing to ship a system charon plugin conf"
+  fi
 }
 
 SYSTEM_PYTHON="/usr/bin/python3.12"
@@ -161,6 +176,7 @@ EOF
 chmod 0755 "${STAGING}/usr/bin/${PACKAGE_NAME}"
 
 build_package_openfortivpn
+build_package_forticlient_vid
 
 {
   echo "#!${VENV_DIR}/bin/python"
@@ -190,7 +206,8 @@ install -m 0755 "${ROOT}/packaging/debian/postrm" "${STAGING}/DEBIAN/postrm"
 
 if find "${STAGING}" \( \
     -name '.git' -o -name '.venv' -o -name 'profiles.json' -o \
-    -name '*.pem' -o -name '*.key' -o -name '.env' \
+    -name '*.pem' -o -name '*.key' -o -name '.env' -o \
+    -name 'fvl-forticlient-vid.conf' \
   \) -print -quit | grep -q .; then
   die "staging directory contains forbidden files"
 fi

@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
             app.quit()
 
     def _tray_connect(self) -> None:
-        self._vpn.connect(self._connection_page.selected_profile())
+        self._connection_page._on_action_clicked()
 
     def _tray_reconnect(self) -> None:
         self._vpn.reconnect(self._connection_page.selected_profile())

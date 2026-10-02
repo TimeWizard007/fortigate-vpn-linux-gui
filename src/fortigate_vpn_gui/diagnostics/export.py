@@ -90,6 +90,7 @@ def format_environment_section(
             f"conf={leftover.owned_conf_present} "
             f"dns={leftover.owned_dns_state_present} "
             f"swanctl_dir={leftover.owned_swanctl_dir_present} "
+            f"license_info={leftover.owned_license_info_present} "
             f"charon_pids={leftover.owned_charon_pids or '()'}"
         ),
         f"Unrelated charon running: {leftover.other_charon_running}",

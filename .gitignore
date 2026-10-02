@@ -96,6 +96,28 @@ vgcore.*
 *.log
 logs/
 
+# Research captures — never commit raw PCAPs, FortiGate debug, HARs, or correlation sessions
+*.pcap
+*.pcapng
+*.har
+docs/research/captures/
+
+# Git-excluded FortiClient research copies (ipsec.exe, FortiAuth.dll, utilsdll.dll, …)
+.research-binaries/
+*.dll
+
+# Real GenRawLicenseInfo2 dumps (identifier material; never commit)
+license-info.raw
+*.license-info.raw
+
+# Local Windows research build products
+tools/research/windows/*.exe
+tools/research/windows/*.obj
+tools/research/windows/*.pdb
+tools/research/windows/*.ilk
+tools/research/windows/*.exp
+tools/research/windows/*.lib
+
 # Debian / packaging output (binaries are published via GitHub Releases)
 *.deb
 *.ddeb

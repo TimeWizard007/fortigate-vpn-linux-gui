@@ -20,7 +20,7 @@ from fortigate_vpn_gui.helper.validation import (
     connect_request_from_fields,
     parse_request_payload,
 )
-from fortigate_vpn_gui.profiles.ipsec import default_ipsec_settings
+from fortigate_vpn_gui.profiles.ipsec import default_ikev2_saml_settings, default_ipsec_settings
 from fortigate_vpn_gui.profiles.model import build_profile
 from fortigate_vpn_gui.vpn.ipsec.detect import IpsecBackendCapabilities
 from fortigate_vpn_gui.vpn.ipsec.secrets import IpsecCredentials
@@ -190,12 +190,17 @@ def test_helper_ipsec_argv_has_no_secrets(tmp_path: Path) -> None:
     assert "remote_ts = 0.0.0.0/0" in conf
     assert "remote_ts = dynamic" not in conf
     assert "cisco_unity = yes" in strongswan
+    assert "fvl-forticlient-vid" not in strongswan
     assert "unix://" in strongswan
     assert "charon.vici" in strongswan
     client = (tmp_path / "run" / "vici-client.conf").read_text(encoding="utf-8")
     assert "unix:///run/charon.vici" not in client
     assert "unix:///var/run/charon.vici" not in client
     assert "unix://" in client
+    assert "load_modular = no" in client
+    assert "load = vici" in client
+    assert "libstrongswan {" in client
+    assert "test-vectors" not in client
     assert any("--load-all" in call for call in swanctl_calls)
     assert any("--initiate" in call for call in swanctl_calls)
     conf_path = str(tmp_path / "run" / "swanctl.conf")
@@ -446,3 +451,196 @@ def test_repeated_swanctl_usage_dump_is_logged_once(tmp_path: Path) -> None:
     assert all(not line.strip().startswith("swanctl --") for line in logs)
     assert all("super-psk" not in line for line in logs)
     assert all("hunter2" not in line for line in logs)
+
+
+def test_ikev2_eap_combo_is_accepted_by_helper() -> None:
+    request = connect_request_from_fields(
+        gateway="vpn.example.com",
+        port=500,
+        auth_mode="standard",
+        backend=BACKEND_IPSEC,
+        ipsec=default_ikev2_saml_settings().to_json(),
+    )
+    assert request.ipsec is not None
+    assert request.ipsec["ike_version"] == "ikev2"
+    assert request.ipsec["auth_method"] == "eap"
+
+
+def test_tokenid_is_forbidden_on_connect_json() -> None:
+    with pytest.raises(HelperProtocolError, match="UNSUPPORTED_FIELD"):
+        parse_request_payload(
+            {
+                "operation": "connect",
+                "gateway": "vpn.example.com",
+                "port": 500,
+                "auth_mode": "standard",
+                "backend": BACKEND_IPSEC,
+                "tokenid": "TEST_ONLY_TOKEN_DO_NOT_USE",
+            }
+        )
+
+
+def test_ikev2_eap_runtime_keeps_private_vici(tmp_path: Path, monkeypatch) -> None:
+    held: dict[str, FakeVpnProcess] = {}
+    uid = "0123456789abcdef0123456789abcdef"
+
+    def stub_fields(*, uid: str, gateway: str, port: int, **kwargs):
+        del gateway, port, kwargs
+        from fortigate_vpn_gui.vpn.ipsec.license_info import LicenseInfoFields
+
+        return LicenseInfoFields(
+            uid=uid,
+            ip="192.0.2.10",
+            mac="aa-bb-cc-dd-ee-ff;",
+            host="testhost",
+            user="tester",
+            osver="Linux",
+        )
+
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.helper.ipsec_runtime.collect_license_info_fields",
+        stub_fields,
+    )
+
+    def factory(argv, on_output, on_exit, env=None):
+        proc = FakeVpnProcess(argv, on_output, on_exit, env=env)
+        held["proc"] = proc
+        return proc
+
+    service = HelperService(
+        process_factory=factory,
+        ipsec_discover=lambda: IpsecBackendCapabilities(
+            charon_path="/usr/lib/ipsec/charon",
+            swanctl_path="/usr/sbin/swanctl",
+            available=True,
+            source="test",
+        ),
+        runtime_dir_factory=lambda: tmp_path / "run",
+        swanctl_runner=lambda argv, timeout: SwanctlCommandResult(returncode=0),
+        vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
+    )
+    (tmp_path / "run").mkdir()
+    token = "TEST_ONLY_TOKEN_DO_NOT_USE"
+    psk = "TEST_ONLY_PSK_DO_NOT_USE"
+    request = connect_request_from_fields(
+        gateway="vpn.example.com",
+        port=500,
+        auth_mode="standard",
+        backend=BACKEND_IPSEC,
+        ipsec=default_ikev2_saml_settings().to_json(),
+    )
+    credentials = IpsecCredentials(psk=psk, username=uid, password=token)
+    service.connect(request, credentials=credentials)
+    service.wait_for_ipsec_setup(timeout=2.0)
+    proc = held["proc"]
+    assert proc.env is not None
+    assert proc.env["STRONGSWAN_CONF"] == str(tmp_path / "run" / "strongswan.conf")
+    assert all(token not in value for value in proc.env.values())
+    assert all(psk not in value for value in proc.env.values())
+    strongswan = (tmp_path / "run" / "strongswan.conf").read_text(encoding="utf-8")
+    client = (tmp_path / "run" / "vici-client.conf").read_text(encoding="utf-8")
+    secrets = (tmp_path / "run" / "secrets.conf").read_text(encoding="utf-8")
+    assert "unix:///run/charon.vici" not in strongswan
+    assert "unix:///var/run/charon.vici" not in client
+    assert "cisco_unity = no" in strongswan
+    assert "fvl-forticlient-vid {" in strongswan
+    assert "load = yes" in strongswan
+    assert "license_info =" in strongswan
+    assert uid not in strongswan
+    assert "eap {" in secrets
+    assert "xauth-user" not in secrets
+    service.disconnect()
+    assert not (tmp_path / "run").exists()
+    assert credentials.psk == ""
+    assert credentials.password == ""
+
+
+_LIVE_IKE_AUTH_TIMEOUT_LINES = (
+    "13[IKE] initiating IKE_SA fortigate[1] to 203.0.113.10",
+    "13[IKE] generating IKE_SA_INIT request 0 [ SA KE No N(NATD_S_IP) N(NATD_D_IP) "
+    "N(FRAG_SUP) N(HASH_ALG) N(REDIR_SUP) ]",
+    "13[IKE] parsed IKE_SA_INIT response 0 [ SA KE No N(NATD_S_IP) N(NATD_D_IP) N(FRAG_SUP) ]",
+    "13[CFG] selected proposal: IKE:AES_CBC_128/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/ECP_384",
+    "13[CFG] loaded EAP shared key 'eap' for '0123456789abcdef0123456789abcdef'",
+    "13[IKE] generating IKE_AUTH request 1 [ IDi AUTH CPRQ(ADDR DNS) SA TSi TSr "
+    "N(EAP_ONLY) N(MSG_ID_SYN_SUP) ]",
+    "13[IKE] retransmit 5 of request with message ID 1",
+    "13[IKE] giving up after 5 retransmits",
+    "13[IKE] establishing IKE_SA failed, giving up",
+)
+
+
+def test_helper_classifies_ike_auth_timeout_not_eap_failure(tmp_path: Path, monkeypatch) -> None:
+    held: dict[str, FakeVpnProcess] = {}
+    uid = "0123456789abcdef0123456789abcdef"
+    token = "TEST_ONLY_TOKEN_DO_NOT_USE"
+    psk = "TEST_ONLY_PSK_DO_NOT_USE"
+
+    def stub_fields(*, uid: str, gateway: str, port: int, **kwargs):
+        del gateway, port, kwargs
+        from fortigate_vpn_gui.vpn.ipsec.license_info import LicenseInfoFields
+
+        return LicenseInfoFields(
+            uid=uid,
+            ip="192.0.2.10",
+            mac="aa-bb-cc-dd-ee-ff;",
+            host="testhost",
+            user="tester",
+            osver="Linux",
+        )
+
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.helper.ipsec_runtime.collect_license_info_fields",
+        stub_fields,
+    )
+
+    def factory(argv, on_output, on_exit, env=None):
+        proc = FakeVpnProcess(argv, on_output, on_exit, env=env)
+        held["proc"] = proc
+        return proc
+
+    def swanctl_runner(argv: list[str], timeout: float) -> SwanctlCommandResult:
+        del timeout
+        if "--initiate" in argv:
+            for line in _LIVE_IKE_AUTH_TIMEOUT_LINES:
+                held["proc"].emit(line)
+            return SwanctlCommandResult(returncode=1, stderr="swanctl timed out.")
+        return SwanctlCommandResult(returncode=0)
+
+    events: list[object] = []
+    service = HelperService(
+        process_factory=factory,
+        ipsec_discover=_available_ipsec,
+        runtime_dir_factory=lambda: tmp_path / "run",
+        swanctl_runner=swanctl_runner,
+        vici_wait=lambda path, timeout: True,
+        ike_port_probe=free_ike_port_report,
+        listener=events.append,
+    )
+    (tmp_path / "run").mkdir()
+    request = connect_request_from_fields(
+        gateway="vpn.example.com",
+        port=500,
+        auth_mode="standard",
+        backend=BACKEND_IPSEC,
+        ipsec=default_ikev2_saml_settings().to_json(),
+    )
+    service.connect(
+        request,
+        credentials=IpsecCredentials(psk=psk, username=uid, password=token),
+    )
+    service.wait_for_ipsec_setup(timeout=2.0)
+    errors = [event for event in events if getattr(event, "kind", None) is HelperEventKind.ERROR]
+    assert errors
+    error = errors[0]
+    assert error.code == "IKE_AUTH_TIMEOUT"
+    assert error.message is not None
+    assert "IKE_AUTH timed out" in error.message
+    assert "FortiGate did not respond to the first IKE_AUTH request" in error.message
+    assert "EAP" not in error.message
+    joined = "\n".join(getattr(event, "line", "") or "" for event in events)
+    assert uid not in joined
+    assert token not in joined
+    assert psk not in joined
+    service.disconnect()

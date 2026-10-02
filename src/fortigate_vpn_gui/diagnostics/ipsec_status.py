@@ -103,6 +103,52 @@ def remote_selectors(policies: Sequence[XfrmPolicy]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def is_wildcard_remote_ts(policies: Sequence[XfrmPolicy]) -> bool:
+    """Return True when an outbound policy uses 0.0.0.0/0."""
+    for item in policies:
+        if item.direction != "out":
+            continue
+        if _is_wildcard_selector(item.dst):
+            return True
+    return False
+
+
+def split_remote_selectors(policies: Sequence[XfrmPolicy]) -> tuple[str, ...]:
+    """Outbound destinations that are not the IPv4 default."""
+    return tuple(item for item in remote_selectors(policies) if not _is_wildcard_selector(item))
+
+
+def parse_table_220_routes(text: str) -> tuple[str, ...]:
+    """Parse ``ip route show table 220`` destinations. No next-hops or keys."""
+    found: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("default ") or line == "default":
+            found.append("0.0.0.0/0")
+            continue
+        parts = line.split()
+        dest = parts[0]
+        if dest in {
+            "unicast",
+            "unreachable",
+            "prohibit",
+            "blackhole",
+            "throw",
+            "nat",
+            "anycast",
+            "multicast",
+        }:
+            dest = parts[1] if len(parts) > 1 else dest
+        found.append(dest)
+    return tuple(found)
+
+
+def table_220_has_default(routes: Sequence[str]) -> bool:
+    return any(_is_wildcard_selector(item) for item in routes)
+
+
 def local_selectors(policies: Sequence[XfrmPolicy]) -> tuple[str, ...]:
     found: list[str] = []
     seen: set[str] = set()
@@ -125,6 +171,15 @@ def _is_host_selector(selector: str) -> bool:
     except ValueError:
         return False
     return network.prefixlen == network.max_prefixlen
+
+
+def _is_wildcard_selector(selector: str) -> bool:
+    text = selector.strip()
+    try:
+        network = ipaddress.ip_network(text, strict=False)
+    except ValueError:
+        return text in {"0.0.0.0/0", "0.0.0.0"}
+    return network.version == 4 and network.prefixlen == 0
 
 
 def _canonical(address: str) -> str:

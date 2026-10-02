@@ -73,10 +73,20 @@ Dates are not committed. Order may change as design work proceeds.
 - Profile/credential UX (VPN type, stored securely / not stored / unavailable)
 - Application 1.2.0; helper protocol remains 0.8.0; Debian package 1.2.0-1
 
-## Later (not claimed in v1.2.0)
+## v1.3.0 — IKEv2 + IPsec SAML/SSO
 
-- IKEv1 Main Mode, IKEv2, certificate authentication, EAP, IPsec SAML/SSO
-- Manual-address IPsec
+- FortiGate IKEv2 + external-browser SAML/SSO
+- FortiClient-compatible EAP-MSCHAPv2
+- Private strongSwan/charon isolation and FortiClient compatibility plugin
+- Negotiated split-tunnel (`INTERNAL_IP4_SUBNET`) and split DNS
+- Safe Connect → Disconnect → Connect with explicit gateway `/32` preservation
+- Application 1.3.0; helper capability version 0.9.0; `protocol_version` 1; Debian package 1.3.0-1
+- Existing SSL/SAML and IKEv1 PSK+XAuth remain supported
+- Research history: [docs/research/ipsec-saml-sso.md](../research/ipsec-saml-sso.md)
+
+## Later (not claimed in v1.3.0)
+
+- IKEv1 Main Mode, certificate authentication, manual-address IPsec
 - Debian 13, Fedora, Windows, macOS
 
 ## v1.0.0 — packaging and stable release

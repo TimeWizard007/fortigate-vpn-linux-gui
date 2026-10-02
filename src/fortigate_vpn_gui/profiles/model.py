@@ -55,6 +55,8 @@ FORBIDDEN_SECRET_KEYS = frozenset(
         "pre_shared_key",
         "xauth_password",
         "ike_secret",
+        "tokenid",
+        "fct_token_id",
     }
 )
 
@@ -126,6 +128,23 @@ class ConnectionProfile:
 
     def is_ipsec(self) -> bool:
         return self.vpn_type == VPN_TYPE_IPSEC
+
+    def is_ipsec_saml_preauth(self) -> bool:
+        """Return True when this profile uses unprivileged IPsec SAML pre-auth.
+
+        The user-facing workflow is SSO/SAML. Internally that is IKEv2 + EAP
+        (EAP-MSCHAPv2) with SAML pre-authentication. ``use_sso`` is kept in
+        sync on save; routing keys off the structured combo so a stored
+        IKEv2+EAP profile is not sent through the PSK/XAuth dialog.
+        """
+        if not self.is_ipsec():
+            return False
+        settings = self.ipsec or default_ipsec_settings()
+        return settings.allows_saml_preauth()
+
+    def requires_ipsec_connect_credentials(self) -> bool:
+        """Return True when Connect must prompt for PSK + XAuth credentials."""
+        return self.is_ipsec() and not self.is_ipsec_saml_preauth()
 
     def vpn_type_label(self) -> str:
         return VPN_TYPE_IPSEC_LABEL if self.is_ipsec() else VPN_TYPE_SSL_LABEL
@@ -237,7 +256,8 @@ def build_profile(
         except ValueError as exc:
             _add_error(errors, field_errors, "ipsec", str(exc))
             ipsec_settings = default_ipsec_settings()
-        sso_value = False
+        if sso_value and not ipsec_settings.allows_saml_preauth():
+            sso_value = False
     else:
         ipsec_settings = None
 
@@ -269,7 +289,7 @@ def build_profile(
         port=port_value,
         description=description_text,
         username_hint=hint_text,
-        use_sso=False if type_value == VPN_TYPE_IPSEC else sso_value,
+        use_sso=sso_value,
         trusted_cert_sha256=pin_value,
         vpn_type=type_value,
         ipsec=ipsec_settings if type_value == VPN_TYPE_IPSEC else None,

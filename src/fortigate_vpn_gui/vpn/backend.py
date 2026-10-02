@@ -7,6 +7,7 @@ setup is performed by the privileged helper through a structured protocol.
 
 from __future__ import annotations
 
+import ssl
 import threading
 from collections.abc import Callable
 
@@ -20,6 +21,7 @@ from fortigate_vpn_gui.helper.protocol import (
     HelperEvent,
     HelperEventKind,
     HelperProbe,
+    helper_has_capabilities,
 )
 from fortigate_vpn_gui.helper.validation import (
     connect_request_from_fields,
@@ -38,12 +40,32 @@ from fortigate_vpn_gui.vpn.capabilities import (
     format_saml_unsupported_message,
 )
 from fortigate_vpn_gui.vpn.classify import (
+    IKE_AUTH_TIMEOUT_MESSAGE,
     IKE_PORT_CONFLICT_MESSAGE,
+    IKE_SA_INIT_TIMEOUT_MESSAGE,
     OutputHint,
     classify_output,
     user_message_for_hint,
 )
 from fortigate_vpn_gui.vpn.detect import locate_openfortivpn
+from fortigate_vpn_gui.vpn.ipsec.charon_noise import is_benign_charon_noise
+from fortigate_vpn_gui.vpn.ipsec.saml_bootstrap import (
+    IPSEC_SAML_CONNECT_MESSAGE,
+    IPSEC_SAML_HTTP_UNKNOWN_MESSAGE,
+    IPSEC_SAML_START_URL_MESSAGE,
+    IpsecSamlBootstrapError,
+    IpsecSamlConnectError,
+    IpsecSamlHttpRejectedError,
+    IpsecSamlHttpUnknownError,
+    IpsecSamlPreauthSession,
+    IpsecSamlStartUrlError,
+)
+from fortigate_vpn_gui.vpn.ipsec.saml_credentials import IpsecSamlCredentials
+from fortigate_vpn_gui.vpn.ipsec.saml_listener import (
+    DEFAULT_LISTEN_TIMEOUT_SECONDS,
+    IpsecSamlListenerError,
+)
+from fortigate_vpn_gui.vpn.ipsec.secrets import IpsecCredentials
 from fortigate_vpn_gui.vpn.log_buffer import LogBuffer, LogLevel
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
 from fortigate_vpn_gui.vpn.models import (
@@ -64,6 +86,7 @@ Selector = Callable[[bool], OpenfortivpnCapabilities | None]
 VpnListener = Callable[["VpnEvent"], None]
 
 DEFAULT_SAML_TIMEOUT_SECONDS = 120.0
+DEFAULT_IPSEC_SAML_TIMEOUT_SECONDS = DEFAULT_LISTEN_TIMEOUT_SECONDS
 DEFAULT_RECONNECT_DELAY_SECONDS = 5.0
 DEFAULT_RECONNECT_ATTEMPTS = 3
 
@@ -104,8 +127,12 @@ _PRIVILEGE_DENIED_MESSAGE = (
     "Authorization for privileged VPN access was denied. The tunnel was not started."
 )
 _HELPER_VERSION_MESSAGE = (
-    "The privileged helper version does not match this application. Reinstall "
-    "the helper from this version of FortiGate VPN Linux GUI."
+    "The privileged helper version does not match this application. From a Git "
+    "checkout run: sudo ./scripts/install-dev-helper.sh"
+)
+_HELPER_CAPABILITY_MESSAGE = (
+    "The installed privileged helper does not support this IPsec combination. "
+    "From this checkout run: sudo ./scripts/install-dev-helper.sh"
 )
 _HELPER_STARTUP_MESSAGE = (
     "The privileged VPN helper failed to start. See Logs or Diagnostics for "
@@ -136,12 +163,24 @@ _IPSEC_DAEMON_START_MESSAGE = (
 )
 _IPSEC_UNSUPPORTED_MESSAGE = (
     "This IPsec combination is not implemented yet. This release connects "
-    "IKEv1 Aggressive Mode with PSK, XAuth, and Mode Config."
+    "IKEv1 Aggressive Mode with PSK, XAuth, and Mode Config, and IKEv2 PSK "
+    "plus EAP-MSCHAPv2 after SAML pre-authentication."
 )
 _IPSEC_CREDENTIALS_MESSAGE = (
     "IPsec connect needs a pre-shared key and XAuth username/password. "
     "These secrets are not stored in the profile."
 )
+_IPSEC_SSO_PSK_MESSAGE = (
+    "IPsec SSO needs the tunnel pre-shared key. Save it in the profile or enter it to connect."
+)
+_IPSEC_SAML_COMPLETE_MESSAGE = "IPsec SAML pre-authentication completed."
+_IPSEC_IKEV2_AUTH_MESSAGE = "IKEv2 authentication failed. See Diagnostics for details."
+_IPSEC_SAML_HTTP_UNKNOWN_USER_MESSAGE = IPSEC_SAML_HTTP_UNKNOWN_MESSAGE
+_IPSEC_SAML_TIMEOUT_MESSAGE = (
+    "IPsec SAML sign-in timed out. Complete authentication in the browser "
+    "within five minutes, then try again."
+)
+_IPSEC_SAML_CALLBACK_MESSAGE = "The IPsec SAML callback was incomplete or malformed."
 
 
 class VpnEvent:
@@ -180,6 +219,8 @@ class VpnBackend:
         schedule_timeout: TimeoutScheduler = threaded_timeout_scheduler,
         grace_seconds: float = 5.0,
         saml_timeout_seconds: float = DEFAULT_SAML_TIMEOUT_SECONDS,
+        ipsec_saml_timeout_seconds: float = DEFAULT_IPSEC_SAML_TIMEOUT_SECONDS,
+        ipsec_saml_session: IpsecSamlPreauthSession | None = None,
         auto_reconnect: bool = False,
         reconnect_delay_seconds: float = DEFAULT_RECONNECT_DELAY_SECONDS,
         reconnect_max_attempts: int = DEFAULT_RECONNECT_ATTEMPTS,
@@ -191,6 +232,11 @@ class VpnBackend:
         self._schedule_timeout = schedule_timeout
         self._grace_seconds = grace_seconds
         self._saml_timeout_seconds = saml_timeout_seconds
+        self._ipsec_saml_timeout_seconds = float(ipsec_saml_timeout_seconds)
+        self._ipsec_saml_session = ipsec_saml_session
+        self._ipsec_saml_cancel: threading.Event | None = None
+        self._ipsec_saml_active = False
+        self._ipsec_tunnel_psk = ""
         if helper is not None:
             self._helper = helper
         elif process_factory is not None:
@@ -226,6 +272,8 @@ class VpnBackend:
         self._tunnel_established_logged = False
         self._gateway_connected_logged = False
         self._ike_established_logged = False
+        self._ike_sa_init_logged = False
+        self._eap_progress_logged = False
         self._child_sa_logged = False
         self._listener_logged = False
         self._disconnect_logged = False
@@ -308,6 +356,26 @@ class VpnBackend:
 
         self._wait_helper_idle()
 
+        if profile.is_ipsec() and profile.is_ipsec_saml_preauth():
+            psk = getattr(credentials, "psk", "") if credentials is not None else ""
+            wipe = getattr(credentials, "wipe", None)
+            if callable(wipe):
+                wipe()
+            if not psk:
+                self._fail_without_process(
+                    VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED, _IPSEC_SSO_PSK_MESSAGE
+                )
+                return
+            needed = (
+                profile.ipsec.required_helper_capabilities()
+                if profile.ipsec is not None
+                else frozenset()
+            )
+            if not self._probe_helper(required_capabilities=needed):
+                return
+            self._begin_ipsec_saml_preauth(profile, tunnel_psk=psk)
+            return
+
         if profile.is_ipsec():
             settings = profile.ipsec
             if settings is None or not settings.is_supported():
@@ -330,22 +398,10 @@ class VpnBackend:
             if capabilities is None:
                 return
 
-        probe = self._helper.probe()
-        with self._lock:
-            self._helper_probe = probe
-        if probe.status == "missing":
-            self._log.append("vpn", "Privileged helper is not installed.")
-            self._fail_without_process(VpnErrorCode.HELPER_NOT_AVAILABLE, _HELPER_MISSING_MESSAGE)
-            return
-        if probe.status == "polkit_unavailable":
-            self._log.append("vpn", "polkit (pkexec) is not available.")
-            self._fail_without_process(VpnErrorCode.POLKIT_UNAVAILABLE, _POLKIT_MISSING_MESSAGE)
-            return
-        if probe.version_mismatch:
-            self._log.append("vpn", "Privileged helper version mismatch.")
-            self._fail_without_process(
-                VpnErrorCode.HELPER_VERSION_MISMATCH, _HELPER_VERSION_MESSAGE
-            )
+        needed = frozenset()
+        if profile.is_ipsec() and profile.ipsec is not None:
+            needed = profile.ipsec.required_helper_capabilities()
+        if not self._probe_helper(required_capabilities=needed):
             return
 
         try:
@@ -378,6 +434,285 @@ class VpnBackend:
             credentials=credentials,
         )
 
+    def _probe_helper(self, *, required_capabilities: frozenset[str] | None = None) -> bool:
+        """Record helper probe status. Does not start charon or the tunnel."""
+        probe = self._helper.probe()
+        with self._lock:
+            self._helper_probe = probe
+        if probe.status == "missing":
+            self._log.append("vpn", "Privileged helper is not installed.")
+            self._fail_without_process(VpnErrorCode.HELPER_NOT_AVAILABLE, _HELPER_MISSING_MESSAGE)
+            return False
+        if probe.status == "polkit_unavailable":
+            self._log.append("vpn", "polkit (pkexec) is not available.")
+            self._fail_without_process(VpnErrorCode.POLKIT_UNAVAILABLE, _POLKIT_MISSING_MESSAGE)
+            return False
+        if probe.version_mismatch:
+            self._log.append("vpn", "Privileged helper version mismatch.")
+            self._fail_without_process(
+                VpnErrorCode.HELPER_VERSION_MISMATCH, _HELPER_VERSION_MESSAGE
+            )
+            return False
+        if required_capabilities and not helper_has_capabilities(
+            probe.capabilities, required_capabilities
+        ):
+            self._log.append("vpn", "Privileged helper lacks required IPsec capabilities.")
+            self._fail_without_process(
+                VpnErrorCode.HELPER_CAPABILITY_MISMATCH, _HELPER_CAPABILITY_MESSAGE
+            )
+            return False
+        return True
+
+    def _begin_ipsec_saml_preauth(self, profile: ConnectionProfile, *, tunnel_psk: str) -> None:
+        """Start unprivileged IPsec SAML pre-auth. Helper/charon start after callback."""
+        with self._lock:
+            if self._shutting_down or self._state is ConnectionState.CLOSING:
+                self._log.append("vpn", "Ignoring connect; application is closing.")
+                return
+            if self._state not in CONNECTABLE_STATES:
+                self._log.append("vpn", "Ignoring repeated connect; session is busy.")
+                return
+            self._attempt_id += 1
+            self._retry_count = 0
+            self._profile = profile
+            self._last_profile = profile
+            self._user_disconnect = False
+            self._capabilities = None
+            self._use_sso = True
+            self._error_code = None
+            self._error_message = None
+            self._output_hint = OutputHint.NONE
+            self._presented_certificate = None
+            self._certificate_subject = None
+            self._certificate_issuer = None
+            self._cert_logged_sha = None
+            self._cert_error_emitted = False
+            self._tunnel_established_logged = False
+            self._gateway_connected_logged = False
+            self._ike_established_logged = False
+            self._ike_sa_init_logged = False
+            self._eap_progress_logged = False
+            self._child_sa_logged = False
+            self._listener_logged = False
+            self._disconnect_logged = False
+            self._failing = False
+            self._saml_waiting_logged = False
+            self._browser_status = "idle"
+            self._safe_auth_url = None
+            self._browser_opened = False
+            self._argv = ()
+            self._ipsec_tunnel_psk = tunnel_psk
+            self._ipsec_saml_active = True
+            self._ipsec_saml_cancel = threading.Event()
+            cancel_event = self._ipsec_saml_cancel
+            self._transition(ConnectionState.STARTING)
+            snapshot = self._snapshot_locked()
+        self._notify(VpnEvent("state", snapshot))
+        self._app_log("Starting connection.")
+        self._app_log("Starting IPsec SAML pre-authentication.")
+        self._log.append(
+            "vpn",
+            f"Starting IPsec SAML pre-auth for {profile.name} ({profile.gateway}:{profile.port}).",
+            severity=LogLevel.DEBUG,
+        )
+        worker = threading.Thread(
+            target=self._run_ipsec_saml_preauth,
+            args=(profile, cancel_event),
+            name="ipsec-saml-preauth",
+            daemon=True,
+        )
+        worker.start()
+
+    def _ipsec_saml_session_for(self, _profile: ConnectionProfile) -> IpsecSamlPreauthSession:
+        if self._ipsec_saml_session is not None:
+            return self._ipsec_saml_session
+        return IpsecSamlPreauthSession(timeout_seconds=self._ipsec_saml_timeout_seconds)
+
+    def _run_ipsec_saml_preauth(
+        self,
+        profile: ConnectionProfile,
+        cancel_event: threading.Event,
+    ) -> None:
+        credentials = None
+        try:
+            session = self._ipsec_saml_session_for(profile)
+            credentials = session.run(
+                profile,
+                browser=self._browser,
+                cancel_event=cancel_event,
+                on_waiting=self._on_ipsec_saml_waiting,
+            )
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._start_ipsec_after_saml(profile, credentials)
+        except IpsecSamlHttpUnknownError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            self._fail_and_clear(
+                VpnErrorCode.IPSEC_SAML_HTTP_UNKNOWN, _IPSEC_SAML_HTTP_UNKNOWN_USER_MESSAGE
+            )
+        except IpsecSamlConnectError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            cause = exc.__cause__
+            if cause is not None:
+                self._log.append(
+                    "vpn",
+                    redact_log_line(f"IPsec SAML bootstrap transport failed: {cause}"),
+                    severity=LogLevel.ERROR,
+                )
+            self._fail_and_clear(VpnErrorCode.IPSEC_SAML_CONNECT_FAILED, IPSEC_SAML_CONNECT_MESSAGE)
+        except IpsecSamlHttpRejectedError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            self._fail_and_clear(VpnErrorCode.IPSEC_SAML_HTTP_REJECTED, str(exc))
+        except IpsecSamlStartUrlError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            self._fail_and_clear(VpnErrorCode.SAML_FAILED, IPSEC_SAML_START_URL_MESSAGE)
+        except IpsecSamlListenerError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            message = str(exc)
+            if "timed out" in message.lower():
+                self._log.append("vpn", "IPsec SAML sign-in timed out.", severity=LogLevel.ERROR)
+                self._fail_and_clear(VpnErrorCode.SAML_TIMEOUT, _IPSEC_SAML_TIMEOUT_MESSAGE)
+                return
+            if "cancelled" in message.lower():
+                return
+            self._log.append("vpn", message, severity=LogLevel.ERROR)
+            self._fail_and_clear(VpnErrorCode.SAML_FAILED, _IPSEC_SAML_CALLBACK_MESSAGE)
+        except BrowserLaunchError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            self._fail_and_clear(VpnErrorCode.BROWSER_FAILED, str(exc))
+        except (ssl.SSLCertVerificationError, ssl.SSLError):
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append(
+                "vpn",
+                "Gateway certificate could not be validated.",
+                severity=LogLevel.ERROR,
+            )
+            self._fail_and_clear(VpnErrorCode.CERTIFICATE_UNTRUSTED, _CERT_UNTRUSTED_MESSAGE)
+        except IpsecSamlBootstrapError as exc:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._log.append("vpn", str(exc), severity=LogLevel.ERROR)
+            self._fail_and_clear(VpnErrorCode.SAML_FAILED, _SAML_AUTH_MESSAGE)
+        except InvalidAuthUrl:
+            if cancel_event.is_set() or self._user_disconnect:
+                return
+            self._fail_and_clear(VpnErrorCode.INVALID_AUTH_URL, _INVALID_URL_MESSAGE)
+        finally:
+            if credentials is not None:
+                credentials.wipe()
+
+    def _on_ipsec_saml_waiting(self, safe_url: str) -> None:
+        with self._lock:
+            self._safe_auth_url = safe_url
+            self._browser_status = "opened"
+            self._browser_opened = True
+            if self._state is ConnectionState.STARTING:
+                self._transition(ConnectionState.WAITING_FOR_AUTH)
+                snapshot = self._snapshot_locked()
+            else:
+                snapshot = None
+        if snapshot is not None:
+            if not self._saml_waiting_logged:
+                self._saml_waiting_logged = True
+                self._app_log("Waiting for browser authentication.")
+            self._notify(VpnEvent("state", snapshot))
+
+    def _start_ipsec_after_saml(
+        self,
+        profile: ConnectionProfile,
+        saml_credentials: IpsecSamlCredentials,
+    ) -> None:
+        """Hand FCT_UID + tokenid to the private IKEv2 runtime. Never logs secrets."""
+        uid = saml_credentials.eap_identity
+        tokenid = saml_credentials.tokenid
+        saml_credentials.wipe()
+        with self._lock:
+            psk = self._ipsec_tunnel_psk
+            self._ipsec_tunnel_psk = ""
+            cancelled = self._user_disconnect
+        if cancelled:
+            return
+        if not psk:
+            self._fail_and_clear(VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED, _IPSEC_SSO_PSK_MESSAGE)
+            return
+        if not uid or not tokenid:
+            self._fail_and_clear(VpnErrorCode.SAML_FAILED, _IPSEC_SAML_CALLBACK_MESSAGE)
+            return
+        ike_credentials = IpsecCredentials(psk=psk, username=uid, password=tokenid)
+        psk = ""
+        uid = ""
+        tokenid = ""
+        try:
+            request = connect_request_from_fields(
+                gateway=profile.gateway,
+                port=profile.port,
+                auth_mode="standard",
+                backend=BACKEND_IPSEC,
+                ipsec=profile.ipsec_payload(),
+            )
+        except HelperError as exc:
+            ike_credentials.wipe()
+            self._log.append("vpn", f"Rejected connect request: {exc.message}")
+            self._fail_and_clear(VpnErrorCode.INVALID_PROFILE, _INVALID_PROFILE_MESSAGE)
+            return
+        self._continue_ipsec_after_saml(profile, request, ike_credentials)
+
+    def _continue_ipsec_after_saml(
+        self,
+        profile: ConnectionProfile,
+        request: ConnectRequest,
+        credentials: IpsecCredentials,
+    ) -> None:
+        """Start private charon after SAML. CONNECTED still requires CHILD_SA."""
+        with self._lock:
+            if self._user_disconnect or self._shutting_down:
+                credentials.wipe()
+                return
+            if self._state not in {
+                ConnectionState.WAITING_FOR_AUTH,
+                ConnectionState.STARTING,
+            }:
+                self._log.append("vpn", "Ignoring IPsec start; session is not waiting for SSO.")
+                credentials.wipe()
+                return
+            self._error_code = None
+            self._error_message = None
+            self._output_hint = OutputHint.NONE
+            self._failing = False
+            self._ipsec_saml_active = False
+            self._transition(ConnectionState.CONNECTING)
+            snapshot = self._snapshot_locked()
+        self._notify(VpnEvent("state", snapshot))
+        self._app_log(_IPSEC_SAML_COMPLETE_MESSAGE)
+        self._app_log("Starting private IKEv2 runtime.")
+        self._log.append(
+            "vpn",
+            f"Starting privileged IPsec for {profile.name} ({profile.gateway}:{profile.port}).",
+            severity=LogLevel.DEBUG,
+        )
+        try:
+            self._helper.connect(request, self._on_helper_event, credentials=credentials)
+        except HelperError as exc:
+            credentials.wipe()
+            code, message = _helper_error_to_vpn(exc)
+            self._log.append("vpn", exc.message, severity=LogLevel.ERROR)
+            self._fail_and_clear(code, message)
+            return
+        self._app_log("Privileged helper authorized.")
+        self._app_log("IKEv2 authentication in progress.")
+
     def disconnect(
         self,
         *,
@@ -388,6 +723,9 @@ class VpnBackend:
         """Ask the helper to stop the owned process. No-op when already idle."""
         self._cancel_saml_timeout()
         self._cancel_reconnect(user_cancel=True)
+        with self._lock:
+            if self._ipsec_saml_cancel is not None:
+                self._ipsec_saml_cancel.set()
         if not for_reconnect:
             cancelled = False
             with self._lock:
@@ -416,6 +754,20 @@ class VpnBackend:
                     self._error_code = VpnErrorCode.CERTIFICATE_UNTRUSTED
                     self._error_message = _CERT_UNTRUSTED_MESSAGE
                 self._transition(ConnectionState.FAILED)
+                snapshot = self._snapshot_locked()
+                running = False
+            elif self._ipsec_saml_active and not self._helper.is_running():
+                self._last_disconnect_reason = "user_disconnect"
+                if self._state in {
+                    ConnectionState.STARTING,
+                    ConnectionState.WAITING_FOR_AUTH,
+                }:
+                    self._transition(ConnectionState.DISCONNECTING)
+                if self._state is ConnectionState.DISCONNECTING:
+                    self._transition(ConnectionState.DISCONNECTED)
+                elif self._state is ConnectionState.FAILED:
+                    self._transition(ConnectionState.DISCONNECTED)
+                self._ipsec_saml_active = False
                 snapshot = self._snapshot_locked()
                 running = False
             elif not self._helper.is_running():
@@ -708,6 +1060,8 @@ class VpnBackend:
             self._tunnel_established_logged = False
             self._gateway_connected_logged = False
             self._ike_established_logged = False
+            self._ike_sa_init_logged = False
+            self._eap_progress_logged = False
             self._child_sa_logged = False
             self._listener_logged = False
             self._disconnect_logged = False
@@ -812,6 +1166,8 @@ class VpnBackend:
 
     def _handle_log_line(self, line: str) -> None:
         text = redact_log_line(line)
+        if is_benign_charon_noise(text):
+            return
         source = "ipsec"
         with self._lock:
             profile = self._profile
@@ -821,17 +1177,28 @@ class VpnBackend:
         hint = classify_output(text)
         snapshots: list[VpnSnapshot] = []
         log_gateway = False
+        log_ike_init = False
         log_ike = False
+        log_eap = False
         log_child = False
         with self._lock:
-            if hint is not OutputHint.NONE:
+            if hint is not OutputHint.NONE and hint not in {
+                OutputHint.IKE_SA_INIT,
+                OutputHint.EAP_IN_PROGRESS,
+            }:
                 self._output_hint = hint
             if hint is OutputHint.GATEWAY_CONNECTED and not self._gateway_connected_logged:
                 self._gateway_connected_logged = True
                 log_gateway = True
+            if hint is OutputHint.IKE_SA_INIT and not self._ike_sa_init_logged:
+                self._ike_sa_init_logged = True
+                log_ike_init = True
             if hint is OutputHint.IKE_ESTABLISHED and not self._ike_established_logged:
                 self._ike_established_logged = True
                 log_ike = True
+            if hint is OutputHint.EAP_IN_PROGRESS and not self._eap_progress_logged:
+                self._eap_progress_logged = True
+                log_eap = True
             if hint is OutputHint.CONNECTED and not self._child_sa_logged:
                 ipsec = profile is not None and profile.is_ipsec()
                 if ipsec:
@@ -841,8 +1208,12 @@ class VpnBackend:
                 snapshots.extend(self._mark_connected_locked())
         if log_gateway:
             self._app_log("Connected to gateway.")
+        if log_ike_init:
+            self._app_log("IKE_SA_INIT started.")
         if log_ike:
             self._app_log("IKE established.")
+        if log_eap:
+            self._app_log("EAP authentication in progress.")
         if log_child:
             self._app_log("CHILD_SA established.")
         for item in snapshots:
@@ -1325,6 +1696,10 @@ class VpnBackend:
             return VpnErrorCode.GATEWAY_UNREACHABLE, (
                 specific or "The VPN gateway could not be reached."
             )
+        if hint is OutputHint.IKE_AUTH_TIMEOUT:
+            return VpnErrorCode.IKE_AUTH_TIMEOUT, specific or IKE_AUTH_TIMEOUT_MESSAGE
+        if hint is OutputHint.IKE_SA_INIT_TIMEOUT:
+            return VpnErrorCode.IKE_SA_INIT_TIMEOUT, specific or IKE_SA_INIT_TIMEOUT_MESSAGE
         if hint is OutputHint.IKE_TIMEOUT:
             return VpnErrorCode.IKE_NEGOTIATION_TIMEOUT, specific or _IPSEC_NEGOTIATION_MESSAGE
         if hint is OutputHint.PSK_FAILURE:
@@ -1332,7 +1707,7 @@ class VpnBackend:
         if hint is OutputHint.XAUTH_FAILURE:
             return VpnErrorCode.IPSEC_XAUTH_FAILURE, specific or _IPSEC_NEGOTIATION_MESSAGE
         if hint is OutputHint.EAP_FAILURE:
-            return VpnErrorCode.AUTH_FAILURE, specific or _AUTH_MESSAGE
+            return VpnErrorCode.IPSEC_EAP_FAILURE, specific or _IPSEC_IKEV2_AUTH_MESSAGE
         if hint is OutputHint.PROPOSAL_MISMATCH:
             return VpnErrorCode.IPSEC_PROPOSAL_MISMATCH, specific or _IPSEC_NEGOTIATION_MESSAGE
         if hint is OutputHint.CHILD_SA_FAILURE:
@@ -1352,6 +1727,9 @@ class VpnBackend:
                 return VpnErrorCode.SAML_FAILED, _SAML_AUTH_MESSAGE
             if hint is OutputHint.SAML_REJECTED:
                 return VpnErrorCode.SAML_FAILED, "SAML authentication was rejected."
+            profile = self._profile
+            if profile is not None and profile.is_ipsec() and profile.is_ipsec_saml_preauth():
+                return VpnErrorCode.IPSEC_EAP_FAILURE, _IPSEC_IKEV2_AUTH_MESSAGE
             return VpnErrorCode.AUTH_FAILURE, _AUTH_MESSAGE
         if hint is OutputHint.SAML_REJECTED:
             return VpnErrorCode.SAML_FAILED, "SAML authentication was rejected."
@@ -1413,6 +1791,9 @@ class VpnBackend:
             self._presented_certificate = None
             self._certificate_subject = None
             self._certificate_issuer = None
+            self._ipsec_saml_active = False
+            self._ipsec_tunnel_psk = ""
+            self._ipsec_saml_cancel = None
 
     def _process_info_locked(self) -> ProcessInfo | None:
         pid = self._helper.pid()
@@ -1524,6 +1905,7 @@ _CODE_MAP = {
     "HELPER_NOT_AVAILABLE": VpnErrorCode.HELPER_NOT_AVAILABLE,
     "POLKIT_UNAVAILABLE": VpnErrorCode.POLKIT_UNAVAILABLE,
     "HELPER_VERSION_MISMATCH": VpnErrorCode.HELPER_VERSION_MISMATCH,
+    "HELPER_CAPABILITY_MISMATCH": VpnErrorCode.HELPER_CAPABILITY_MISMATCH,
     "HELPER_STARTUP_FAILED": VpnErrorCode.HELPER_STARTUP_FAILED,
     "PRIVILEGE_DENIED": VpnErrorCode.PRIVILEGE_DENIED,
     "SSO_NOT_SUPPORTED": VpnErrorCode.SSO_NOT_SUPPORTED,
@@ -1536,6 +1918,17 @@ _CODE_MAP = {
     "IPSEC_BACKEND_MISSING": VpnErrorCode.IPSEC_BACKEND_MISSING,
     "IPSEC_DAEMON_START_FAILED": VpnErrorCode.IPSEC_DAEMON_START_FAILED,
     "IKE_PORT_IN_USE": VpnErrorCode.IKE_PORT_IN_USE,
+    "IKE_AUTH_TIMEOUT": VpnErrorCode.IKE_AUTH_TIMEOUT,
+    "IKE_SA_INIT_TIMEOUT": VpnErrorCode.IKE_SA_INIT_TIMEOUT,
+    "IKE_NEGOTIATION_TIMEOUT": VpnErrorCode.IKE_NEGOTIATION_TIMEOUT,
+    "IPSEC_EAP_FAILURE": VpnErrorCode.IPSEC_EAP_FAILURE,
+    "IPSEC_PROPOSAL_MISMATCH": VpnErrorCode.IPSEC_PROPOSAL_MISMATCH,
+    "IPSEC_CHILD_SA_FAILED": VpnErrorCode.IPSEC_CHILD_SA_FAILED,
+    "IPSEC_VIP_FAILED": VpnErrorCode.IPSEC_VIP_FAILED,
+    "IPSEC_PSK_FAILURE": VpnErrorCode.IPSEC_PSK_FAILURE,
+    "IPSEC_XAUTH_FAILURE": VpnErrorCode.IPSEC_XAUTH_FAILURE,
+    "IPSEC_SWANCTL_FAILED": VpnErrorCode.IPSEC_SWANCTL_FAILED,
+    "IPSEC_NEGOTIATION_FAILED": VpnErrorCode.IPSEC_NEGOTIATION_FAILED,
     "UNSUPPORTED_IPSEC": VpnErrorCode.IPSEC_UNSUPPORTED,
     "INVALID_CREDENTIALS": VpnErrorCode.IPSEC_CREDENTIALS_REQUIRED,
 }
@@ -1547,6 +1940,7 @@ def _helper_error_to_vpn(exc: HelperError) -> tuple[VpnErrorCode, str]:
         VpnErrorCode.HELPER_NOT_AVAILABLE: _HELPER_MISSING_MESSAGE,
         VpnErrorCode.POLKIT_UNAVAILABLE: _POLKIT_MISSING_MESSAGE,
         VpnErrorCode.HELPER_VERSION_MISMATCH: _HELPER_VERSION_MESSAGE,
+        VpnErrorCode.HELPER_CAPABILITY_MISMATCH: _HELPER_CAPABILITY_MESSAGE,
         VpnErrorCode.HELPER_STARTUP_FAILED: _HELPER_STARTUP_MESSAGE,
         VpnErrorCode.PRIVILEGE_DENIED: _PRIVILEGE_DENIED_MESSAGE,
         VpnErrorCode.OPENFORTIVPN_MISSING: _MISSING_MESSAGE,
@@ -1565,4 +1959,9 @@ def _default_selector(require_saml: bool) -> OpenfortivpnCapabilities | None:
     return resolve_approved_executable(require_saml=require_saml)
 
 
-__all__ = ["DEFAULT_SAML_TIMEOUT_SECONDS", "VpnBackend", "VpnEvent"]
+__all__ = [
+    "DEFAULT_IPSEC_SAML_TIMEOUT_SECONDS",
+    "DEFAULT_SAML_TIMEOUT_SECONDS",
+    "VpnBackend",
+    "VpnEvent",
+]

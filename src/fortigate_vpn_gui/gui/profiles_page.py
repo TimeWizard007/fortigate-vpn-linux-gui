@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fortigate_vpn_gui.gui.ipsec_credentials_dialog import prompt_ipsec_credentials
+from fortigate_vpn_gui.gui.ipsec_connect import collect_ipsec_connect_credentials
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
@@ -208,16 +208,14 @@ class ProfilesPage(QWidget):
             return False
         if self._select_profile is not None:
             self._select_profile(profile.id)
-        credentials = None
-        if profile.is_ipsec():
-            credentials = prompt_ipsec_credentials(
-                profile,
-                parent=dialog_parent_for(self),
-                psk_store=self._manager.psk_store,
-                manager=self._manager,
-            )
-            if credentials is None:
-                return False
+        proceed, credentials = collect_ipsec_connect_credentials(
+            profile,
+            parent=dialog_parent_for(self),
+            psk_store=self._manager.psk_store,
+            manager=self._manager,
+        )
+        if not proceed:
+            return False
         self._feedback.setText(f"Connecting… {profile.name}")
         self._feedback.show()
         self._vpn.connect(profile, credentials=credentials)

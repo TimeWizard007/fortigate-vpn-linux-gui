@@ -221,6 +221,7 @@ def test_polkit_client_valid_hello_json() -> None:
     probe = client.probe()
     assert probe.status == "ready"
     assert probe.helper_version == HELPER_VERSION
+    assert "ipsec_ikev2_eap" in probe.capabilities
 
 
 def test_polkit_client_does_not_use_stderr_as_version() -> None:

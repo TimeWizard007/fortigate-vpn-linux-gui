@@ -7,8 +7,10 @@ FortiGate SSL VPN na Linuxie.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v1.2.0 jest aktualnym pakietem Ubuntu 24.04 (amd64). Protokół
-pomocnika to 0.8.0.
+Wersja v1.3.0 jest aktualnym pakietem Ubuntu 24.04 (amd64). Spakowany
+pomocnik to **0.9.0** (`protocol_version` pozostaje 1) i obejmuje IKEv2
+SAML/SSO. `sudo ./scripts/install-dev-helper.sh` jest potrzebny tylko przy
+testowaniu niewydanych zmian pomocnika.
 
 | Temat | Dokument |
 | ----- | -------- |
@@ -18,3 +20,4 @@ pomocnika to 0.8.0.
 | Plan rozwoju | [roadmap.md](roadmap.md) |
 | Model bezpieczeństwa | [security.md](security.md) |
 | Znane ograniczenia | [limitations.md](limitations.md) |
+| Badania (historia protokołu, EN) | [../research/README.md](../research/README.md) |

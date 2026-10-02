@@ -15,6 +15,7 @@ from typing import Protocol
 from fortigate_vpn_gui.helper.handshake import is_valid_helper_version, parse_helper_hello_output
 from fortigate_vpn_gui.helper.ike_ports import free_ike_port_report
 from fortigate_vpn_gui.helper.protocol import (
+    HELPER_CAPABILITIES,
     HELPER_VERSION,
     INSTALLED_HELPER_PATH,
     PROTOCOL_VERSION,
@@ -24,9 +25,13 @@ from fortigate_vpn_gui.helper.protocol import (
     HelperEventKind,
     HelperProbe,
     event_from_payload,
+    helper_has_capabilities,
 )
 from fortigate_vpn_gui.helper.service import HelperService, SwanctlCommandResult
-from fortigate_vpn_gui.helper.validation import connect_request_from_fields
+from fortigate_vpn_gui.helper.validation import (
+    connect_request_from_fields,
+    required_helper_capabilities_for_request,
+)
 from fortigate_vpn_gui.vpn.capabilities import OpenfortivpnCapabilities
 from fortigate_vpn_gui.vpn.ipsec.detect import IpsecBackendCapabilities
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
@@ -39,6 +44,10 @@ PathExists = Callable[[str], bool]
 PopenFactory = Callable[..., subprocess.Popen[str]]
 _DENIED = "Authorization for privileged VPN access was denied."
 _VERSION_MISMATCH = "Privileged helper version does not match the GUI."
+_CAPABILITY_MISMATCH = (
+    "The installed privileged helper does not support this IPsec combination. "
+    "From this checkout run: sudo ./scripts/install-dev-helper.sh"
+)
 _STARTUP_FAILED = "The privileged VPN helper failed to start."
 _DETAIL_LIMIT = 400
 
@@ -82,6 +91,7 @@ class InProcessHelperClient:
         polkit_available: bool = True,
         denied: bool = False,
         version_mismatch: bool = False,
+        capabilities: tuple[str, ...] | None = None,
         grace_seconds: float = 5.0,
         ipsec_discover=None,
         swanctl_runner=None,
@@ -94,6 +104,7 @@ class InProcessHelperClient:
         self._polkit_available = polkit_available
         self._denied = denied
         self._version_mismatch = version_mismatch
+        self._capabilities = HELPER_CAPABILITIES if capabilities is None else capabilities
         self._service = HelperService(
             process_factory=process_factory,
             selector=selector,
@@ -129,6 +140,7 @@ class InProcessHelperClient:
                 polkit_available=False,
                 authorization_mechanism="polkit",
                 status="polkit_unavailable",
+                capabilities=self._capabilities,
             )
         if self._version_mismatch:
             return HelperProbe(
@@ -139,6 +151,7 @@ class InProcessHelperClient:
                 authorization_mechanism="polkit",
                 status="version_mismatch",
                 version_mismatch=True,
+                capabilities=self._capabilities,
             )
         return HelperProbe(
             installed=True,
@@ -147,6 +160,7 @@ class InProcessHelperClient:
             polkit_available=True,
             authorization_mechanism="polkit",
             status="ready",
+            capabilities=self._capabilities,
         )
 
     def connect(
@@ -175,6 +189,7 @@ class InProcessHelperClient:
             backend=request.backend,
             ipsec=request.ipsec,
         )
+        _ensure_ipsec_capabilities(probe, validated)
         self._listener = listener
         self._service.set_listener(listener)
         self._service.connect(validated, credentials=credentials)
@@ -241,12 +256,14 @@ class PolkitHelperClient:
         mismatch = False
         handshake_failed = False
         detail: str | None = None
+        capabilities: tuple[str, ...] = ()
         if installed:
             hello = self._read_helper_hello()
             detail = _safe_startup_detail(hello.detail)
             if hello.status == "ok" and hello.helper_version:
                 version = hello.helper_version
                 mismatch = version != self._expected_version
+                capabilities = hello.capabilities
             else:
                 handshake_failed = True
         if not installed:
@@ -268,6 +285,7 @@ class PolkitHelperClient:
             status=status,
             version_mismatch=mismatch,
             startup_detail=detail,
+            capabilities=capabilities,
         )
 
     def connect(
@@ -297,6 +315,7 @@ class PolkitHelperClient:
             backend=request.backend,
             ipsec=request.ipsec,
         )
+        _ensure_ipsec_capabilities(probe, validated)
         self._listener = listener
         self._ensure_session()
         payload = {
@@ -487,6 +506,12 @@ class PolkitHelperClient:
             self._running = False
             self._pid = None
             self._argv = ()
+
+
+def _ensure_ipsec_capabilities(probe: HelperProbe, request: ConnectRequest) -> None:
+    needed = required_helper_capabilities_for_request(request)
+    if needed and not helper_has_capabilities(probe.capabilities, needed):
+        raise HelperError("HELPER_CAPABILITY_MISMATCH", _CAPABILITY_MISMATCH)
 
 
 def _safe_startup_detail(text: str) -> str | None:

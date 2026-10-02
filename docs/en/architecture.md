@@ -66,8 +66,15 @@ Install locations (also installed by the Ubuntu `.deb`):
 ```text
 /usr/libexec/fortigate-vpn-linux-gui/vpn-helper
 /usr/libexec/fortigate-vpn-linux-gui/openfortivpn
+/usr/libexec/fortigate-vpn-linux-gui/plugins/libstrongswan-fvl-forticlient-vid.so
+/usr/lib/ipsec/plugins/libstrongswan-fvl-forticlient-vid.so
 /usr/share/polkit-1/actions/com.fortigate-vpn-linux-gui.policy
 ```
+
+The uniquely named FortiClient compatibility plugin is loaded only by this
+application's private IKEv2 SSO charon. There is no
+`/etc/strongswan.d/charon/fvl-forticlient-vid.conf`, so system charon does
+not load it.
 
 The helper validates every field again, selects an approved backend binary,
 and builds argv itself. It never accepts a command string, argv list,
@@ -129,9 +136,10 @@ and a pid file hint to `/run/charon.fvl.pid`. Ubuntu 5.9.13 `swanctl` has no
 `unix:///var/run/charon.vici` (`/run/charon.vici`). The helper therefore
 runs every `swanctl` command with `STRONGSWAN_CONF` pointing at
 `/etc/swanctl/fortigate-vpn-linux-gui/vici-client.conf`, whose
-`swanctl.socket` is the private endpoint. Production `swanctl` refuses to
+`swanctl.socket` is the private endpoint and whose `swanctl.load` /
+`libstrongswan.load` request only `vici`. Production `swanctl` refuses to
 run without that private `STRONGSWAN_CONF`, so credentials cannot be loaded
-into the system charon. The package ships an AppArmor local snippet so
+into the system charon and distro optional plugins are not requested. The package ships an AppArmor local snippet so
 distro `swanctl` may read `/run/charon.fvl.conf` and connect to
 `/run/charon.fvl.vici`; it does not grant access to `/run/charon.vici`.
 Ubuntu charon 5.9.13 still uses the compiled pid path `/var/run/charon.pid`;
@@ -160,8 +168,11 @@ strongSwan is a distribution **Depends** on the Ubuntu package
 execution. `/etc/strongswan.conf` is not modified.
 
 This release starts IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T with
-FortiGate/Cisco Unity split include. Other combinations may be stored in the
-profile and are rejected at connect.
+FortiGate/Cisco Unity split include, and IKEv2 + SAML/SSO with
+FortiClient-compatible EAP-MSCHAPv2 and negotiated `INTERNAL_IP4_SUBNET`
+split-tunnel. On Disconnect the helper restores pre-VPN DNS, then an explicit
+main-table gateway `/32` that existed before Connect (never invented). Other
+combinations may be stored in the profile and are rejected at connect.
 
 ### FortiGate SSL VPN
 

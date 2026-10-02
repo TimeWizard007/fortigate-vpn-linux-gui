@@ -34,18 +34,28 @@ from fortigate_vpn_gui.helper.ipsec_dns import (
     parse_virtual_ip_line,
     restore_from_state_path,
 )
+from fortigate_vpn_gui.helper.ipsec_gateway_route import (
+    GatewayHostRoute,
+    read_gateway_route_state,
+    restore_and_verify_explicit_host_route,
+    snapshot_explicit_host_route_with_reason,
+    write_gateway_route_state,
+)
 from fortigate_vpn_gui.helper.ipsec_runtime import (
     IpsecRuntimeFiles,
     create_runtime_dir,
+    is_live_swanctl_dir,
     owned_charon_pids,
     recover_owned_ipsec_leftovers,
     settings_from_request,
     stop_owned_leftover_charon,
     wipe_ipsec_runtime,
+    wipe_runtime_dir,
     write_ipsec_runtime,
 )
 from fortigate_vpn_gui.helper.protocol import (
     BACKEND_IPSEC,
+    HELPER_CAPABILITIES,
     HELPER_VERSION,
     PROTOCOL_VERSION,
     ConnectRequest,
@@ -62,8 +72,11 @@ from fortigate_vpn_gui.vpn.capabilities import (
 from fortigate_vpn_gui.vpn.classify import (
     IKE_PORT_CONFLICT_MESSAGE,
     OutputHint,
+    classify_ipsec_initiate_logs,
     classify_output,
+    initiate_failure_report,
 )
+from fortigate_vpn_gui.vpn.ipsec.charon_noise import is_benign_charon_noise
 from fortigate_vpn_gui.vpn.ipsec.commands import (
     STRONGSWAN_CONF_ENV,
     build_charon_argv,
@@ -78,7 +91,30 @@ from fortigate_vpn_gui.vpn.ipsec.detect import (
     is_approved_charon_path,
     is_approved_swanctl_path,
 )
+from fortigate_vpn_gui.vpn.ipsec.forticlient_vid import (
+    AUTH_OMIT_PLAN_LOG,
+    CP_REQUEST_PLAN_LOG,
+    EAP_LOCAL_PLAN_LOG,
+    EAP_ONLY_OMIT_PLAN_LOG,
+    INITIAL_CONTACT_PLAN_LOG,
+    LICENSE_INFO_BUILD_FAILED_MESSAGE,
+    LICENSE_NOTIFY_LENGTH_LOG,
+    LICENSE_NOTIFY_PLAN_LOG,
+    LICENSE_NOTIFY_REPOSITION_PLAN_LOG,
+    MSG_ID_SYN_SUP_OMIT_PLAN_LOG,
+    PLUGIN_MISSING_MESSAGE,
+    SPLIT_INCLUDE_PLAN_LOG,
+    VID_COUNT_LOG,
+    VID_ENABLED_LOG,
+    plugin_is_installed,
+    should_emit_forticlient_vids,
+)
 from fortigate_vpn_gui.vpn.ipsec.secrets import IpsecCredentials
+from fortigate_vpn_gui.vpn.ipsec.split_include import (
+    SplitIncludeInfo,
+    merge_split_include_info,
+    parse_split_include_log_line,
+)
 from fortigate_vpn_gui.vpn.log_redaction import redact_log_line
 from fortigate_vpn_gui.vpn.process import ProcessFactory, VpnProcess, default_process_factory
 from fortigate_vpn_gui.vpn.saml_parse import SamlEventKind, parse_saml_output
@@ -147,8 +183,13 @@ class HelperService:
         self._ipsec_start_error_emitted = False
         self._swanctl_cli_error_logged = False
         self._ipsec_dns_servers: list[str] = []
+        self._ipsec_dns_domains: list[str] = []
         self._ipsec_vip: str | None = None
         self._ipsec_dns_applied = False
+        self._ipsec_split: SplitIncludeInfo | None = None
+        self._gateway_route: GatewayHostRoute | None = None
+        self._teardown_lock = threading.Lock()
+        self._ipsec_teardown_done = False
 
     def set_listener(self, listener: HelperListener | None) -> None:
         self._listener = listener
@@ -186,6 +227,7 @@ class HelperService:
                 request_id=request_id,
                 helper_version=HELPER_VERSION,
                 protocol_version=PROTOCOL_VERSION,
+                capabilities=HELPER_CAPABILITIES,
             )
             self._emit(event)
             return event
@@ -318,7 +360,7 @@ class HelperService:
         if credentials is None:
             raise HelperProtocolError(
                 "INVALID_CREDENTIALS",
-                "IPsec connect requires a pre-shared key and XAuth credentials.",
+                "IPsec connect requires a pre-shared key and user credentials.",
             )
         settings = settings_from_request(request.ipsec)
         if not settings.is_supported():
@@ -339,19 +381,59 @@ class HelperService:
             )
         self._fail_if_unrelated_ike_ports()
         runtime_dir = Path(str(self._runtime_dir_factory()))
-        files = write_ipsec_runtime(
-            gateway=request.gateway,
-            port=request.port,
-            settings=settings,
-            credentials=credentials,
-            runtime_dir=runtime_dir,
-        )
+        sso = should_emit_forticlient_vids(settings)
+        self._capture_gateway_host_route(request.gateway)
+        try:
+            files = write_ipsec_runtime(
+                gateway=request.gateway,
+                port=request.port,
+                settings=settings,
+                credentials=credentials,
+                runtime_dir=runtime_dir,
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            self._finalize_ipsec_teardown(None)
+            wipe_runtime_dir(runtime_dir)
+            if sso:
+                raise HelperError(
+                    "IPSEC_DAEMON_START_FAILED",
+                    LICENSE_INFO_BUILD_FAILED_MESSAGE,
+                ) from exc
+            raise
         credentials.wipe()
+        self._persist_gateway_host_route(files)
+        if sso:
+            if is_live_swanctl_dir(runtime_dir) and not plugin_is_installed():
+                self._finalize_ipsec_teardown(files)
+                raise HelperError("IPSEC_DAEMON_START_FAILED", PLUGIN_MISSING_MESSAGE)
+            if files.license_info is None or not files.license_info.is_file():
+                self._finalize_ipsec_teardown(files)
+                raise HelperError("IPSEC_DAEMON_START_FAILED", LICENSE_INFO_BUILD_FAILED_MESSAGE)
+            try:
+                payload_len = files.license_info.stat().st_size
+            except OSError as exc:
+                self._finalize_ipsec_teardown(files)
+                raise HelperError(
+                    "IPSEC_DAEMON_START_FAILED",
+                    LICENSE_INFO_BUILD_FAILED_MESSAGE,
+                ) from exc
+            self._on_output(VID_ENABLED_LOG)
+            self._on_output(VID_COUNT_LOG)
+            self._on_output(EAP_ONLY_OMIT_PLAN_LOG)
+            self._on_output(MSG_ID_SYN_SUP_OMIT_PLAN_LOG)
+            self._on_output(INITIAL_CONTACT_PLAN_LOG)
+            self._on_output(LICENSE_NOTIFY_PLAN_LOG)
+            self._on_output(f"{LICENSE_NOTIFY_LENGTH_LOG}{payload_len}")
+            self._on_output(LICENSE_NOTIFY_REPOSITION_PLAN_LOG)
+            self._on_output(AUTH_OMIT_PLAN_LOG)
+            self._on_output(EAP_LOCAL_PLAN_LOG)
+            self._on_output(CP_REQUEST_PLAN_LOG)
+            self._on_output(SPLIT_INCLUDE_PLAN_LOG)
         try:
             argv = build_charon_argv(str(charon))
             env = build_charon_environment(str(files.strongswan_conf))
         except ValueError as exc:
-            wipe_ipsec_runtime(files)
+            self._finalize_ipsec_teardown(files)
             raise HelperProtocolError("INVALID_EXECUTABLE", str(exc)) from exc
         self._cert_parser.reset()
         self._saml = False
@@ -368,13 +450,17 @@ class HelperService:
             self._ipsec_start_error_emitted = False
             self._swanctl_cli_error_logged = False
             self._ipsec_dns_servers = []
+            self._ipsec_dns_domains = []
             self._ipsec_vip = None
             self._ipsec_dns_applied = False
+            self._ipsec_split = None
+        with self._teardown_lock:
+            self._ipsec_teardown_done = False
         process = self._spawn_owned_process(argv, env=env)
         try:
             process.start()
         except OSError as exc:
-            wipe_ipsec_runtime(files)
+            self._finalize_ipsec_teardown(files)
             with self._lock:
                 self._ipsec_runtime = None
                 self._ipsec_files = None
@@ -409,12 +495,11 @@ class HelperService:
         grace = self._grace_seconds if grace_seconds is None else grace_seconds
         self._ipsec_cancel.set()
         self._ipsec_terminate_sa()
-        self._restore_ipsec_dns()
         with self._lock:
             process = self._process
             files = self._ipsec_files
         if process is None:
-            wipe_ipsec_runtime(files)
+            self._finalize_ipsec_teardown(files)
             stop_owned_leftover_charon()
             with self._lock:
                 self._ipsec_runtime = None
@@ -425,13 +510,13 @@ class HelperService:
         if not wait:
             worker = threading.Thread(
                 target=self._await_stop,
-                args=(process, grace),
+                args=(process, grace, files),
                 name="helper-stop",
                 daemon=True,
             )
             worker.start()
             return
-        self._await_stop(process, grace)
+        self._await_stop(process, grace, files)
 
     def status(self, request_id: str | None = None) -> HelperEvent:
         event = HelperEvent(
@@ -446,22 +531,30 @@ class HelperService:
         self._emit(event)
         return event
 
-    def _await_stop(self, process: VpnProcess, grace: float) -> None:
+    def _await_stop(
+        self, process: VpnProcess, grace: float, files: IpsecRuntimeFiles | None
+    ) -> None:
         try:
             process.wait(timeout=grace)
-            return
         except TimeoutExpired:
-            pass
+            process.kill()
+            try:
+                process.wait(timeout=2)
+            except (TimeoutExpired, Exception):
+                pass
         except Exception:
-            pass
-        process.kill()
-        try:
-            process.wait(timeout=2)
-        except (TimeoutExpired, Exception):
-            pass
+            process.kill()
+            try:
+                process.wait(timeout=2)
+            except (TimeoutExpired, Exception):
+                pass
+        self._finalize_ipsec_teardown(files)
+        stop_owned_leftover_charon()
 
     def _on_output(self, line: str) -> None:
         redacted = redact_log_line(line)
+        if is_benign_charon_noise(redacted):
+            return
         with self._lock:
             if self._ipsec_files is not None and not self._connected_emitted:
                 self._ipsec_startup_logs.append(redacted)
@@ -533,15 +626,13 @@ class HelperService:
             should_fail = was_ipsec and not connected and not cancelled and not already_emitted
             if should_fail:
                 self._ipsec_start_error_emitted = True
-            self._ipsec_runtime = None
-            self._ipsec_files = None
-            self._ipsec_swanctl = None
             self._ipsec_startup_logs = []
             self._ipsec_dns_servers = []
+            self._ipsec_dns_domains = []
             self._ipsec_vip = None
             self._ipsec_dns_applied = False
-        self._restore_ipsec_dns(files)
-        wipe_ipsec_runtime(files)
+            self._ipsec_split = None
+        self._finalize_ipsec_teardown(files)
         stop_owned_leftover_charon()
         if should_fail:
             self._emit(
@@ -615,13 +706,7 @@ class HelperService:
             return
         initiate = self._run_swanctl(initiate_argv, timeout=60.0)
         if initiate.returncode != 0:
-            self._emit(
-                HelperEvent(
-                    kind=HelperEventKind.ERROR,
-                    code="VPN_PROCESS_FAILED",
-                    message="IPsec initiation failed. See Logs for non-secret details.",
-                )
-            )
+            self._emit_ipsec_initiate_failed()
             self.disconnect(wait=False)
             return
         if not self._connected_emitted:
@@ -692,13 +777,21 @@ class HelperService:
     def _note_ipsec_dns_line(self, line: str) -> None:
         dns = parse_dns_server_line(line)
         vip = parse_virtual_ip_line(line)
-        if dns is None and vip is None:
+        split = parse_split_include_log_line(line)
+        if dns is None and vip is None and split is None:
             return
         with self._lock:
             if dns is not None and dns not in self._ipsec_dns_servers:
                 self._ipsec_dns_servers.append(dns)
             if vip is not None:
                 self._ipsec_vip = vip
+            if split is not None:
+                self._ipsec_split = merge_split_include_info(self._ipsec_split, split)
+                for server in split.dns_servers:
+                    if server not in self._ipsec_dns_servers:
+                        self._ipsec_dns_servers.append(server)
+                if split.dns_domains:
+                    self._ipsec_dns_domains = list(split.dns_domains)
             connected = self._connected_emitted
         if connected:
             self._apply_ipsec_dns()
@@ -710,13 +803,23 @@ class HelperService:
             servers = tuple(self._ipsec_dns_servers)
             vip = self._ipsec_vip
             files = self._ipsec_files
+            split = self._ipsec_split
+            domains = tuple(self._ipsec_dns_domains)
         if not servers or files is None:
             return
         interface = lookup_interface_for_address(vip) if vip else None
         if not interface:
             return
+        catch_all = True if split is None else split.catch_all_dns
+        dns_domains = domains if split is None else split.dns_domains
         try:
-            state = apply_temporary_vpn_dns(interface, servers, files.dns_state)
+            state = apply_temporary_vpn_dns(
+                interface,
+                servers,
+                files.dns_state,
+                domains=dns_domains,
+                catch_all=catch_all,
+            )
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             self._on_output(f"VPN DNS could not be applied via resolvectl: {exc}")
             return
@@ -732,7 +835,95 @@ class HelperService:
                 f"{interface}: servers={pre_servers} domains={pre_domains} nm-managed={nm}"
             )
         joined = ", ".join(servers)
-        self._on_output(f"applied VPN DNS {joined} on {interface}")
+        mode = "full-tunnel" if catch_all else "split"
+        if catch_all:
+            domain_text = "~."
+        elif dns_domains:
+            domain_text = ", ".join(dns_domains)
+        else:
+            domain_text = "(none)"
+        self._on_output(
+            f"applied VPN DNS {joined} on {interface} mode={mode} domains={domain_text}"
+        )
+        if split is not None:
+            prefixes = ",".join(split.prefixes) if split.prefixes else "(none)"
+            self._on_output(
+                "FortiClient compatibility: split-include "
+                f"count={len(split.prefixes)} prefixes={prefixes} "
+                f"source={split.source} tunnel-mode={split.tunnel_mode}"
+            )
+
+    def _capture_gateway_host_route(self, gateway: str) -> None:
+        """Snapshot an explicit pre-VPN /32 before any leftover DNS restore."""
+        with self._teardown_lock:
+            self._ipsec_teardown_done = False
+        route, reason = snapshot_explicit_host_route_with_reason(gateway)
+        with self._lock:
+            self._gateway_route = route
+        if route is None:
+            self._on_output(f"Gateway route snapshot unavailable: {reason}")
+            return
+        via = route.via if route.via else "none"
+        self._on_output(
+            "Gateway route snapshot captured: "
+            f"endpoint={route.destination} via={via} dev={route.device}"
+        )
+
+    def _persist_gateway_host_route(self, files: IpsecRuntimeFiles) -> None:
+        with self._lock:
+            route = self._gateway_route
+        if route is None or files.gateway_route is None:
+            return
+        write_gateway_route_state(files.gateway_route, route)
+
+    def _finalize_ipsec_teardown(self, files: IpsecRuntimeFiles | None) -> None:
+        """Run DNS/`nmcli` then restore the endpoint /32 exactly once.
+
+        Must run after private charon has exited so VIP removal cannot race
+        a later NetworkManager reapply past this restore. The /32 restore
+        is last and still runs if DNS restore raises.
+        """
+        with self._teardown_lock:
+            if self._ipsec_teardown_done:
+                return
+            with self._lock:
+                route = self._gateway_route
+                target = files if files is not None else self._ipsec_files
+            if route is None and target is not None and target.gateway_route is not None:
+                route = read_gateway_route_state(target.gateway_route)
+            try:
+                if target is not None:
+                    self._restore_ipsec_dns(target)
+            finally:
+                try:
+                    if route is not None:
+                        self._on_output("Gateway route restore starting")
+                        result = restore_and_verify_explicit_host_route(route)
+                        if result.verified:
+                            via = route.via if route.via else "none"
+                            self._on_output("Gateway route restore completed")
+                            self._on_output(
+                                "Gateway route restore verified: "
+                                f"endpoint={route.destination} via={via} "
+                                f"dev={route.device}"
+                            )
+                        else:
+                            self._on_output(
+                                f"Gateway route restore failed: {result.detail}"
+                            )
+                finally:
+                    wipe_ipsec_runtime(target)
+                    with self._lock:
+                        self._gateway_route = None
+                        if (
+                            files is None
+                            or self._ipsec_files is files
+                            or target is self._ipsec_files
+                        ):
+                            self._ipsec_runtime = None
+                            self._ipsec_files = None
+                            self._ipsec_swanctl = None
+                    self._ipsec_teardown_done = True
 
     def _restore_ipsec_dns(self, files: IpsecRuntimeFiles | None = None) -> None:
         with self._lock:
@@ -758,6 +949,16 @@ class HelperService:
             return self._factory(argv, self._on_output, self._on_exit, env=env)
         except TypeError:
             return self._factory(argv, self._on_output, self._on_exit)
+
+    def _emit_ipsec_initiate_failed(self) -> None:
+        with self._lock:
+            if self._ipsec_start_error_emitted:
+                return
+            self._ipsec_start_error_emitted = True
+            logs = list(self._ipsec_startup_logs)
+        hint = classify_ipsec_initiate_logs(logs)
+        code, message = initiate_failure_report(hint)
+        self._emit(HelperEvent(kind=HelperEventKind.ERROR, code=code, message=message))
 
     def _emit_ipsec_daemon_start_failed(self, message: str) -> None:
         with self._lock:

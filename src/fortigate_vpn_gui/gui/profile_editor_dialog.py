@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -30,11 +31,23 @@ from PySide6.QtWidgets import (
 
 from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
 from fortigate_vpn_gui.profiles.ipsec import (
+    AUTH_EAP,
+    AUTH_PSK_XAUTH,
+    CHILD_PROPOSAL_CHOICES,
     DH_GROUPS,
-    ENCRYPTION_ALGORITHMS,
-    INTEGRITY_ALGORITHMS,
+    IKE_MODE_AGGRESSIVE,
+    IKE_MODE_MAIN,
+    IKE_PROPOSAL_CHOICES,
+    IKE_V1,
+    IKE_V2,
+    USER_AUTH_PSK_XAUTH,
+    USER_AUTH_PSK_XAUTH_LABEL,
+    USER_AUTH_SAML,
+    USER_AUTH_SAML_LABEL,
     VPN_TYPE_IPSEC,
     VPN_TYPE_SSL,
+    CryptoProposal,
+    default_ikev2_saml_settings,
     default_ipsec_settings,
 )
 from fortigate_vpn_gui.profiles.manager import ProfileManager
@@ -87,6 +100,71 @@ class _AdaptiveColumns(QWidget):
         self._root.addLayout(layout)
 
 
+class _ProposalCheckList(QWidget):
+    """Checkbox list of structured encryption/integrity pairs."""
+
+    def __init__(
+        self,
+        object_name: str,
+        choices: tuple[tuple[str, str], ...],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(2)
+        self._boxes: dict[CryptoProposal, QCheckBox] = {}
+        for encryption, integrity in choices:
+            self.ensure(CryptoProposal(encryption, integrity))
+
+    def ensure(self, proposal: CryptoProposal) -> QCheckBox:
+        existing = self._boxes.get(proposal)
+        if existing is not None:
+            return existing
+        box = QCheckBox(proposal.label())
+        box.setObjectName(f"{self.objectName()}_{proposal.encryption}_{proposal.integrity}")
+        self._boxes[proposal] = box
+        self._layout.addWidget(box)
+        return box
+
+    def selected(self) -> tuple[CryptoProposal, ...]:
+        return tuple(proposal for proposal, box in self._boxes.items() if box.isChecked())
+
+    def set_selected(self, proposals: tuple[CryptoProposal, ...]) -> None:
+        wanted = set(proposals)
+        for proposal in proposals:
+            self.ensure(proposal)
+        for proposal, box in self._boxes.items():
+            box.setChecked(proposal in wanted)
+
+
+class _DhCheckList(QWidget):
+    """Checkbox list of DH group numbers."""
+
+    def __init__(self, object_name: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self._layout = QGridLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setHorizontalSpacing(12)
+        self._layout.setVerticalSpacing(2)
+        self._boxes: dict[int, QCheckBox] = {}
+        for index, group in enumerate(DH_GROUPS):
+            box = QCheckBox(str(group))
+            box.setObjectName(f"{object_name}_{group}")
+            self._boxes[group] = box
+            self._layout.addWidget(box, index // 4, index % 4)
+
+    def selected(self) -> tuple[int, ...]:
+        return tuple(group for group in DH_GROUPS if self._boxes[group].isChecked())
+
+    def set_selected(self, groups: tuple[int, ...]) -> None:
+        wanted = set(groups)
+        for group, box in self._boxes.items():
+            box.setChecked(group in wanted)
+
+
 class ProfileEditorDialog(QDialog):
     """Collect profile fields and persist them through ``ProfileManager``."""
 
@@ -99,6 +177,7 @@ class ProfileEditorDialog(QDialog):
         super().__init__(parent)
         self._manager = manager
         self._existing = profile
+        self._updating_ipsec = False
         self.setWindowTitle("Edit profile" if profile else "Add profile")
         self.setModal(True)
         self.setWindowModality(Qt.WindowModality.WindowModal)
@@ -153,7 +232,7 @@ class ProfileEditorDialog(QDialog):
         self._peer_id.setObjectName("profilePeerId")
         self._ike_version = self._labeled_combo(
             "profileIkeVersion",
-            (("ikev1", "IKEv1"), ("ikev2", "IKEv2 (not implemented)")),
+            (("ikev1", "IKEv1"), ("ikev2", "IKEv2")),
             "ikev1",
         )
         self._ike_mode = self._labeled_combo(
@@ -161,30 +240,31 @@ class ProfileEditorDialog(QDialog):
             (("aggressive", "Aggressive"), ("main", "Main (not implemented)")),
             "aggressive",
         )
-        self._auth_method = self._labeled_combo(
-            "profileIpsecAuth",
+        self._user_auth = self._labeled_combo(
+            "profileIpsecUserAuth",
             (
-                ("psk_xauth", "PSK + XAuth"),
-                ("psk", "PSK only (not implemented)"),
-                ("certificate", "Certificate (not implemented)"),
-                ("eap", "EAP (not implemented)"),
+                (USER_AUTH_PSK_XAUTH, USER_AUTH_PSK_XAUTH_LABEL),
+                (USER_AUTH_SAML, USER_AUTH_SAML_LABEL),
             ),
-            "psk_xauth",
+            USER_AUTH_PSK_XAUTH,
         )
+        self._user_auth.setObjectName("profileIpsecUserAuth")
         self._addr_assign = self._labeled_combo(
             "profileIpsecAddress",
             (("modeconfig", "Mode Config"), ("manual", "Manual (not implemented)")),
             "modeconfig",
         )
-        self._p1_enc = self._enum_combo("profilePhase1Enc", ENCRYPTION_ALGORITHMS, "aes256")
-        self._p1_int = self._enum_combo("profilePhase1Int", INTEGRITY_ALGORITHMS, "sha256")
-        self._dh = self._int_combo("profileDhGroup", DH_GROUPS, 14)
+        self._ike_proposals = _ProposalCheckList("profileIkeProposals", IKE_PROPOSAL_CHOICES)
+        self._ike_dh = _DhCheckList("profileIkeDhGroups")
+        _legacy = default_ipsec_settings()
+        self._ike_proposals.set_selected(_legacy.ike_proposals)
+        self._ike_dh.set_selected(_legacy.ike_dh_groups)
         self._p1_life = QSpinBox()
         self._p1_life.setObjectName("profilePhase1Lifetime")
         self._p1_life.setRange(60, 604800)
         self._p1_life.setValue(86400)
-        self._p2_enc = self._enum_combo("profilePhase2Enc", ENCRYPTION_ALGORITHMS, "aes256")
-        self._p2_int = self._enum_combo("profilePhase2Int", INTEGRITY_ALGORITHMS, "sha256")
+        self._child_proposals = _ProposalCheckList("profileChildProposals", CHILD_PROPOSAL_CHOICES)
+        self._child_proposals.set_selected(_legacy.child_proposals)
         self._pfs = QCheckBox("Perfect Forward Secrecy (PFS)")
         self._pfs.setObjectName("profilePfs")
         self._pfs.setChecked(True)
@@ -218,7 +298,7 @@ class ProfileEditorDialog(QDialog):
         self._username_hint = QLineEdit()
         self._username_hint.setObjectName("profileUsernameHint")
         self._username_hint.setPlaceholderText("Optional reminder; passwords are not stored")
-        self._username_label = QLabel("Username hint:")
+        self._username_label = QLabel("Username:")
         self._username_label.setObjectName("profileUsernameLabel")
         self._username_row = QWidget()
         self._username_row.setObjectName("profileUsernameRow")
@@ -263,9 +343,25 @@ class ProfileEditorDialog(QDialog):
         self._xauth_note = QLabel("User authentication: XAuth username/password")
         self._xauth_note.setObjectName("profileXauthNote")
         self._xauth_note.setWordWrap(True)
-        self._ipsec_sso = QCheckBox("Enable Single Sign On (SSO) for VPN Tunnel (not implemented)")
-        self._ipsec_sso.setObjectName("profileIpsecSso")
-        self._ipsec_sso.setEnabled(False)
+        self._sso_browser_note = QLabel("Authentication opens your system browser.")
+        self._sso_browser_note.setObjectName("profileIpsecSsoBrowserNote")
+        self._sso_browser_note.setWordWrap(True)
+        self._sso_protocol_note = QLabel("Protocol authentication: EAP-MSCHAPv2 (IKEv2)")
+        self._sso_protocol_note.setObjectName("profileIpsecSsoProtocolNote")
+        self._sso_protocol_note.setWordWrap(True)
+        self._saml_port = QSpinBox()
+        self._saml_port.setObjectName("profileIpsecSamlPort")
+        self._saml_port.setRange(1, 65535)
+        self._saml_port.setValue(1001)
+        self._saml_port_host = QWidget()
+        self._saml_port_host.setObjectName("profileIpsecSamlPortRow")
+        saml_port_form = QFormLayout(self._saml_port_host)
+        self._apply_form_metrics(saml_port_form)
+        saml_port_form.setContentsMargins(0, 0, 0, 0)
+        saml_port_form.addRow("SAML port:", self._saml_port)
+        self._user_auth.currentIndexChanged.connect(self._on_user_auth_changed)
+        self._ike_version.currentIndexChanged.connect(self._sync_ipsec_auth_ui)
+        self._pfs.toggled.connect(self._sync_pfs_dh)
         self._psk_has_stored = False
         self._password_has_stored = False
 
@@ -296,24 +392,24 @@ class ProfileEditorDialog(QDialog):
         self._ipsec_layout = QVBoxLayout(self._ipsec_box)
         self._ipsec_layout.setContentsMargins(10, 8, 10, 8)
         self._ipsec_layout.setSpacing(6)
+        tunnel_heading = QLabel("Tunnel authentication: Pre-shared key")
+        tunnel_heading.setObjectName("profileIpsecTunnelAuthLabel")
         method_form = QFormLayout()
         self._apply_form_metrics(method_form)
-        method_form.addRow("IPsec authentication:", self._auth_method)
+        method_form.addRow("User authentication:", self._user_auth)
         psk_form = QFormLayout()
         self._apply_form_metrics(psk_form)
         psk_form.addRow("Pre-shared key:", psk_field)
-        ids_form = QFormLayout()
-        self._apply_form_metrics(ids_form)
-        ids_form.addRow("Local ID:", self._local_id)
-        ids_form.addRow("Peer ID:", self._peer_id)
-        self._ipsec_layout.addLayout(method_form)
+        self._ipsec_layout.addWidget(tunnel_heading)
         self._ipsec_layout.addLayout(psk_form)
         self._ipsec_layout.addWidget(self._save_psk)
         self._ipsec_layout.addWidget(self._psk_status)
         self._ipsec_layout.addWidget(self._forget_psk)
+        self._ipsec_layout.addLayout(method_form)
         self._ipsec_layout.addWidget(self._xauth_note)
-        self._ipsec_layout.addWidget(self._ipsec_sso)
-        self._ipsec_layout.addLayout(ids_form)
+        self._ipsec_layout.addWidget(self._sso_browser_note)
+        self._ipsec_layout.addWidget(self._sso_protocol_note)
+        self._ipsec_layout.addWidget(self._saml_port_host)
 
         self._cert_box = self._section("Certificate pin", "profileCertBox")
         cert_layout = QVBoxLayout(self._cert_box)
@@ -322,30 +418,37 @@ class ProfileEditorDialog(QDialog):
         cert_layout.addWidget(self._cert_status)
         cert_layout.addWidget(self._reset_cert, alignment=Qt.AlignmentFlag.AlignLeft)
 
+        self._ike_mode_row = QWidget()
+        self._ike_mode_row.setObjectName("profileIkeModeRow")
+        ike_mode_form = QFormLayout(self._ike_mode_row)
+        self._apply_form_metrics(ike_mode_form)
+        ike_mode_form.setContentsMargins(0, 0, 0, 0)
+        ike_mode_form.addRow("IKE mode:", self._ike_mode)
+
         phase1 = self._section("IKE / Phase 1", "profileIpsecPhase1Box")
         phase1_form = self._compact_form(phase1)
         phase1_form.addRow("IKE version:", self._ike_version)
-        phase1_form.addRow("IKE mode:", self._ike_mode)
+        phase1_form.addRow(self._ike_mode_row)
         phase1_form.addRow("Address assignment:", self._addr_assign)
-        phase1_form.addRow("Phase 1 encryption:", self._p1_enc)
-        phase1_form.addRow("Phase 1 integrity:", self._p1_int)
-        phase1_form.addRow("DH group:", self._dh)
-        phase1_form.addRow("Phase 1 lifetime (s):", self._p1_life)
+        phase1_form.addRow("IKE proposals:", self._ike_proposals)
+        phase1_form.addRow("DH groups:", self._ike_dh)
+        phase1_form.addRow("IKE lifetime (s):", self._p1_life)
+        phase1_form.addRow(self._dpd)
+        phase1_form.addRow("DPD interval (s):", self._dpd_interval)
+        phase1_form.addRow("Local ID:", self._local_id)
+        phase1_form.addRow("Peer ID:", self._peer_id)
 
-        phase2 = self._section("Child SA / Phase 2", "profileIpsecPhase2Box")
+        phase2 = self._section("CHILD_SA / Phase 2", "profileIpsecPhase2Box")
         phase2_form = self._compact_form(phase2)
-        phase2_form.addRow("Phase 2 encryption:", self._p2_enc)
-        phase2_form.addRow("Phase 2 integrity:", self._p2_int)
+        phase2_form.addRow("CHILD_SA proposals:", self._child_proposals)
         phase2_form.addRow(self._pfs)
         phase2_form.addRow("PFS DH group:", self._pfs_dh)
-        phase2_form.addRow("Phase 2 lifetime (s):", self._p2_life)
+        phase2_form.addRow("CHILD_SA lifetime (s):", self._p2_life)
         phase2_form.addRow(self._replay)
 
         transport = self._section("Transport", "profileIpsecTransportBox")
         transport_form = self._compact_form(transport)
         transport_form.addRow(self._natt)
-        transport_form.addRow(self._dpd)
-        transport_form.addRow("DPD interval (s):", self._dpd_interval)
         transport_form.addRow(self._local_lan)
 
         right_column = QWidget()
@@ -447,13 +550,14 @@ class ProfileEditorDialog(QDialog):
     def submit(self) -> bool:
         """Validate and save. Returns True when the dialog is accepted."""
         self._clear_errors()
+        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
         values = {
             "name": self._name.text(),
             "gateway": self._gateway.text(),
             "port": self._port.value(),
             "description": self._description.text(),
             "username_hint": self._stored_username_hint(),
-            "use_sso": self._saml_radio.isChecked(),
+            "use_sso": (self._is_saml_user_auth() if ipsec else self._saml_radio.isChecked()),
             "vpn_type": self._vpn_type.currentData(),
             "ipsec": self._ipsec_values(),
         }
@@ -498,6 +602,8 @@ class ProfileEditorDialog(QDialog):
     def _sync_auth_fields(self) -> None:
         ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
         self._username_row.setVisible(ipsec or self._password_radio.isChecked())
+        if ipsec:
+            self._sync_ipsec_auth_ui()
 
     def _on_vpn_type_changed(self) -> None:
         ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
@@ -530,6 +636,75 @@ class ProfileEditorDialog(QDialog):
             self._place_username_row(ipsec=False)
         self._sync_psk_storage_ui()
         self._sync_auth_fields()
+        self._sync_ipsec_auth_ui()
+
+    def _is_saml_user_auth(self) -> bool:
+        return self._user_auth.currentData() == USER_AUTH_SAML
+
+    def _on_user_auth_changed(self) -> None:
+        if self._updating_ipsec:
+            return
+        if self._is_saml_user_auth():
+            self._apply_saml_ike_defaults()
+        elif self._ike_version.currentData() == IKE_V2:
+            self._set_combo(self._ike_version, IKE_V1)
+            self._set_combo(self._ike_mode, IKE_MODE_AGGRESSIVE)
+        self._sync_ipsec_auth_ui()
+
+    def _apply_saml_ike_defaults(self) -> None:
+        defaults = default_ikev2_saml_settings()
+        self._updating_ipsec = True
+        try:
+            self._set_combo(self._ike_version, defaults.ike_version)
+            self._set_combo(self._ike_mode, defaults.ike_mode)
+            self._set_combo(self._addr_assign, defaults.address_assignment)
+            self._ike_proposals.set_selected(defaults.ike_proposals)
+            self._ike_dh.set_selected(defaults.ike_dh_groups)
+            self._p1_life.setValue(defaults.phase1_lifetime)
+            self._child_proposals.set_selected(defaults.child_proposals)
+            self._pfs.setChecked(defaults.pfs)
+            self._set_combo(self._pfs_dh, defaults.pfs_dh_group)
+            self._p2_life.setValue(defaults.phase2_lifetime)
+            self._natt.setChecked(defaults.nat_traversal)
+            self._dpd.setChecked(defaults.dpd)
+            self._replay.setChecked(defaults.replay_detection)
+            self._saml_port.setValue(defaults.saml_port)
+        finally:
+            self._updating_ipsec = False
+
+    def _sync_ipsec_auth_ui(self) -> None:
+        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        if not ipsec:
+            return
+        saml = self._is_saml_user_auth()
+        ikev2 = saml or self._ike_version.currentData() == IKE_V2
+        self._ike_version.setEnabled(not saml)
+        self._ike_mode_row.setVisible(not ikev2)
+        self._xauth_note.setVisible(not saml)
+        self._username_row.setVisible(not saml)
+        self._remember_username.setVisible(not saml)
+        self._password_status.setVisible(not saml)
+        self._forget_password.setVisible(not saml)
+        self._saml_port_host.setVisible(saml)
+        self._sso_browser_note.setVisible(saml)
+        self._sso_protocol_note.setVisible(saml)
+        if saml:
+            self._psk.setPlaceholderText("IPsec tunnel key. Not used for SAML user authentication.")
+            self._ipsec_note.setText(
+                "Authentication opens your system browser. After SAML, the app "
+                "starts the private IKEv2 tunnel with EAP-MSCHAPv2. Save the "
+                "IPsec tunnel pre-shared key; it is not the SAML password."
+            )
+        else:
+            self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
+            self._ipsec_note.setText(
+                "This release connects IKEv1 Aggressive + PSK + XAuth + Mode Config. "
+                "Other stored combinations are not started."
+            )
+        self._sync_pfs_dh()
+
+    def _sync_pfs_dh(self) -> None:
+        self._pfs_dh.setEnabled(self._pfs.isChecked())
 
     def _place_username_row(self, *, ipsec: bool) -> None:
         parent = self._username_row.parentWidget()
@@ -555,8 +730,7 @@ class ProfileEditorDialog(QDialog):
                     self._ipsec_layout.addWidget(widget)
             else:
                 for offset, widget in enumerate(widgets):
-                    self._ipsec_layout.insertWidget(index + offset, widget)
-            self._remember_username.show()
+                    self._ipsec_layout.insertWidget(index + 1 + offset, widget)
             return
         self._remember_username.hide()
         self._password_status.hide()
@@ -565,7 +739,9 @@ class ProfileEditorDialog(QDialog):
 
     def _stored_username_hint(self) -> str:
         ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
-        if ipsec and not self._remember_username.isChecked():
+        if ipsec and (self._is_saml_user_auth() or not self._remember_username.isChecked()):
+            if self._is_saml_user_auth():
+                return self._username_hint.text() if self._remember_username.isChecked() else ""
             return ""
         return self._username_hint.text()
 
@@ -576,7 +752,7 @@ class ProfileEditorDialog(QDialog):
         store = self._manager.psk_store
         self._psk_has_stored = False
         self._password_has_stored = False
-        self._psk.clear()
+        typed = self._psk.text()
         if not store.is_available():
             self._save_psk.setChecked(False)
             self._save_psk.setEnabled(False)
@@ -588,9 +764,10 @@ class ProfileEditorDialog(QDialog):
             )
             self._password_status.show()
             self._forget_password.setEnabled(False)
-            self._psk.setPlaceholderText(
-                "Not stored. This key is not the user password and will be asked at connect."
-            )
+            if not typed:
+                self._psk.setPlaceholderText(
+                    "Not stored. This key is not the user password and will be asked at connect."
+                )
             return
         self._save_psk.setEnabled(True)
         stored = False
@@ -601,14 +778,16 @@ class ProfileEditorDialog(QDialog):
         if stored:
             self._save_psk.setChecked(True)
             self._psk_has_stored = True
-            self._psk.setPlaceholderText("Saved securely — leave blank to keep")
+            if not typed:
+                self._psk.setPlaceholderText("Saved securely — leave blank to keep")
             self._psk_status.setText("Pre-shared key: stored securely")
             self._psk_status.show()
             self._forget_psk.setEnabled(True)
         else:
             if self._existing is None:
                 self._save_psk.setChecked(False)
-            self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
+            if not typed:
+                self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
             self._psk_status.setText("Pre-shared key: not stored")
             self._psk_status.show()
             self._forget_psk.setEnabled(False)
@@ -678,50 +857,58 @@ class ProfileEditorDialog(QDialog):
             return
 
     def _ipsec_values(self) -> dict[str, object]:
+        saml = self._is_saml_user_auth()
+        ike_proposals = self._ike_proposals.selected()
+        child_proposals = self._child_proposals.selected()
+        ike_dh = self._ike_dh.selected()
+        pfs_dh = self._pfs_dh.currentData()
         return {
-            "ike_version": self._ike_version.currentData(),
-            "ike_mode": self._ike_mode.currentData(),
-            "auth_method": self._auth_method.currentData(),
+            "ike_version": IKE_V2 if saml else self._ike_version.currentData(),
+            "ike_mode": IKE_MODE_MAIN if saml else self._ike_mode.currentData(),
+            "auth_method": AUTH_EAP if saml else AUTH_PSK_XAUTH,
             "address_assignment": self._addr_assign.currentData(),
             "local_id": self._local_id.text(),
             "peer_id": self._peer_id.text(),
-            "phase1_encryption": self._p1_enc.currentData(),
-            "phase1_integrity": self._p1_int.currentData(),
-            "dh_group": self._dh.currentData(),
+            "ike_proposals": [item.to_json() for item in ike_proposals],
+            "ike_dh_groups": list(ike_dh),
             "phase1_lifetime": self._p1_life.value(),
-            "phase2_encryption": self._p2_enc.currentData(),
-            "phase2_integrity": self._p2_int.currentData(),
+            "child_proposals": [item.to_json() for item in child_proposals],
             "pfs": self._pfs.isChecked(),
-            "pfs_dh_group": self._pfs_dh.currentData(),
+            "pfs_dh_group": pfs_dh,
+            "pfs_dh_groups": [pfs_dh],
             "phase2_lifetime": self._p2_life.value(),
             "nat_traversal": self._natt.isChecked(),
             "dpd": self._dpd.isChecked(),
             "dpd_interval": self._dpd_interval.value(),
             "replay_detection": self._replay.isChecked(),
             "local_lan_access": self._local_lan.isChecked(),
+            "saml_port": self._saml_port.value(),
         }
 
     def _apply_ipsec(self, settings) -> None:
-        self._local_id.setText(settings.local_id)
-        self._peer_id.setText(settings.peer_id)
-        self._set_combo(self._ike_version, settings.ike_version)
-        self._set_combo(self._ike_mode, settings.ike_mode)
-        self._set_combo(self._auth_method, settings.auth_method)
-        self._set_combo(self._addr_assign, settings.address_assignment)
-        self._set_combo(self._p1_enc, settings.phase1_encryption)
-        self._set_combo(self._p1_int, settings.phase1_integrity)
-        self._set_combo(self._dh, settings.dh_group)
-        self._p1_life.setValue(settings.phase1_lifetime)
-        self._set_combo(self._p2_enc, settings.phase2_encryption)
-        self._set_combo(self._p2_int, settings.phase2_integrity)
-        self._pfs.setChecked(settings.pfs)
-        self._set_combo(self._pfs_dh, settings.pfs_dh_group)
-        self._p2_life.setValue(settings.phase2_lifetime)
-        self._natt.setChecked(settings.nat_traversal)
-        self._dpd.setChecked(settings.dpd)
-        self._dpd_interval.setValue(settings.dpd_interval)
-        self._replay.setChecked(settings.replay_detection)
-        self._local_lan.setChecked(settings.local_lan_access)
+        self._updating_ipsec = True
+        try:
+            self._local_id.setText(settings.local_id)
+            self._peer_id.setText(settings.peer_id)
+            self._set_combo(self._ike_version, settings.ike_version)
+            self._set_combo(self._ike_mode, settings.ike_mode)
+            self._set_combo(self._user_auth, settings.user_auth_mode())
+            self._set_combo(self._addr_assign, settings.address_assignment)
+            self._ike_proposals.set_selected(settings.ike_proposals)
+            self._ike_dh.set_selected(settings.ike_dh_groups)
+            self._p1_life.setValue(settings.phase1_lifetime)
+            self._child_proposals.set_selected(settings.child_proposals)
+            self._pfs.setChecked(settings.pfs)
+            self._set_combo(self._pfs_dh, settings.pfs_dh_group)
+            self._p2_life.setValue(settings.phase2_lifetime)
+            self._natt.setChecked(settings.nat_traversal)
+            self._dpd.setChecked(settings.dpd)
+            self._dpd_interval.setValue(settings.dpd_interval)
+            self._replay.setChecked(settings.replay_detection)
+            self._local_lan.setChecked(settings.local_lan_access)
+            self._saml_port.setValue(settings.saml_port)
+        finally:
+            self._updating_ipsec = False
 
     def _fit_to_screen(self) -> None:
         screen = self.screen()
@@ -766,15 +953,6 @@ class ProfileEditorDialog(QDialog):
         combo.setObjectName(object_name)
         for value, label in choices:
             combo.addItem(label, value)
-        ProfileEditorDialog._set_combo(combo, current)
-        return combo
-
-    @staticmethod
-    def _enum_combo(object_name: str, values, current: str) -> QComboBox:
-        combo = QComboBox()
-        combo.setObjectName(object_name)
-        for value in values:
-            combo.addItem(str(value), value)
         ProfileEditorDialog._set_combo(combo, current)
         return combo
 

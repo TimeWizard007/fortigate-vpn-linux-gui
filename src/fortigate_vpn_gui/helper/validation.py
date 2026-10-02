@@ -203,9 +203,9 @@ def parse_credentials_payload(payload: object) -> IpsecCredentials:
     if not isinstance(psk, str) or not psk:
         raise HelperProtocolError("INVALID_CREDENTIALS", "Pre-shared key is required.")
     if not isinstance(username, str) or not username.strip():
-        raise HelperProtocolError("INVALID_CREDENTIALS", "XAuth username is required.")
+        raise HelperProtocolError("INVALID_CREDENTIALS", "IPsec username is required.")
     if not isinstance(password, str) or not password:
-        raise HelperProtocolError("INVALID_CREDENTIALS", "XAuth password is required.")
+        raise HelperProtocolError("INVALID_CREDENTIALS", "IPsec password is required.")
     return IpsecCredentials(psk=psk, username=username.strip(), password=password)
 
 
@@ -242,3 +242,10 @@ def connect_request_from_fields(
         backend=backend,
         ipsec=ipsec_data,
     )
+
+
+def required_helper_capabilities_for_request(request: ConnectRequest) -> frozenset[str]:
+    """Return helper capabilities required to execute *request*."""
+    if request.backend != BACKEND_IPSEC or request.ipsec is None:
+        return frozenset()
+    return _parse_ipsec_settings(request.ipsec).required_helper_capabilities()

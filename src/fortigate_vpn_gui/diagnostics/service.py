@@ -18,6 +18,7 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_certificate_pin,
     check_connection_state,
     check_dns,
+    check_forticlient_vid_plugin,
     check_helper,
     check_ike_ports,
     check_ipsec_backend,
@@ -178,6 +179,20 @@ class DiagnosticService:
                         lambda: check_ipsec_backend(
                             request.profile,
                             is_executable=self._deps.is_executable or default_is_executable,
+                        ),
+                    )
+                ),
+            ),
+            (
+                "vpn.ipsec.forticlient_vid",
+                lambda: add(
+                    self._safe(
+                        "vpn.ipsec.forticlient_vid",
+                        "FortiClient Vendor IDs",
+                        GROUP_VPN,
+                        lambda: check_forticlient_vid_plugin(
+                            request.profile,
+                            path_exists=self._deps.path_exists,
                         ),
                     )
                 ),

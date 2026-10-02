@@ -5,7 +5,11 @@ from __future__ import annotations
 
 from fortigate_vpn_gui.helper.handshake import parse_helper_hello_output
 from fortigate_vpn_gui.helper.main import main
-from fortigate_vpn_gui.helper.protocol import HELPER_VERSION, PROTOCOL_VERSION
+from fortigate_vpn_gui.helper.protocol import (
+    CAPABILITY_IPSEC_IKEV2_EAP,
+    HELPER_VERSION,
+    PROTOCOL_VERSION,
+)
 
 
 def test_helper_version_flag(capsys) -> None:
@@ -13,6 +17,8 @@ def test_helper_version_flag(capsys) -> None:
     parsed = parse_helper_hello_output(stdout=capsys.readouterr().out, returncode=0)
     assert parsed.status == "ok"
     assert parsed.helper_version == HELPER_VERSION
+    assert parsed.protocol_version == PROTOCOL_VERSION
+    assert CAPABILITY_IPSEC_IKEV2_EAP in parsed.capabilities
 
 
 def test_helper_protocol_version_flag(capsys) -> None:

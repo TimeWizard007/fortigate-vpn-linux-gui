@@ -68,6 +68,7 @@ def test_installed_helper_entry_point_version_without_gui() -> None:
     )
     assert parsed.status == "ok"
     assert parsed.helper_version == HELPER_VERSION
+    assert "ipsec_ikev2_eap" in parsed.capabilities
     assert "Traceback" not in result.stdout
     assert "PySide6" not in result.stderr
     for name in _FORBIDDEN_MODULES:

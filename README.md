@@ -13,7 +13,8 @@ their respective owner(s).
 Primary release target: **Ubuntu 24.04 LTS, amd64**. Other Debian-family
 distributions are untested.
 
-The current version is **1.2.0**. Helper protocol is **0.8.0**.
+The current version is **1.3.0**. Helper capability version is **0.9.0**
+(`protocol_version` remains **1**).
 
 ## Features
 
@@ -21,8 +22,9 @@ The current version is **1.2.0**. Helper protocol is **0.8.0**.
 - Connect from Profiles or the Connection page
 - SAML/SSO via `openfortivpn --saml-login` and the system browser
 - Username/password SSL profiles when SSO is not used
-- IPsec remote access: IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T,
-  FortiGate/Cisco Unity split include (distribution strongSwan, not bundled)
+- IPsec remote access via distribution strongSwan (not bundled):
+  - IKEv1 Aggressive Mode, PSK, XAuth, Mode Config, NAT-T, FortiGate/Cisco Unity split include
+  - IKEv2 + SAML/SSO with FortiClient-compatible EAP-MSCHAPv2, negotiated split-tunnel, and split DNS
 - Explicit FortiGate certificate pinning for SSL (never auto-trusted)
 - Privileged helper authorized through polkit (`pkexec` starts only the helper)
 - Optional Secret Service storage for IPsec PSK and XAuth password (never in
@@ -35,7 +37,7 @@ The current version is **1.2.0**. Helper protocol is **0.8.0**.
 ## Install (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.2.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.3.0-1_amd64.deb
 ```
 
 `apt` resolves runtime libraries, `pkexec`, `ppp`, `iproute2`, and the
@@ -128,8 +130,10 @@ browser, with explicit certificate pinning.
 
 **IPsec remote access** (distribution strongSwan): IKEv1 Aggressive Mode,
 PSK + XAuth, Mode Config / VIP, NAT-T, CHILD_SA/XFRM, FortiGate/Cisco Unity
-split include, and VPN DNS overlay. IKEv2, Main Mode, certificate IPsec,
-EAP, and IPsec SAML are stored in the profile for later work and are not
+split include, and VPN DNS overlay; and IKEv2 + SAML/SSO with
+FortiClient-compatible EAP-MSCHAPv2, negotiated `INTERNAL_IP4_SUBNET`
+split-tunnel, and split DNS. Main Mode, certificate IPsec, and
+manual-address IPsec are stored in the profile for later work and are not
 connected.
 
 Application IPsec uses a **private** charon (`/run/charon.fvl.conf` and
@@ -143,7 +147,9 @@ is running. This package never disables system strongSwan automatically.
 ### Tested
 
 - Ubuntu 24.04 LTS amd64
-- The FortiGate / FortiOS environment used to validate v1.1.0 IPsec and SSL
+- The FortiGate / FortiOS environment used to validate SSL, IKEv1 IPsec, and
+  v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, three successful
+  live cycles)
 - v1.2.0 installed-package smoke: IPsec refused while system charon owned
   UDP/500/4500; private IPsec after that IKE was stopped; SSL/SAML after IPsec
   cleanup with system strongSwan restored

@@ -1,7 +1,7 @@
 # Known limitations
 
-v1.2.0 is a hardening, diagnostics, and UX release on the v1.1.0 SSL and
-IPsec clients, tray, optional autostart, and optional auto-reconnect.
+v1.3.0 adds FortiGate IPsec IKEv2 + SAML/SSO on the existing SSL and
+IKEv1 IPsec clients, tray, optional autostart, and optional auto-reconnect.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing
@@ -28,10 +28,11 @@ IPsec clients, tray, optional autostart, and optional auto-reconnect.
 - Disconnect/Cancel is safe during STARTING, WAITING_FOR_AUTH,
   WAITING_FOR_CERTIFICATE_TRUST, CONNECTING, and CONNECTED. The browser is
   not force-closed; the SAML listener goes away with the process.
-- IPsec is a generic profile type. This release starts IKEv1 Aggressive Mode with
-  PSK, XAuth, Mode Config, NAT-T, and FortiGate/Cisco Unity split include.
-  IKEv2, Main Mode, certificate authentication, EAP, IPsec SAML/SSO, and
-  manual-address IPsec are not connected.
+- IPsec is a generic profile type. This release starts IKEv1 Aggressive Mode
+  with PSK, XAuth, Mode Config, NAT-T, and FortiGate/Cisco Unity split include,
+  and IKEv2 + SAML/SSO with FortiClient-compatible EAP-MSCHAPv2 and negotiated
+  `INTERNAL_IP4_SUBNET` split-tunnel. Main Mode, certificate authentication,
+  and manual-address IPsec are not connected.
 - IPsec uses distribution strongSwan (`charon`/`swanctl`). It is not bundled.
   Ubuntu 24.04 packages it. Debian 13, Fedora, Windows, and macOS are not
   claimed.

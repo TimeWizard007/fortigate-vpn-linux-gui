@@ -95,7 +95,12 @@ z dystrybucji (`Depends`: `strongswan`, `strongswan-swanctl`,
 `libcharon-extra-plugins`, `libcharon-extauth-plugins`) i nie jest
 dołączany do paczki. `/etc/strongswan.conf` nie jest zmieniany. Ta wersja łączy
 IKEv1 Aggressive + PSK + XAuth + Mode Config + NAT-T z FortiGate/Cisco Unity
-split include. Sekrety idą
+split include oraz IKEv2 + SAML/SSO z kompatybilnym EAP-MSCHAPv2 FortiClient
+i negocjowanym split-tunnel `INTERNAL_IP4_SUBNET`. Przy Disconnect pomocnik
+przywraca DNS sprzed VPN, a na końcu jawny `/32` bramy, jeśli istniał przed
+Connect (nigdy nie jest wymyślany). Unikalna wtyczka kompatybilności
+FortiClient jest ładowana tylko przez prywatny charon IKEv2 SSO; nie ma
+snippetu `/etc/strongswan.d/charon/`. Sekrety idą
 osobną operacją `credentials` i plikiem 0600, nigdy przez argv. PSK i hasło
 XAuth mogą być zapisane w Secret Service tylko po zgodzie użytkownika; nigdy
 w `profiles.json`. DNS VPN jest nakładką tymczasową: pomocnik zapisuje stan

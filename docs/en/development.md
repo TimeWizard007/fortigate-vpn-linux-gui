@@ -31,28 +31,50 @@ install system packages automatically.
 
 ## Privileged helper (development)
 
-The GUI from this checkout expects helper protocol **0.8.0**. A previously
-installed **1.0.0-2** package helper is protocol **0.7.0**. pkexec only starts
-`/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`; do not point the GUI at a
-user-writable helper, do not setuid, and do not run the GUI as root.
+The GUI from this checkout expects helper **0.9.0** with advertised
+capabilities `ipsec_ikev1_psk_xauth` and `ipsec_ikev2_eap`. The packaged
+**1.3.0** helper is the same capability version. JSON-lines
+`protocol_version` remains **1**; do not use `--version` alone to decide
+whether IKEv2 SSO can run. A leftover packaged **1.2.0** helper is **0.8.0**
+and only implements IKEv1 Aggressive + PSK + XAuth.
 
-Install or update the checkout helper into the polkit-approved path:
+`python -m fortigate_vpn_gui` always asks pkexec to start
+`/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. It never loads helper
+code from the checkout unless that polkit path was updated. Do not point
+the GUI at a user-writable helper, do not setuid, and do not run the GUI
+as root.
+
+Install or update the checkout helper into the polkit-approved path when
+testing unreleased helper changes:
 
 ```bash
 sudo ./scripts/install-dev-helper.sh
+./scripts/install-dev-helper.sh status
 ```
 
-Verify (no pkexec required for `--version`):
+`status` prints install kind (`development` vs `packaged`), helper
+version, protocol version, and capabilities. Re-run `install` after any
+helper-code change.
+
+Verify:
 
 ```bash
-./scripts/install-dev-helper.sh status
 /usr/libexec/fortigate-vpn-linux-gui/vpn-helper --version
 ```
 
-The script copies `src/fortigate_vpn_gui` to a root-owned directory and writes
-the helper wrapper. Re-run it after helper-protocol changes. The GUI still
-uses pkexec on the same path. Diagnostics reports expected protocol, detected
-protocol, and the effective helper path.
+Expect `helper_version` **0.9.0**, `protocol_version` **1**, and
+`ipsec_ikev2_eap` in `capabilities`. Then start the GUI from this
+checkout:
+
+```bash
+source .venv/bin/activate
+python -m fortigate_vpn_gui
+```
+
+The script copies `src/fortigate_vpn_gui` to a root-owned directory and
+writes the helper wrapper. It does not modify the system strongSwan
+daemon. Diagnostics reports expected protocol, detected protocol,
+capabilities, and the effective helper path.
 
 Restore the previously packaged helper later:
 
@@ -67,9 +89,10 @@ sudo apt install --reinstall fortigate-vpn-linux-gui
 ```
 
 Optional override: `FORTIGATE_VPN_HELPER=/path/to/vpn-helper`. Missing helper,
-missing polkit, authorization denied, and version mismatch are reported.
-There is no silent insecure fallback. A custom path must still be allowed by
-the polkit policy (`exec.path` remains the installed helper).
+missing polkit, authorization denied, version mismatch, and capability
+mismatch are reported. There is no silent insecure fallback. A custom
+path must still be allowed by the polkit policy (`exec.path` remains the
+installed helper).
 
 ## Profile storage
 
@@ -160,7 +183,9 @@ src/fortigate_vpn_gui/   application package
   diagnostics/           redacted snapshots
 packaging/               helper, polkit policy, desktop entry, Debian metadata
 scripts/                 package build (`./scripts/build-deb.sh`)
+native/                  application-owned charon plugin (IKEv2 SSO only)
 tests/                   pytest suite (mocked processes)
 docs/en/                 English documentation
 docs/pl/                 Polish documentation
+docs/research/           protocol research history (not product claims)
 ```
