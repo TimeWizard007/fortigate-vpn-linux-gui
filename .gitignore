@@ -136,3 +136,4 @@ debian/debhelper-build-stamp
 *.pem
 *.key
 secrets/
+*.fvbackup
