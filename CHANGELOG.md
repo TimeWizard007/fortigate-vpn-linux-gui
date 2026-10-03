@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Target: application **1.5.0**, Debian **1.5.0-1**. This version is **not tagged
-and not released** in this working tree.
+## [1.5.0] - 2026-10-03
+
+Application **1.5.0**, Debian **1.5.0-1**. Tagged, published, and production-verified.
 
 ### Added
 
@@ -18,14 +19,15 @@ and not released** in this working tree.
 - **View release** opens the GitHub Release page in the system browser after an explicit click
 - GitHub Actions **Release** workflow on `v*.*.*` tags: Ruff, tests, native plugin/symbol/`ldd -r`, `scripts/build-deb.sh`, SHA-256, attach `.deb`
 - Version consistency check across application, pyproject, Debian metadata, and optional git tag
-- Static APT repository generator (`dists/` + `pool/`, Packages, Release, InRelease) with `signed-by` documentation
+- Static APT repository generator (`dists/` + `pool/`, Packages, Release, InRelease) with `Signed-By` documentation
+- Production APT repository for Ubuntu 24.04 (`noble`) amd64 at https://timewizard007.github.io/fortigate-vpn-linux-gui/apt
 - Package inspection script that rejects credentials, private keys, research binaries, and FortiClient proprietary files
 
 ### Changed
 
 - Application version is 1.5.0; helper capability version remains 0.9.0; JSON-lines `protocol_version` remains 1; Debian package is 1.5.0-1
 - Frozen v1.4.0 / v1.3.0 VPN protocol backend is unchanged
-- Direct `.deb` install remains supported; APT install is documented but **not claimed live** until Pages signing is configured
+- Direct `.deb` install remains supported as an alternative; production APT is **live** with a binary OpenPGP `Signed-By` keyring (fingerprint `E0388D37D6E52C7675A933B1AAD0826D6E18C01E`); historical package versions remain published
 
 ### Security
 
@@ -427,7 +429,8 @@ and not released** in this working tree.
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[Unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.1.0...v1.2.0
