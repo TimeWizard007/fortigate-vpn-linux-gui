@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from fortigate_vpn_gui.diagnostics.checks import (
     CommandResult,
+    TcpResult,
     check_certificate_pin,
     check_helper,
     check_openfortivpn,
@@ -14,10 +15,13 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_polkit_authorization,
     check_polkit_policy,
     check_profile_context,
+    check_profile_supported,
+    check_saml_service,
 )
 from fortigate_vpn_gui.diagnostics.model import CheckStatus
 from fortigate_vpn_gui.helper.handshake import encode_hello_line
 from fortigate_vpn_gui.helper.protocol import HELPER_VERSION, POLKIT_ACTION_ID
+from fortigate_vpn_gui.profiles.ipsec import default_ikev2_saml_settings
 from fortigate_vpn_gui.profiles.model import build_profile
 from fortigate_vpn_gui.vpn.detect import OpenfortivpnDetection
 from fortigate_vpn_gui.vpn.models import ConnectionState
@@ -286,6 +290,45 @@ def test_profile_context_and_missing() -> None:
     assert "password" not in present.summary.lower()
     assert missing.status is CheckStatus.INFO
     assert "No profile" in missing.summary
+
+
+def test_profile_supported_and_saml_service_states() -> None:
+    ssl = build_profile(name="Office", gateway="vpn.example.com")
+    assert check_profile_supported(ssl).status is CheckStatus.PASS
+    assert check_profile_supported(None).status is CheckStatus.NOT_TESTED
+    saml = build_profile(
+        name="SSO",
+        gateway="vpn.example.com",
+        port=500,
+        use_sso=True,
+        vpn_type="ipsec",
+        ipsec=default_ikev2_saml_settings().to_json(),
+    )
+    reachable = check_saml_service(
+        saml,
+        ("192.0.2.10",),
+        dns_failed=False,
+        include_network=True,
+        connect=lambda *a, **k: TcpResult(ok=True, kind="ok", elapsed_ms=12),
+    )
+    assert reachable.status is CheckStatus.PASS
+    assert "1001" in reachable.summary
+    skipped = check_saml_service(
+        ssl,
+        ("192.0.2.10",),
+        dns_failed=False,
+        include_network=True,
+        connect=lambda *a, **k: TcpResult(ok=True, kind="ok", elapsed_ms=1),
+    )
+    assert skipped.status is CheckStatus.INFO
+    timed = check_saml_service(
+        saml,
+        ("192.0.2.10",),
+        dns_failed=False,
+        include_network=True,
+        connect=lambda *a, **k: TcpResult(kind="timeout", error="timed out"),
+    )
+    assert timed.status is CheckStatus.WARNING
 
 
 def test_certificate_pin_states() -> None:

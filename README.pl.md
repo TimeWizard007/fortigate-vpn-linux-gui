@@ -13,12 +13,13 @@ odpowiednich właścicieli.
 Główny cel wydania: **Ubuntu 24.04 LTS, amd64**. Inne dystrybucje z rodziny
 Debian nie były testowane.
 
-Aktualna wersja to **1.3.0**. Wersja możliwości pomocnika to **0.9.0**
-(`protocol_version` pozostaje **1**).
+Aktualna wersja to **1.4.0**. Wersja możliwości pomocnika to **0.9.0**
+(`protocol_version` pozostaje **1**). Zachowanie protokołu VPN to zamrożony
+backend v1.3.0.
 
 ## Funkcje
 
-- Trwałe profile połączeń (tworzenie, edycja, duplikowanie, usuwanie, domyślny)
+- Trwałe profile połączeń (tworzenie, edycja, duplikowanie, usuwanie, import, eksport, domyślny)
 - Łączenie ze strony Profiles lub Connection
 - SAML/SSO przez `openfortivpn --saml-login` i systemową przeglądarkę
 - Profile SSL z hasłem, gdy SSO nie jest używane
@@ -31,13 +32,13 @@ Aktualna wersja to **1.3.0**. Wersja możliwości pomocnika to **0.9.0**
   `profiles.json`; bez zapisu jawnego)
 - Zasobnik systemowy, opcjonalne zamykanie do zasobnika, opcjonalny autostart
 - Opcjonalne ponawianie po nieoczekiwanej utracie tunelu (domyślnie wyłączone)
-- Diagnostyka: DNS, routing, TCP, tunel, pomocnik, IPsec, polkit
-- Kopiowanie i eksport diagnostyki (ocenzurowany tekst lub ZIP do zgłoszenia)
+- Diagnostyka: DNS, routing, TCP, usługa SAML, tunel, pomocnik, IPsec, polkit
+- Kopiowanie raportu diagnostycznego i eksport diagnostyki (ocenzurowany tekst lub ZIP do zgłoszenia)
 
 ## Instalacja (Ubuntu 24.04)
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.3.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.4.0-1_amd64.deb
 ```
 
 `apt` dociąga biblioteki runtime, `pkexec`, `ppp`, `iproute2` oraz pakiety
@@ -77,16 +78,23 @@ Profile użytkownika w `~/.config/fortigate-vpn-linux-gui/` zostają.
 ## Użytkowanie
 
 1. Uruchom aplikację.
-2. Dodaj profil (brama, port, SAML/SSO albo nazwa użytkownika/hasło).
-3. Połącz. W razie potrzeby zatwierdź pomocnika w oknie polkit.
-4. Przy SSO dokończ logowanie w przeglądarce.
-5. Nieznany certyfikat FortiGate trzeba jawnie przypiąć do profilu albo
+2. Otwórz **Profiles** → **New profile**.
+3. Wybierz obsługiwany typ VPN:
+   - **SSL VPN** (hasło albo SAML/SSO)
+   - **IPsec IKEv1** (klucz wstępny + nazwa użytkownika/hasło)
+   - **IPsec IKEv2 SAML/SSO** (klucz wstępny + logowanie w przeglądarce)
+4. Wpisz bramę i wymagane ustawienia, potem zapisz. Hasła i klucz wstępny
+   IPsec nigdy nie trafiają do `profiles.json`.
+5. Połącz ze strony Profiles albo Connection. W razie potrzeby zatwierdź
+   pomocnika w oknie polkit.
+6. Przy SAML/SSO dokończ logowanie w przeglądarce.
+7. Nieznany certyfikat FortiGate trzeba jawnie przypiąć do profilu SSL albo
    anulować.
-6. Gdy połączenie nie działa, otwórz Diagnostykę, kliknij **Uruchom
-   diagnostykę**, potem **Kopiuj diagnostykę** albo **Eksportuj diagnostykę**.
-   Eksport jest ocenzurowany i nie może zawierać haseł, PSK, ciasteczek ani
-   tokenów SAML. Sprawdź plik przed załączeniem.
-7. Rozłącz ze strony Connection lub z zasobnika. Quit z zasobnika zawsze
+8. Gdy połączenie nie działa, otwórz Diagnostykę, kliknij **Run diagnostics**,
+   potem **Copy diagnostic report** albo **Export diagnostics**. Eksport jest
+   ocenzurowany i nie może zawierać haseł, PSK, ciasteczek ani tokenów SAML.
+   Sprawdź plik przed załączeniem.
+9. Rozłącz ze strony Connection lub z zasobnika. Quit z zasobnika zawsze
    kończy aplikację (czeka na sprzątnięcie pomocnika/openfortivpn).
 
 Zamknięcie okna domyślnie kończy program. W ustawieniach można zmienić to na
@@ -103,6 +111,16 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/fortigate-vpn-linux-gui/profiles.json
 
 Plik nie przechowuje haseł, tokenów SAML, ciasteczek ani innych sekretów.
 `trusted_cert_sha256` to publiczny pin certyfikatu.
+
+**Export** zapisuje wersjonowany JSON aplikacji tylko z przenośnymi polami
+bez sekretów. Nigdy nie zawiera klucza wstępnego IPsec, hasła, tokenid,
+FCT UID, ciasteczek ani zawartości keyringa. **Import** sprawdza format i
+typ VPN, nie przyjmuje haseł jawnym tekstem i nie zapisuje fragmentów
+konfiguracji strongSwan ani openfortivpn. Duplikat i import dostają własną
+tożsamość; zapisane sekrety nie są kopiowane. Przed połączeniem uzupełnij
+wymagane sekrety.
+
+Profile SSL, IKEv1 i IKEv2 SAML/SSO z v1.3.0 nadal się wczytują.
 
 ## Model bezpieczeństwa
 
@@ -145,7 +163,8 @@ strongSwan. Paczka nigdy nie wyłącza systemowego strongSwan automatycznie.
 
 - Ubuntu 24.04 LTS amd64
 - Środowisko FortiGate / FortiOS użyte do walidacji SSL, IPsec IKEv1 oraz
-  v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, trzy udane cykle)
+  v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, trzy udane cykle).
+  v1.4.0 zachowuje to zachowanie VPN i dodaje zarządzanie profilami w GUI.
 - Test zainstalowanej paczki v1.2.0: odmowa IPsec gdy systemowy charon miał
   UDP/500/4500; prywatny IPsec po zatrzymaniu tego IKE; SSL/SAML po sprzątaniu
   IPsec z przywróconym systemowym strongSwan

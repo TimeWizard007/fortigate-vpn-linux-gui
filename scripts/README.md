@@ -10,7 +10,7 @@ network.
 ./scripts/build-deb.sh
 ```
 
-Builds `dist/fortigate-vpn-linux-gui_1.3.0-1_amd64.deb` from this checkout.
+Builds `dist/fortigate-vpn-linux-gui_1.4.0-1_amd64.deb` from this checkout.
 Fails on errors. Does not install, publish, or modify user configuration.
 
 ## Development helper

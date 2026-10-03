@@ -25,8 +25,8 @@ from fortigate_vpn_gui.metadata import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_application_version_is_1_3_0() -> None:
-    assert __version__ == "1.3.0"
+def test_application_version_is_1_4_0() -> None:
+    assert __version__ == "1.4.0"
 
 
 def test_helper_protocol_is_0_9_0() -> None:
@@ -105,7 +105,8 @@ def test_launcher_script_has_no_shell_injection() -> None:
 def test_debian_control_metadata() -> None:
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "Package: fortigate-vpn-linux-gui" in control
-    assert "Version: 1.3.0-1" in control
+    assert "Version: 1.4.0-1" in control
+    assert "1.3.0-1" not in control.split("Depends:", 1)[0]
     assert "1.2.0-1" not in control.split("Depends:", 1)[0]
     assert "1.0.0-2" not in control
     assert "Architecture: amd64" in control
@@ -128,9 +129,9 @@ def test_debian_control_metadata() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "keyring" in pyproject
     changelog = (ROOT / "packaging" / "debian" / "changelog").read_text(encoding="utf-8")
-    assert changelog.startswith("fortigate-vpn-linux-gui (1.3.0-1)")
+    assert changelog.startswith("fortigate-vpn-linux-gui (1.4.0-1)")
     script = (ROOT / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
-    assert 'VERSION="1.3.0"' in script
+    assert 'VERSION="1.4.0"' in script
     assert 'REVISION="1"' in script
     assert "import keyring" in script
     assert 'OPENFORTIVPN_VERSION="1.24.1"' in script

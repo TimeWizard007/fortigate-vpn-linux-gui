@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -35,7 +38,10 @@ def test_profiles_page_empty_state(qapp, profile_manager: ProfileManager) -> Non
     assert "No VPN profiles yet" in hint.text()
     add = page.findChild(QPushButton, "emptyAddProfileButton")
     assert add is not None
-    assert add.text() == "Add profile"
+    assert add.text() == "New profile"
+    imported = page.findChild(QPushButton, "emptyImportProfileButton")
+    assert imported is not None
+    assert imported.text() == "Import"
 
 
 def test_profiles_page_add_via_dialog(qapp, profile_manager: ProfileManager) -> None:
@@ -360,7 +366,6 @@ def test_profile_editor_ipsec_controls_reachable_in_scroll_area(
     names = (
         "profileLocalId",
         "profilePeerId",
-        "profileIpsecUserAuth",
         "profileIpsecPsk",
         "profileSavePsk",
         "profileRememberUsername",
@@ -422,6 +427,7 @@ def test_more_menu_lists_edit_duplicate_delete(qapp, profile_manager: ProfileMan
     labels = [action.text() for action in menu.actions() if action.text()]
     assert "Edit" in labels
     assert "Duplicate" in labels
+    assert "Export" in labels
     assert "Delete" in labels
     edit = next(action for action in menu.actions() if action.text() == "Edit")
     assert edit.objectName() == f"profileEditAction_{profile.id}"
@@ -471,7 +477,7 @@ def test_more_edit_opens_populated_ipsec_editor(
     page = ProfilesPage(profile_manager)
     page.edit_profile(profile.id)
     assert seen["name"] == "IPsec office"
-    assert seen["vpn"] == "ipsec"
+    assert seen["vpn"] == "ikev1"
     assert seen["gateway"] == "vpn.example.com"
     assert seen["port"] == 500
     assert seen["user"] == "mwi"
@@ -574,7 +580,7 @@ def test_ipsec_sso_user_auth_forces_ikev2_and_hides_xauth(
     dialog = ProfileEditorDialog(profile_manager)
     vpn_type = dialog.findChild(QComboBox, "profileVpnType")
     assert vpn_type is not None
-    vpn_type.setCurrentIndex(1)
+    vpn_type.setCurrentIndex(2)
     user_auth = dialog.findChild(QComboBox, "profileIpsecUserAuth")
     ike = dialog.findChild(QComboBox, "profileIkeVersion")
     ike_mode_row = dialog.findChild(QWidget, "profileIkeModeRow")
@@ -583,14 +589,14 @@ def test_ipsec_sso_user_auth_forces_ikev2_and_hides_xauth(
     protocol = dialog.findChild(QLabel, "profileIpsecSsoProtocolNote")
     port = dialog.findChild(QSpinBox, "profileIpsecSamlPort")
     assert user_auth is not None and ike is not None
-    user_auth.setCurrentIndex(user_auth.findData("saml"))
+    assert user_auth.currentData() == "saml"
     assert ike.currentData() == "ikev2"
     assert ike.isEnabled() is False
     assert ike_mode_row is not None and ike_mode_row.isHidden()
     assert xauth is not None and xauth.isHidden()
     assert browser is not None and not browser.isHidden()
     assert "system browser" in browser.text().lower()
-    assert protocol is not None and "EAP-MSCHAPv2" in protocol.text()
+    assert protocol is not None and "IPsec tunnel" in protocol.text()
     assert port is not None and port.value() == 1001
     dialog.findChild(QLineEdit, "profileName").setText("SAML PoC")
     dialog.findChild(QLineEdit, "profileGateway").setText("vpn.example.com")
@@ -655,3 +661,65 @@ def test_more_duplicate_and_delete_secret_lifecycle(
     raw = profile_manager.storage_path.read_text(encoding="utf-8")
     assert "tunnel-psk-secret" not in raw
     assert "ad-directory-password" not in raw
+
+
+def test_profiles_page_import_export_excludes_secrets(
+    qapp, profile_manager: ProfileManager, psk_store, tmp_path: Path
+) -> None:
+    profile = profile_manager.add(
+        name="IPsec office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        ipsec=default_ipsec_settings().to_json(),
+    )
+    psk_store.set(profile.id, "tunnel-psk-secret")
+    page = ProfilesPage(profile_manager)
+    target = tmp_path / "office.json"
+    written = page.export_profile(profile.id, destination=target)
+    assert written == target
+    text = target.read_text(encoding="utf-8")
+    assert "tunnel-psk-secret" not in text
+    assert '"psk"' not in text.casefold()
+    imported = page.import_profile(source=target)
+    assert imported is not None
+    assert imported.id != profile.id
+    assert imported.name == "IPsec office (imported)"
+    assert psk_store.get(imported.id) is None
+    assert page.card_count() == 2
+
+
+def test_profiles_page_import_rejects_malformed(
+    qapp, profile_manager: ProfileManager, tmp_path: Path, monkeypatch
+) -> None:
+    page = ProfilesPage(profile_manager)
+    bad = tmp_path / "bad.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "format": "fortigate-vpn-linux-gui-profile",
+                "version": 1,
+                "profile": {
+                    "name": "X",
+                    "gateway": "vpn.example.com",
+                    "psk": "secret",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    notices: list[str] = []
+
+    def _warn(parent, title, text):
+        del parent, title
+        notices.append(text)
+        return 1
+
+    monkeypatch.setattr(
+        "fortigate_vpn_gui.gui.profiles_page.QMessageBox.warning",
+        _warn,
+    )
+    assert page.import_profile(source=bad) is None
+    assert notices
+    assert "secret" not in notices[0].lower() or "credentials" in notices[0].lower()
+    assert profile_manager.list_profiles() == ()

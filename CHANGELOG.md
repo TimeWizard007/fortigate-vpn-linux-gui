@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-03
+
+### Added
+
+- First-class GUI profile families: SSL VPN, IPsec IKEv1, and IPsec IKEv2 SAML/SSO
+- Profile **Import** and **Export** using a versioned, secret-free application format
+- Diagnostics **Copy diagnostic report** (same sanitized engine as Export diagnostics)
+- SAML service reachability check for IKEv2 SAML/SSO profiles
+- Connect disabled for stored IPsec combinations this release cannot start
+
+### Changed
+
+- Application version is 1.4.0; helper capability version remains 0.9.0; JSON-lines `protocol_version` remains 1; Debian package is 1.4.0-1
+- Profile editor progressive disclosure: users pick a supported VPN family instead of low-level IKE/ESP controls
+- Profiles page: **New profile**, **Import**, **Export**, and delete confirmation that also removes saved secrets
+- Connection page shows the human-readable VPN family and authentication method
+- Existing v1.3.0 SSL, IKEv1, and IKEv2 SAML/SSO profiles continue to load without recreation
+- Live-validated against real FortiGate gateways: SSL VPN SAML/SSO; IKEv1 PSK + XAuth including Edit/Save reconnect; IKEv2 SAML/SSO
+
+### Security
+
+- GUI still never runs as root; helper is not setuid; JSON-lines protocol_version is unchanged
+- Profile export never contains PSK, passwords, tokenid, FCT UID, cookies, or filesystem/config fragments
+- Duplicate creates a new profile id / keyring namespace and does not copy saved secrets
+- Editing a profile keeps an existing saved PSK when the field is left blank
+- The editor never loads a stored PSK into the pre-shared-key field; Show/Hide applies only to a newly typed replacement
+- Diagnostics and logs remain structurally redacted
+
+### Fixed
+
+- IPsec editor Show control is disabled while the PSK field is empty so a stored key is not implied to be revealable
+- Opening and saving an existing IKEv1 profile no longer resets IKE identity/settings or stored PSK/XAuth secrets
+- Frozen v1.3.0 VPN protocol backend is unchanged
+
 ## [1.3.0] - 2026-10-02
 
 ### Added
@@ -364,7 +398,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[1.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.2.0...HEAD
+[1.4.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v0.9.0...v1.0.0

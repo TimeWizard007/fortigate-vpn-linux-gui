@@ -271,10 +271,15 @@ Passwords, SAML tokens, cookies, client secrets, and MFA data are not stored.
 Unknown JSON fields are ignored. Malformed files do not crash the application.
 A malformed pin is dropped so the rest of the profile still loads. Duplicate
 copies safe metadata and the certificate pin; it does not copy credentials.
+**Export** writes a versioned application-owned document without secrets.
+**Import** validates format, version, and supported VPN type; it never
+accepts plaintext credentials or path/config fragments.
 
 `ProfileManager` notifies listeners after add/update/delete/duplicate/default
 changes so the Connection page refreshes without restarting. Connect from
-Profiles calls the same `VpnBackend.connect` as the Connection page.
+Profiles calls the same `VpnBackend.connect` as the Connection page. Profile
+import/export also goes through `ProfileManager`; widgets do not parse
+export JSON themselves beyond choosing a file.
 
 ## Log redaction
 

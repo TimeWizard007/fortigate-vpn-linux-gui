@@ -23,7 +23,7 @@ from fortigate_vpn_gui.gui.ipsec_credentials_dialog import (
 )
 from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
 from fortigate_vpn_gui.gui.profiles_page import ProfilesPage
-from fortigate_vpn_gui.profiles.ipsec import default_ipsec_settings
+from fortigate_vpn_gui.profiles.ipsec import default_ikev2_saml_settings, default_ipsec_settings
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.system.psk_store import SecretServicePskStore, UnavailablePskStore
 from fortigate_vpn_gui.vpn.models import ConnectionState
@@ -100,7 +100,7 @@ def test_editor_save_psk_never_writes_profiles_json(
     assert save is not None and save.isEnabled()
     save.setChecked(True)
     assert dialog.findChild(QLabel, "profileXauthNote").text() == (
-        "User authentication: XAuth username/password"
+        "Sign-in uses a username and password. These are not the IPsec tunnel key."
     )
     assert dialog.findChild(QLabel, "profileUsernameLabel").text() == "Username:"
     assert dialog.submit() is True
@@ -502,6 +502,122 @@ def test_ikev2_hides_aggressive_main_even_for_psk_xauth(
     assert not mode_row.isHidden()
     ike.setCurrentIndex(ike.findData("ikev2"))
     assert mode_row.isHidden()
+
+
+def _psk_reveal_state(dialog: ProfileEditorDialog) -> tuple[bool, str, QLineEdit.EchoMode]:
+    toggle = dialog.findChild(QPushButton, "profileIpsecPskToggle")
+    field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    assert toggle is not None and field is not None
+    return toggle.isEnabled(), toggle.text(), field.echoMode()
+
+
+def test_editor_psk_show_disabled_when_field_empty(qapp, profile_manager: ProfileManager) -> None:
+    dialog = ProfileEditorDialog(profile_manager)
+    vpn_type = dialog.findChild(QComboBox, "profileVpnType")
+    assert vpn_type is not None
+    vpn_type.setCurrentIndex(1)
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    toggle = dialog.findChild(QPushButton, "profileIpsecPskToggle")
+    assert field is not None and toggle is not None
+    toggle.click()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    assert field.text() == ""
+
+
+def test_editor_psk_show_hide_only_reveals_typed_replacement(
+    qapp, profile_manager: ProfileManager, psk_store
+) -> None:
+    profile = profile_manager.add(
+        name="IPsec office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        username_hint="mwi",
+        ipsec=default_ipsec_settings().to_json(),
+    )
+    psk_store.set(profile.id, _PSK)
+    dialog = ProfileEditorDialog(profile_manager, profile)
+    field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    toggle = dialog.findChild(QPushButton, "profileIpsecPskToggle")
+    assert field is not None and toggle is not None
+    assert field.text() == ""
+    assert _PSK not in field.text()
+    assert _PSK not in field.placeholderText()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    status = dialog.findChild(QLabel, "profilePskStatus")
+    assert status is not None and "stored securely" in status.text().lower()
+
+    field.setText("replacement-psk")
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is True
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    toggle.click()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is True
+    assert label == "Hide"
+    assert echo == QLineEdit.EchoMode.Normal
+    assert field.text() == "replacement-psk"
+    assert _PSK not in field.text()
+    toggle.click()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is True
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    assert field.text() == "replacement-psk"
+
+    field.clear()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    dialog.close()
+
+
+def test_editor_ikev2_saml_psk_show_hide_matches_ikev1(
+    qapp, profile_manager: ProfileManager, psk_store
+) -> None:
+    profile = profile_manager.add(
+        name="SAML office",
+        gateway="vpn.example.com",
+        port=500,
+        vpn_type="ipsec",
+        use_sso=True,
+        ipsec=default_ikev2_saml_settings().to_json(),
+    )
+    psk_store.set(profile.id, _PSK)
+    dialog = ProfileEditorDialog(profile_manager, profile)
+    field = dialog.findChild(QLineEdit, "profileIpsecPsk")
+    toggle = dialog.findChild(QPushButton, "profileIpsecPskToggle")
+    assert field is not None and toggle is not None
+    assert field.text() == ""
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    field.setText("typed-sso-psk")
+    assert toggle.isEnabled() is True
+    toggle.click()
+    assert toggle.text() == "Hide"
+    assert field.echoMode() == QLineEdit.EchoMode.Normal
+    assert field.text() == "typed-sso-psk"
+    assert _PSK not in field.text()
+    field.clear()
+    enabled, label, echo = _psk_reveal_state(dialog)
+    assert enabled is False
+    assert label == "Show"
+    assert echo == QLineEdit.EchoMode.Password
+    dialog.close()
 
 
 def test_psk_only_dialog_hides_xauth_fields(qapp) -> None:

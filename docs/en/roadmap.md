@@ -84,7 +84,17 @@ Dates are not committed. Order may change as design work proceeds.
 - Existing SSL/SAML and IKEv1 PSK+XAuth remain supported
 - Research history: [docs/research/ipsec-saml-sso.md](../research/ipsec-saml-sso.md)
 
-## Later (not claimed in v1.3.0)
+## v1.4.0 — GUI profile management
+
+- Profile families in the GUI: SSL VPN, IPsec IKEv1, IPsec IKEv2 SAML/SSO
+- New / Edit / Duplicate / Delete / Import / Export
+- Secret-free versioned profile export; import never accepts plaintext credentials
+- Connection-page family summary; diagnostics Copy diagnostic report
+- Frozen v1.3.0 VPN protocol backend (no protocol research in this release)
+- Application 1.4.0; helper capability version remains 0.9.0; `protocol_version` 1; Debian package 1.4.0-1
+- Live-validated: SSL VPN SAML/SSO; IKEv1 PSK + XAuth including Edit/Save reconnect; IKEv2 SAML/SSO
+
+## Later (not claimed in v1.4.0)
 
 - IKEv1 Main Mode, certificate authentication, manual-address IPsec
 - Debian 13, Fedora, Windows, macOS

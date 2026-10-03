@@ -1,7 +1,8 @@
 # Znane ograniczenia
 
-Wersja v1.3.0 dodaje FortiGate IPsec IKEv2 + SAML/SSO na bazie klienta SSL
-VPN i IPsec IKEv1, zasobnika, opcjonalnego autostartu i ponawiania.
+Wersja v1.4.0 to wydanie zarządzania profilami w GUI na zamrożonych
+backendach SSL i IPsec z v1.3.0 (zasobnik, opcjonalny autostart i
+opcjonalne ponawianie bez zmian).
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.

@@ -754,6 +754,35 @@ def check_profile_context(profile: ConnectionProfile | None) -> DiagnosticCheck:
     )
 
 
+def check_profile_supported(profile: ConnectionProfile | None) -> DiagnosticCheck:
+    """Whether this release can start the selected profile combination."""
+    if profile is None:
+        return _check(
+            check_id="profile.supported",
+            label="Profile can connect",
+            status=CheckStatus.NOT_TESTED,
+            summary="No profile selected.",
+            group=GROUP_PROFILE,
+        )
+    if profile.is_connectable():
+        return _check(
+            check_id="profile.supported",
+            label="Profile can connect",
+            status=CheckStatus.PASS,
+            summary=f"{profile.vpn_type_label()} with {profile.auth_label()} is supported.",
+            group=GROUP_PROFILE,
+        )
+    reason = profile.connect_block_reason() or "This combination is not started in this release."
+    return _check(
+        check_id="profile.supported",
+        label="Profile can connect",
+        status=CheckStatus.FAIL,
+        summary=reason,
+        hint="Create a supported SSL, IPsec IKEv1, or IPsec IKEv2 SAML/SSO profile.",
+        group=GROUP_PROFILE,
+    )
+
+
 def check_certificate_pin(profile: ConnectionProfile | None) -> DiagnosticCheck:
     """Show stored gateway certificate pin metadata. Does not trust anything."""
     if profile is None:
@@ -1216,6 +1245,90 @@ def check_tcp(
         summary=summary,
         detail=result.error,
         hint=hint,
+        group=GROUP_NETWORK,
+    )
+
+
+def check_saml_service(
+    profile: ConnectionProfile | None,
+    addresses: Sequence[str],
+    *,
+    dns_failed: bool,
+    include_network: bool,
+    connect: TcpConnect = default_tcp_connect,
+) -> DiagnosticCheck:
+    """TCP reachability of the FortiGate IPsec SAML service port."""
+    if not include_network:
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.NOT_TESTED,
+            summary="Run diagnostics to test SAML service reachability.",
+            group=GROUP_NETWORK,
+        )
+    if profile is None:
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.NOT_TESTED,
+            summary="No profile selected.",
+            group=GROUP_NETWORK,
+        )
+    if not profile.is_ipsec_saml_preauth():
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.INFO,
+            summary="SAML service check applies to IPsec IKEv2 SAML/SSO profiles.",
+            group=GROUP_NETWORK,
+        )
+    if dns_failed:
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.NOT_TESTED,
+            summary="DNS resolution failed.",
+            group=GROUP_NETWORK,
+        )
+    settings = profile.ipsec
+    port = settings.saml_port if settings is not None else 1001
+    host = addresses[0] if addresses else profile.gateway
+    result = connect(host, port, timeout=TCP_TIMEOUT_SECONDS)
+    target = f"{profile.gateway}:{port}"
+    if result.ok:
+        elapsed = result.elapsed_ms if result.elapsed_ms is not None else 0
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.PASS,
+            summary=f"{target} reachable in {elapsed} ms",
+            detail="TCP connect succeeded. This does not prove SAML sign-in will succeed.",
+            group=GROUP_NETWORK,
+        )
+    if result.kind == "timeout":
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.WARNING,
+            summary=f"{target} timed out",
+            hint="The SAML service port did not accept a TCP connection in time.",
+            group=GROUP_NETWORK,
+        )
+    if result.kind == "refused":
+        return _check(
+            check_id="network.saml",
+            label="SAML service",
+            status=CheckStatus.FAIL,
+            summary=f"{target} connection refused",
+            hint="A host responded but the SAML service port is closed.",
+            group=GROUP_NETWORK,
+        )
+    return _check(
+        check_id="network.saml",
+        label="SAML service",
+        status=CheckStatus.WARNING,
+        summary=f"{target} could not be reached",
+        hint="Check DNS, routing, and firewall policy for the SAML service port.",
         group=GROUP_NETWORK,
     )
 

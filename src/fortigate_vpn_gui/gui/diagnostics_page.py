@@ -113,8 +113,8 @@ class DiagnosticsPage(QWidget):
         intro = QLabel(
             "Troubleshooting checks for why a VPN connection may fail. "
             "Opening this page does not request administrator rights. "
-            "Copy diagnostics and Export diagnostics never include passwords, "
-            "tokens, cookies, PSKs, or SAML payloads."
+            "Copy diagnostic report and Export diagnostics never include "
+            "passwords, tokens, cookies, PSKs, or SAML payloads."
         )
         intro.setWordWrap(True)
 
@@ -127,7 +127,7 @@ class DiagnosticsPage(QWidget):
         self._run_button.setObjectName("runDiagnosticsButton")
         self._run_button.clicked.connect(self.start_run)
 
-        self._copy_button = QPushButton("Copy diagnostics")
+        self._copy_button = QPushButton("Copy diagnostic report")
         self._copy_button.setObjectName("copyDiagnosticsReportButton")
         self._copy_button.clicked.connect(self.copy_report)
 
@@ -363,12 +363,14 @@ class DiagnosticsPage(QWidget):
         line = QHBoxLayout()
         status = QLabel(STATUS_LABEL[check.status])
         status.setObjectName(f"diagCheckStatus_{slug}")
+        status.setAccessibleName(STATUS_LABEL[check.status])
         status.setStyleSheet(
             f"color: {_STATUS_COLORS[check.status]}; font-weight: 600; min-width: 92px;"
         )
         name = QLabel(check.label)
         name.setObjectName(f"diagCheckLabel_{slug}")
         name.setMinimumWidth(180)
+        row.setAccessibleName(f"{STATUS_LABEL[check.status]}: {check.label}")
         summary = QLabel(check.summary)
         summary.setObjectName(f"diagCheckSummary_{slug}")
         summary.setWordWrap(True)

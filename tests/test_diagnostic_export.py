@@ -108,7 +108,7 @@ def test_diagnostics_page_copy_and_export(
     copied = page.copy_diagnostics()
     assert "FortiGate VPN Linux GUI" in copied
     assert "Office" in copied
-    assert page._copy_button.text() == "Copy diagnostics"
+    assert page._copy_button.text() == "Copy diagnostic report"
     assert page._export_button.text() == "Export diagnostics"
     exported = page.export_report(tmp_path / "issue.zip")
     assert exported is not None

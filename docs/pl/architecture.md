@@ -159,7 +159,9 @@ Pliki v0.7.1 bez tego klucza wczytują się bez profilu domyślnego.
 
 Hasła, tokeny SAML, ciasteczka, PSK IPsec, hasła XAuth i dane MFA nie są
 przechowywane. Duplikowanie kopiuje bezpieczne metadane i pin certyfikatu,
-nie sekrety z Secret Service.
+nie sekrety z Secret Service. **Export** zapisuje wersjonowany dokument
+aplikacji bez sekretów. **Import** sprawdza format, wersję i obsługiwany
+typ VPN; nie przyjmuje haseł jawnym tekstem ani ścieżek/konfiguracji.
 
 ## Cenzura logów
 

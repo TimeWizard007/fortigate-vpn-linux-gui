@@ -2,6 +2,8 @@
 
 Working documents for the v1.3.0 protocol history. They are not a
 substitute for product documentation in `docs/en/` and `docs/pl/`.
+v1.4.0 uses this frozen v1.3.0 protocol backend; it is not a new
+protocol-research milestone.
 
 | Topic | Status | Document |
 | ----- | ------ | -------- |

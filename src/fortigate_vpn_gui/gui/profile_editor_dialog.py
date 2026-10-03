@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from fortigate_vpn_gui.helper.validation import format_sha256_fingerprint
 from fortigate_vpn_gui.profiles.ipsec import (
+    ADDR_MODECONFIG,
     AUTH_EAP,
     AUTH_PSK_XAUTH,
     CHILD_PROPOSAL_CHOICES,
@@ -51,7 +52,16 @@ from fortigate_vpn_gui.profiles.ipsec import (
     default_ipsec_settings,
 )
 from fortigate_vpn_gui.profiles.manager import ProfileManager
-from fortigate_vpn_gui.profiles.model import ConnectionProfile, ProfileValidationError
+from fortigate_vpn_gui.profiles.model import (
+    PROFILE_FAMILY_IKEV1,
+    PROFILE_FAMILY_IKEV2_SAML,
+    PROFILE_FAMILY_SSL,
+    VPN_TYPE_IKEV1_LABEL,
+    VPN_TYPE_IKEV2_SAML_LABEL,
+    VPN_TYPE_SSL_LABEL,
+    ConnectionProfile,
+    ProfileValidationError,
+)
 from fortigate_vpn_gui.system.psk_store import PSK_NOT_STORED_MESSAGE, PskStoreError
 
 _ERROR_STYLE = "color: #c4564c;"
@@ -178,7 +188,7 @@ class ProfileEditorDialog(QDialog):
         self._manager = manager
         self._existing = profile
         self._updating_ipsec = False
-        self.setWindowTitle("Edit profile" if profile else "Add profile")
+        self.setWindowTitle("Edit profile" if profile else "New profile")
         self.setModal(True)
         self.setWindowModality(Qt.WindowModality.WindowModal)
         self.setSizeGripEnabled(True)
@@ -222,8 +232,9 @@ class ProfileEditorDialog(QDialog):
 
         self._vpn_type = QComboBox()
         self._vpn_type.setObjectName("profileVpnType")
-        self._vpn_type.addItem("SSL VPN", VPN_TYPE_SSL)
-        self._vpn_type.addItem("IPsec", VPN_TYPE_IPSEC)
+        self._vpn_type.addItem(VPN_TYPE_SSL_LABEL, PROFILE_FAMILY_SSL)
+        self._vpn_type.addItem(VPN_TYPE_IKEV1_LABEL, PROFILE_FAMILY_IKEV1)
+        self._vpn_type.addItem(VPN_TYPE_IKEV2_SAML_LABEL, PROFILE_FAMILY_IKEV2_SAML)
         self._vpn_type.currentIndexChanged.connect(self._on_vpn_type_changed)
 
         self._local_id = QLineEdit()
@@ -237,7 +248,7 @@ class ProfileEditorDialog(QDialog):
         )
         self._ike_mode = self._labeled_combo(
             "profileIkeMode",
-            (("aggressive", "Aggressive"), ("main", "Main (not implemented)")),
+            (("aggressive", "Aggressive"), ("main", "Main")),
             "aggressive",
         )
         self._user_auth = self._labeled_combo(
@@ -249,9 +260,11 @@ class ProfileEditorDialog(QDialog):
             USER_AUTH_PSK_XAUTH,
         )
         self._user_auth.setObjectName("profileIpsecUserAuth")
+        self._user_auth.setParent(self)
+        self._user_auth.hide()
         self._addr_assign = self._labeled_combo(
             "profileIpsecAddress",
-            (("modeconfig", "Mode Config"), ("manual", "Manual (not implemented)")),
+            (("modeconfig", "Mode Config"), ("manual", "Manual")),
             "modeconfig",
         )
         self._ike_proposals = _ProposalCheckList("profileIkeProposals", IKE_PROPOSAL_CHOICES)
@@ -314,7 +327,9 @@ class ProfileEditorDialog(QDialog):
         self._psk_toggle.setObjectName("profileIpsecPskToggle")
         self._psk_toggle.setCheckable(True)
         self._psk_toggle.setFixedWidth(72)
+        self._psk_toggle.setEnabled(False)
         self._psk_toggle.toggled.connect(self._on_psk_reveal)
+        self._psk.textChanged.connect(self._sync_psk_reveal_button)
         psk_field = QWidget()
         psk_field.setObjectName("profileIpsecPskRow")
         psk_field_layout = QHBoxLayout(psk_field)
@@ -340,13 +355,20 @@ class ProfileEditorDialog(QDialog):
         self._forget_password.clicked.connect(self._on_forget_password)
         self._remember_username = QCheckBox("Remember username")
         self._remember_username.setObjectName("profileRememberUsername")
-        self._xauth_note = QLabel("User authentication: XAuth username/password")
+        self._xauth_note = QLabel(
+            "Sign-in uses a username and password. These are not the IPsec tunnel key."
+        )
         self._xauth_note.setObjectName("profileXauthNote")
         self._xauth_note.setWordWrap(True)
-        self._sso_browser_note = QLabel("Authentication opens your system browser.")
+        self._sso_browser_note = QLabel(
+            "Sign-in opens your system browser. Save the IPsec tunnel pre-shared key; "
+            "it is not your SAML password."
+        )
         self._sso_browser_note.setObjectName("profileIpsecSsoBrowserNote")
         self._sso_browser_note.setWordWrap(True)
-        self._sso_protocol_note = QLabel("Protocol authentication: EAP-MSCHAPv2 (IKEv2)")
+        self._sso_protocol_note = QLabel(
+            "After browser sign-in, the application starts the IPsec tunnel automatically."
+        )
         self._sso_protocol_note.setObjectName("profileIpsecSsoProtocolNote")
         self._sso_protocol_note.setWordWrap(True)
         self._saml_port = QSpinBox()
@@ -394,9 +416,6 @@ class ProfileEditorDialog(QDialog):
         self._ipsec_layout.setSpacing(6)
         tunnel_heading = QLabel("Tunnel authentication: Pre-shared key")
         tunnel_heading.setObjectName("profileIpsecTunnelAuthLabel")
-        method_form = QFormLayout()
-        self._apply_form_metrics(method_form)
-        method_form.addRow("User authentication:", self._user_auth)
         psk_form = QFormLayout()
         self._apply_form_metrics(psk_form)
         psk_form.addRow("Pre-shared key:", psk_field)
@@ -405,7 +424,6 @@ class ProfileEditorDialog(QDialog):
         self._ipsec_layout.addWidget(self._save_psk)
         self._ipsec_layout.addWidget(self._psk_status)
         self._ipsec_layout.addWidget(self._forget_psk)
-        self._ipsec_layout.addLayout(method_form)
         self._ipsec_layout.addWidget(self._xauth_note)
         self._ipsec_layout.addWidget(self._sso_browser_note)
         self._ipsec_layout.addWidget(self._sso_protocol_note)
@@ -479,7 +497,7 @@ class ProfileEditorDialog(QDialog):
             self._saml_radio.setChecked(profile.use_sso)
             self._password_radio.setChecked(not profile.use_sso)
             self._vpn_type.blockSignals(True)
-            self._vpn_type.setCurrentIndex(1 if profile.is_ipsec() else 0)
+            self._set_combo(self._vpn_type, profile.profile_family())
             self._vpn_type.blockSignals(False)
             if profile.is_ipsec():
                 self._apply_ipsec(profile.ipsec or default_ipsec_settings())
@@ -521,6 +539,7 @@ class ProfileEditorDialog(QDialog):
         if ok_button is not None:
             ok_button.setDefault(True)
             ok_button.setAutoDefault(True)
+            self._ok_button = ok_button
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -530,6 +549,7 @@ class ProfileEditorDialog(QDialog):
         layout.addWidget(buttons)
         self._sync_auth_fields()
         self._sync_vpn_type()
+        self._sync_psk_reveal_button()
         self._fit_to_screen()
 
     def error_text(self) -> str:
@@ -550,7 +570,13 @@ class ProfileEditorDialog(QDialog):
     def submit(self) -> bool:
         """Validate and save. Returns True when the dialog is accepted."""
         self._clear_errors()
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        ipsec = self._is_ipsec_family()
+        if ipsec and self._save_psk.isChecked():
+            typed = self._psk.text()
+            if not typed and not self._psk_has_stored:
+                message = "Enter the IPsec pre-shared key to save it, or clear Save pre-shared key."
+                self._show_errors(ProfileValidationError([message], field_errors={"psk": message}))
+                return False
         values = {
             "name": self._name.text(),
             "gateway": self._gateway.text(),
@@ -558,19 +584,24 @@ class ProfileEditorDialog(QDialog):
             "description": self._description.text(),
             "username_hint": self._stored_username_hint(),
             "use_sso": (self._is_saml_user_auth() if ipsec else self._saml_radio.isChecked()),
-            "vpn_type": self._vpn_type.currentData(),
+            "vpn_type": VPN_TYPE_IPSEC if ipsec else VPN_TYPE_SSL,
             "ipsec": self._ipsec_values(),
         }
         if self._existing is not None:
             values["trusted_cert_sha256"] = (
                 None if self._clear_trust else self._existing.trusted_cert_sha256
             )
+        ok = getattr(self, "_ok_button", None)
+        if ok is not None:
+            ok.setEnabled(False)
         try:
             if self._existing is None:
                 profile = self._manager.add(**values)
             else:
                 profile = self._manager.update(self._existing.id, **values)
         except ProfileValidationError as exc:
+            if ok is not None:
+                ok.setEnabled(True)
             self._show_errors(exc)
             return False
         self._persist_psk(profile)
@@ -600,21 +631,50 @@ class ProfileEditorDialog(QDialog):
             label.clear()
 
     def _sync_auth_fields(self) -> None:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        ipsec = self._is_ipsec_family()
         self._username_row.setVisible(ipsec or self._password_radio.isChecked())
         if ipsec:
             self._sync_ipsec_auth_ui()
 
+    def _family(self) -> str:
+        return str(self._vpn_type.currentData() or PROFILE_FAMILY_SSL)
+
+    def _is_ipsec_family(self) -> bool:
+        return self._family() != PROFILE_FAMILY_SSL
+
     def _on_vpn_type_changed(self) -> None:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        family = self._family()
+        ipsec = family != PROFILE_FAMILY_SSL
         if ipsec and self._port.value() == 443:
             self._port.setValue(500)
         elif not ipsec and self._port.value() == 500:
             self._port.setValue(443)
+        if family == PROFILE_FAMILY_IKEV2_SAML:
+            self._updating_ipsec = True
+            try:
+                self._set_combo(self._user_auth, USER_AUTH_SAML)
+            finally:
+                self._updating_ipsec = False
+            self._apply_saml_ike_defaults()
+        elif family == PROFILE_FAMILY_IKEV1:
+            self._updating_ipsec = True
+            try:
+                self._set_combo(self._user_auth, USER_AUTH_PSK_XAUTH)
+            finally:
+                self._updating_ipsec = False
+            # Widgets already default to IKEv1. Applying full defaults here
+            # would wipe local_id/peer_id/proposals on an existing profile if
+            # this handler runs for any reason other than leaving IKEv2 SAML.
+            if self._ike_version.currentData() == IKE_V2:
+                self._apply_ikev1_defaults()
+            else:
+                self._set_combo(self._ike_version, IKE_V1)
+                self._set_combo(self._ike_mode, IKE_MODE_AGGRESSIVE)
+                self._set_combo(self._addr_assign, ADDR_MODECONFIG)
         self._sync_vpn_type()
 
     def _sync_vpn_type(self) -> None:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        ipsec = self._is_ipsec_family()
         self._ssl_auth_box.setVisible(not ipsec)
         self._ipsec_box.setVisible(ipsec)
         self._ipsec_advanced.setVisible(ipsec)
@@ -635,21 +695,58 @@ class ProfileEditorDialog(QDialog):
             self._username_hint.setPlaceholderText("Optional reminder; passwords are not stored")
             self._place_username_row(ipsec=False)
         self._sync_psk_storage_ui()
+        self._sync_psk_reveal_button()
         self._sync_auth_fields()
         self._sync_ipsec_auth_ui()
 
     def _is_saml_user_auth(self) -> bool:
+        family = self._family()
+        if family == PROFILE_FAMILY_IKEV2_SAML:
+            return True
+        if family == PROFILE_FAMILY_IKEV1:
+            return False
         return self._user_auth.currentData() == USER_AUTH_SAML
 
     def _on_user_auth_changed(self) -> None:
         if self._updating_ipsec:
             return
-        if self._is_saml_user_auth():
+        if self._user_auth.currentData() == USER_AUTH_SAML:
+            self._vpn_type.blockSignals(True)
+            self._set_combo(self._vpn_type, PROFILE_FAMILY_IKEV2_SAML)
+            self._vpn_type.blockSignals(False)
             self._apply_saml_ike_defaults()
         elif self._ike_version.currentData() == IKE_V2:
+            self._vpn_type.blockSignals(True)
+            self._set_combo(self._vpn_type, PROFILE_FAMILY_IKEV1)
+            self._vpn_type.blockSignals(False)
             self._set_combo(self._ike_version, IKE_V1)
             self._set_combo(self._ike_mode, IKE_MODE_AGGRESSIVE)
         self._sync_ipsec_auth_ui()
+
+    def _apply_ikev1_defaults(self) -> None:
+        defaults = default_ipsec_settings()
+        local_id = self._local_id.text()
+        peer_id = self._peer_id.text()
+        self._updating_ipsec = True
+        try:
+            self._set_combo(self._ike_version, defaults.ike_version)
+            self._set_combo(self._ike_mode, defaults.ike_mode)
+            self._set_combo(self._user_auth, USER_AUTH_PSK_XAUTH)
+            self._set_combo(self._addr_assign, defaults.address_assignment)
+            self._ike_proposals.set_selected(defaults.ike_proposals)
+            self._ike_dh.set_selected(defaults.ike_dh_groups)
+            self._p1_life.setValue(defaults.phase1_lifetime)
+            self._child_proposals.set_selected(defaults.child_proposals)
+            self._pfs.setChecked(defaults.pfs)
+            self._set_combo(self._pfs_dh, defaults.pfs_dh_group)
+            self._p2_life.setValue(defaults.phase2_lifetime)
+            self._natt.setChecked(defaults.nat_traversal)
+            self._dpd.setChecked(defaults.dpd)
+            self._replay.setChecked(defaults.replay_detection)
+            self._local_id.setText(local_id)
+            self._peer_id.setText(peer_id)
+        finally:
+            self._updating_ipsec = False
 
     def _apply_saml_ike_defaults(self) -> None:
         defaults = default_ikev2_saml_settings()
@@ -673,7 +770,7 @@ class ProfileEditorDialog(QDialog):
             self._updating_ipsec = False
 
     def _sync_ipsec_auth_ui(self) -> None:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        ipsec = self._is_ipsec_family()
         if not ipsec:
             return
         saml = self._is_saml_user_auth()
@@ -691,14 +788,13 @@ class ProfileEditorDialog(QDialog):
         if saml:
             self._psk.setPlaceholderText("IPsec tunnel key. Not used for SAML user authentication.")
             self._ipsec_note.setText(
-                "Authentication opens your system browser. After SAML, the app "
-                "starts the private IKEv2 tunnel with EAP-MSCHAPv2. Save the "
-                "IPsec tunnel pre-shared key; it is not the SAML password."
+                "Sign-in opens your system browser. Save the IPsec tunnel "
+                "pre-shared key; it is not the SAML password."
             )
         else:
             self._psk.setPlaceholderText("IPsec tunnel key; not the user password")
             self._ipsec_note.setText(
-                "This release connects IKEv1 Aggressive + PSK + XAuth + Mode Config. "
+                "This release connects IKEv1 Aggressive + PSK + username/password. "
                 "Other stored combinations are not started."
             )
         self._sync_pfs_dh()
@@ -738,15 +834,16 @@ class ProfileEditorDialog(QDialog):
         self._ssl_auth_layout.addWidget(self._username_row)
 
     def _stored_username_hint(self) -> str:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
-        if ipsec and (self._is_saml_user_auth() or not self._remember_username.isChecked()):
-            if self._is_saml_user_auth():
-                return self._username_hint.text() if self._remember_username.isChecked() else ""
-            return ""
+        if self._family() == PROFILE_FAMILY_IKEV1:
+            if not self._remember_username.isChecked():
+                return ""
+            return self._username_hint.text()
+        if self._is_saml_user_auth():
+            return self._username_hint.text() if self._remember_username.isChecked() else ""
         return self._username_hint.text()
 
     def _sync_psk_storage_ui(self) -> None:
-        ipsec = self._vpn_type.currentData() == VPN_TYPE_IPSEC
+        ipsec = self._is_ipsec_family()
         if not ipsec:
             return
         store = self._manager.psk_store
@@ -825,7 +922,22 @@ class ProfileEditorDialog(QDialog):
         self._password_has_stored = False
         self._sync_psk_storage_ui()
 
+    def _sync_psk_reveal_button(self) -> None:
+        """Show/Hide only the newly typed PSK. Never fetch a stored secret."""
+        if self._psk.text():
+            self._psk_toggle.setEnabled(True)
+            return
+        self._psk_toggle.blockSignals(True)
+        self._psk_toggle.setChecked(False)
+        self._psk_toggle.blockSignals(False)
+        self._psk.setEchoMode(QLineEdit.EchoMode.Password)
+        self._psk_toggle.setText("Show")
+        self._psk_toggle.setEnabled(False)
+
     def _on_psk_reveal(self, checked: bool) -> None:
+        if not self._psk.text():
+            self._sync_psk_reveal_button()
+            return
         if checked:
             self._psk.setEchoMode(QLineEdit.EchoMode.Normal)
             self._psk_toggle.setText("Hide")
@@ -855,6 +967,8 @@ class ProfileEditorDialog(QDialog):
             return
         if self._psk_has_stored:
             return
+        # Blank PSK while editing means keep the existing stored PSK.
+        # XAuth passwords are never written or deleted here.
 
     def _ipsec_values(self) -> dict[str, object]:
         saml = self._is_saml_user_auth()

@@ -45,7 +45,8 @@ Hasła SSL, tokeny SAML i SVPNCOOKIE nie są przechowywane w `profiles.json`.
 PSK IPsec i hasło XAuth mogą być zapisane w Secret Service tylko po zgodzie
 użytkownika; nigdy w `profiles.json` i bez zapisu jawnego. Skopiowane raporty
 diagnostyczne są ocenzurowane i nie mogą zawierać haseł, tokenów, ciasteczek
-ani ładunków SAML. Otwarcie Diagnostics nie uruchamia pkexec.
+ani ładunków SAML. Eksport profilu nigdy nie zawiera sekretów. Import odrzuca
+pliki z hasłami. Otwarcie Diagnostics nie uruchamia pkexec.
 `trusted_cert_sha256` to publiczny pin certyfikatu, nie hasło.
 Poświadczenia IPsec aplikacji ładują się tylko do prywatnego charon przez
 `/run/charon.fvl.vici`, nigdy do systemowego `/run/charon.vici`. Odzyskiwanie

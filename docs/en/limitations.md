@@ -1,7 +1,8 @@
 # Known limitations
 
-v1.3.0 adds FortiGate IPsec IKEv2 + SAML/SSO on the existing SSL and
-IKEv1 IPsec clients, tray, optional autostart, and optional auto-reconnect.
+v1.4.0 is a GUI profile-management release on the frozen v1.3.0 SSL and
+IPsec backends (tray, optional autostart, and optional auto-reconnect
+unchanged).
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing

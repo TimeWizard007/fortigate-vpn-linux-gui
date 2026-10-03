@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -25,6 +28,10 @@ from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
 from fortigate_vpn_gui.profiles.manager import ProfileManager
 from fortigate_vpn_gui.profiles.model import ConnectionProfile, ProfileNotFoundError
+from fortigate_vpn_gui.profiles.transfer import (
+    ProfileTransferError,
+    write_exported_profile,
+)
 from fortigate_vpn_gui.vpn.backend import VpnBackend
 from fortigate_vpn_gui.vpn.models import CONNECTABLE_STATES, ConnectionState, VpnSnapshot
 
@@ -57,7 +64,8 @@ class ProfilesPage(QWidget):
 
         intro = QLabel(
             "Profiles are stored on this computer only. They do not contain "
-            "passwords, SAML tokens, cookies, or other secrets."
+            "passwords, SAML tokens, cookies, or other secrets. Export never "
+            "includes saved credentials."
         )
         intro.setWordWrap(True)
 
@@ -66,27 +74,42 @@ class ProfilesPage(QWidget):
         self._feedback.setWordWrap(True)
         self._feedback.hide()
 
-        self._add_button = QPushButton("Add profile")
+        self._add_button = QPushButton("New profile")
         self._add_button.setObjectName("addProfileButton")
         self._add_button.clicked.connect(self.add_profile)
+        self._import_button = QPushButton("Import")
+        self._import_button.setObjectName("importProfileButton")
+        self._import_button.clicked.connect(self.import_profile)
+
+        header_buttons = QVBoxLayout()
+        header_buttons.setContentsMargins(0, 0, 0, 0)
+        header_buttons.setSpacing(6)
+        header_buttons.addWidget(self._add_button)
+        header_buttons.addWidget(self._import_button)
 
         header_row = QHBoxLayout()
         header_row.addWidget(intro, stretch=1)
-        header_row.addWidget(self._add_button, alignment=Qt.AlignmentFlag.AlignTop)
+        header_row.addLayout(header_buttons)
 
         self._empty = QWidget()
         self._empty.setObjectName("emptyProfilesState")
         empty_layout = QVBoxLayout(self._empty)
         empty_layout.setContentsMargins(0, 24, 0, 0)
         empty_layout.setSpacing(12)
-        empty_hint = QLabel("No VPN profiles yet.\nAdd a profile to connect to a FortiGate VPN.")
+        empty_hint = QLabel(
+            "No VPN profiles yet.\nCreate a profile or import one to connect to a FortiGate VPN."
+        )
         empty_hint.setObjectName("emptyProfilesHint")
         empty_hint.setWordWrap(True)
-        self._empty_add = QPushButton("Add profile")
+        self._empty_add = QPushButton("New profile")
         self._empty_add.setObjectName("emptyAddProfileButton")
         self._empty_add.clicked.connect(self.add_profile)
+        self._empty_import = QPushButton("Import")
+        self._empty_import.setObjectName("emptyImportProfileButton")
+        self._empty_import.clicked.connect(self.import_profile)
         empty_layout.addWidget(empty_hint)
         empty_layout.addWidget(self._empty_add, alignment=Qt.AlignmentFlag.AlignLeft)
+        empty_layout.addWidget(self._empty_import, alignment=Qt.AlignmentFlag.AlignLeft)
         empty_layout.addStretch(1)
 
         self._list = QWidget()
@@ -126,6 +149,7 @@ class ProfilesPage(QWidget):
         self._empty.setVisible(empty)
         self._list.setVisible(not empty)
         self._add_button.setVisible(not empty)
+        self._import_button.setVisible(not empty)
         for profile in profiles:
             self._list_layout.addWidget(self._build_card(profile))
         if profiles:
@@ -149,6 +173,76 @@ class ProfilesPage(QWidget):
     def add_profile(self) -> None:
         dialog = ProfileEditorDialog(self._manager, parent=dialog_parent_for(self))
         dialog.exec()
+
+    def import_profile(self, source: Path | None = None) -> ConnectionProfile | None:
+        """Import a secret-free profile export. *source* is for tests."""
+        path = source
+        if path is None:
+            chosen, _filter = QFileDialog.getOpenFileName(
+                dialog_parent_for(self),
+                "Import profile",
+                "",
+                "Profile export (*.json);;All files (*)",
+            )
+            if not chosen:
+                return None
+            path = Path(chosen)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            profile = self._manager.import_profile(payload)
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                "Import failed",
+                "The profile file is not valid JSON.",
+            )
+            return None
+        except ProfileTransferError as exc:
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                "Import failed",
+                str(exc),
+            )
+            return None
+        self._feedback.setText(
+            f'Imported "{profile.name}". Enter any required secrets before connecting.'
+        )
+        self._feedback.show()
+        return profile
+
+    def export_profile(self, profile_id: str, destination: Path | None = None) -> Path | None:
+        """Export non-secret profile configuration. Never includes secrets."""
+        profile = self._manager.get(profile_id)
+        if profile is None:
+            return None
+        path = destination
+        if path is None:
+            suggested = f"{profile.name}.json"
+            chosen, _filter = QFileDialog.getSaveFileName(
+                dialog_parent_for(self),
+                "Export profile",
+                suggested,
+                "Profile export (*.json)",
+            )
+            if not chosen:
+                return None
+            path = Path(chosen)
+            if path.suffix.lower() != ".json":
+                path = path.with_suffix(".json")
+        try:
+            written = write_exported_profile(profile, path)
+        except OSError:
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                "Export failed",
+                "The profile could not be written.",
+            )
+            return None
+        self._feedback.setText(
+            f'Exported "{profile.name}" without passwords or the IPsec pre-shared key.'
+        )
+        self._feedback.show()
+        return written
 
     def edit_profile(self, profile_id: str) -> None:
         profile = self._manager.get(profile_id)
@@ -185,7 +279,11 @@ class ProfilesPage(QWidget):
             answer = QMessageBox.question(
                 dialog_parent_for(self),
                 "Delete profile",
-                f'Delete profile "{profile.name}"?\n\nThis cannot be undone.',
+                (
+                    f'Delete profile "{profile.name}"?\n\n'
+                    "Saved passwords and the IPsec pre-shared key for this "
+                    "profile will also be removed. This cannot be undone."
+                ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -205,6 +303,11 @@ class ProfilesPage(QWidget):
             return False
         snapshot = self._vpn.snapshot()
         if not self._can_start_connection(snapshot):
+            return False
+        if not profile.is_connectable():
+            reason = profile.connect_block_reason() or "This profile cannot be connected."
+            self._feedback.setText(reason)
+            self._feedback.show()
             return False
         if self._select_profile is not None:
             self._select_profile(profile.id)
@@ -292,6 +395,11 @@ class ProfilesPage(QWidget):
         duplicate.triggered.connect(
             lambda checked=False, pid=profile.id: self.duplicate_profile(pid)
         )
+        export_action = menu.addAction("Export")
+        export_action.setObjectName(f"profileExportAction_{profile.id}")
+        export_action.triggered.connect(
+            lambda checked=False, pid=profile.id: self.export_profile(pid)
+        )
         set_default = menu.addAction("Set as default")
         set_default.setObjectName(f"profileDefaultAction_{profile.id}")
         set_default.triggered.connect(
@@ -316,7 +424,12 @@ class ProfilesPage(QWidget):
             button = self.findChild(QPushButton, f"connectProfileButton_{profile.id}")
             if button is None:
                 continue
-            button.setEnabled(allowed)
+            button.setEnabled(allowed and profile.is_connectable())
+            if not profile.is_connectable():
+                reason = profile.connect_block_reason() or "This profile cannot be connected."
+                button.setToolTip(reason)
+            else:
+                button.setToolTip("")
             if connecting_id == profile.id and snapshot is not None:
                 if snapshot.state is ConnectionState.CONNECTED:
                     button.setText("Connected")

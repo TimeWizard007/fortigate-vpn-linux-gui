@@ -5,9 +5,10 @@ Debian/Ubuntu packaging for Ubuntu 24.04 LTS (amd64).
 The GUI is never installed setuid and never launched with pkexec. The
 privileged helper remains `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`
 and polkit action `com.fortigate-vpn-linux-gui.manage-vpn`. Packaged
-**1.3.0** ships helper **0.9.0** (`protocol_version` remains 1) including
+**1.4.0** ships helper **0.9.0** (`protocol_version` remains 1) including
 IKEv2 SAML/SSO and the application-owned FortiClient Vendor ID plugin used
-only by the private IKEv2 SSO charon. `sudo ./scripts/install-dev-helper.sh`
+only by the private IKEv2 SSO charon. The VPN protocol behavior is the frozen
+v1.3.0 backend. `sudo ./scripts/install-dev-helper.sh`
 installs unreleased helper changes for live development.
 
 ## Build
@@ -18,7 +19,7 @@ From a clean checkout:
 ./scripts/build-deb.sh
 ```
 
-The script writes `dist/fortigate-vpn-linux-gui_1.3.0-1_amd64.deb` and prints
+The script writes `dist/fortigate-vpn-linux-gui_1.4.0-1_amd64.deb` and prints
 its path and SHA-256. It does not install the package, publish anything, or
 modify user configuration.
 
@@ -39,7 +40,7 @@ install and is not a user venv. A clean `.deb` install does not require
 ## Install
 
 ```bash
-sudo apt install ./dist/fortigate-vpn-linux-gui_1.3.0-1_amd64.deb
+sudo apt install ./dist/fortigate-vpn-linux-gui_1.4.0-1_amd64.deb
 ```
 
 Launch:

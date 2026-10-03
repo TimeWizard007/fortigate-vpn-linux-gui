@@ -80,7 +80,17 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Istniejące SSL/SAML i IKEv1 PSK+XAuth pozostają wspierane
 - Historia badań (EN): [docs/research/ipsec-saml-sso.md](../research/ipsec-saml-sso.md)
 
-## Później (nie deklarowane w v1.3.0)
+## v1.4.0 — zarządzanie profilami w GUI
+
+- Rodziny profili w GUI: SSL VPN, IPsec IKEv1, IPsec IKEv2 SAML/SSO
+- New / Edit / Duplicate / Delete / Import / Export
+- Eksport profilu bez sekretów; import nie przyjmuje haseł jawnym tekstem
+- Podsumowanie rodziny na stronie Connection; Copy diagnostic report
+- Zamrożony backend protokołu v1.3.0 (ten release nie jest badaniami protokołu)
+- Aplikacja 1.4.0; wersja możliwości pomocnika nadal 0.9.0; `protocol_version` 1; paczka Debian 1.4.0-1
+- Potwierdzone live: SSL VPN SAML/SSO; IKEv1 PSK + XAuth w tym Edit/Save i ponowne połączenie; IKEv2 SAML/SSO
+
+## Później (nie deklarowane w v1.4.0)
 
 - IKEv1 Main Mode, uwierzytelnianie certyfikatem, adresacja ręczna IPsec
 - Debian 13, Fedora, Windows, macOS

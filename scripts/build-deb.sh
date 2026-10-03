@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="fortigate-vpn-linux-gui"
-VERSION="1.3.0"
+VERSION="1.4.0"
 REVISION="1"
 ARCH="amd64"
 DEB_VERSION="${VERSION}-${REVISION}"

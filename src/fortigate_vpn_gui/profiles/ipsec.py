@@ -61,8 +61,8 @@ USER_AUTH_PSK_XAUTH = "psk_xauth"
 USER_AUTH_SAML = "saml"
 USER_AUTH_MODES = frozenset({USER_AUTH_PSK_XAUTH, USER_AUTH_SAML})
 
-USER_AUTH_PSK_XAUTH_LABEL = "Pre-shared key + username/password"
-USER_AUTH_SAML_LABEL = "Single Sign-On (SSO / SAML)"
+USER_AUTH_PSK_XAUTH_LABEL = "Username / Password"
+USER_AUTH_SAML_LABEL = "SAML / SSO"
 
 ADDR_MODECONFIG = "modeconfig"
 ADDR_MANUAL = "manual"

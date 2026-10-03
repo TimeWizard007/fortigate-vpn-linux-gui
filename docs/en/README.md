@@ -7,9 +7,10 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v1.3.0 is the current packaged Ubuntu 24.04 (amd64) release. The packaged
-helper is **0.9.0** (`protocol_version` remains 1) and includes IKEv2
-SAML/SSO. `sudo ./scripts/install-dev-helper.sh` is only needed when
+v1.4.0 is the current packaged Ubuntu 24.04 (amd64) release. The packaged
+helper is **0.9.0** (`protocol_version` remains 1). VPN protocol behavior is
+the frozen v1.3.0 backend; v1.4.0 adds GUI profile management, import/export,
+and diagnostics. `sudo ./scripts/install-dev-helper.sh` is only needed when
 testing unreleased helper changes from this checkout.
 
 | Topic | Document |

@@ -32,6 +32,18 @@ AUTH_SAML_LABEL = "SAML / SSO"
 AUTH_PASSWORD_LABEL = "Username / Password"
 VPN_TYPE_SSL_LABEL = "SSL VPN"
 VPN_TYPE_IPSEC_LABEL = "IPsec"
+VPN_TYPE_IKEV1_LABEL = "IPsec IKEv1"
+VPN_TYPE_IKEV2_SAML_LABEL = "IPsec IKEv2 SAML/SSO"
+
+PROFILE_FAMILY_SSL = "ssl"
+PROFILE_FAMILY_IKEV1 = "ikev1"
+PROFILE_FAMILY_IKEV2_SAML = "ikev2_saml"
+PROFILE_FAMILIES = frozenset({PROFILE_FAMILY_SSL, PROFILE_FAMILY_IKEV1, PROFILE_FAMILY_IKEV2_SAML})
+PROFILE_FAMILY_LABELS = {
+    PROFILE_FAMILY_SSL: VPN_TYPE_SSL_LABEL,
+    PROFILE_FAMILY_IKEV1: VPN_TYPE_IKEV1_LABEL,
+    PROFILE_FAMILY_IKEV2_SAML: VPN_TYPE_IKEV2_SAML_LABEL,
+}
 
 # Keys that must never be persisted or round-tripped from disk.
 FORBIDDEN_SECRET_KEYS = frozenset(
@@ -57,6 +69,14 @@ FORBIDDEN_SECRET_KEYS = frozenset(
         "ike_secret",
         "tokenid",
         "fct_token_id",
+        "fct_uid",
+        "eap_identity",
+        "eap_password",
+        "authorization",
+        "private_key",
+        "privatekey",
+        "saml_session",
+        "auth_cache",
     }
 )
 
@@ -146,8 +166,30 @@ class ConnectionProfile:
         """Return True when Connect must prompt for PSK + XAuth credentials."""
         return self.is_ipsec() and not self.is_ipsec_saml_preauth()
 
+    def profile_family(self) -> str:
+        """Return the user-facing VPN family. Stored ``vpn_type`` stays ssl|ipsec."""
+        if self.is_ipsec_saml_preauth():
+            return PROFILE_FAMILY_IKEV2_SAML
+        if self.is_ipsec():
+            return PROFILE_FAMILY_IKEV1
+        return PROFILE_FAMILY_SSL
+
     def vpn_type_label(self) -> str:
-        return VPN_TYPE_IPSEC_LABEL if self.is_ipsec() else VPN_TYPE_SSL_LABEL
+        return PROFILE_FAMILY_LABELS.get(self.profile_family(), VPN_TYPE_SSL_LABEL)
+
+    def is_connectable(self) -> bool:
+        """Return True when this release can start the stored combination."""
+        if self.is_ssl():
+            return True
+        settings = self.ipsec or default_ipsec_settings()
+        return settings.is_supported()
+
+    def connect_block_reason(self) -> str | None:
+        """Return a user-facing reason when Connect must stay disabled."""
+        if self.is_connectable():
+            return None
+        settings = self.ipsec or default_ipsec_settings()
+        return settings.support_summary()
 
     def auth_label(self) -> str:
         """Return the human-readable authentication mode."""
@@ -176,14 +218,30 @@ def new_profile_id() -> str:
 
 def unique_copy_name(base: str, existing_names: Iterable[str]) -> str:
     """Return a deterministic unique name for a duplicated profile."""
+    return unique_suffixed_name(base, existing_names, stem="copy")
+
+
+def unique_imported_name(base: str, existing_names: Iterable[str]) -> str:
+    """Return a unique name when an imported profile collides."""
     taken = {name.casefold() for name in existing_names}
-    suffix = " (copy)"
+    if base.strip().casefold() not in taken:
+        trimmed = base.strip() or "Profile"
+        if len(trimmed) <= _MAX_NAME_LENGTH:
+            return trimmed
+        return trimmed[:_MAX_NAME_LENGTH].rstrip()
+    return unique_suffixed_name(base, existing_names, stem="imported")
+
+
+def unique_suffixed_name(base: str, existing_names: Iterable[str], *, stem: str = "copy") -> str:
+    """Return a deterministic unique name using `` (stem)`` then `` (stem N)``."""
+    taken = {name.casefold() for name in existing_names}
+    suffix = f" ({stem})"
     candidate = _with_copy_suffix(base, suffix)
     if candidate.casefold() not in taken:
         return candidate
     index = 2
     while True:
-        suffix = f" (copy {index})"
+        suffix = f" ({stem} {index})"
         candidate = _with_copy_suffix(base, suffix)
         if candidate.casefold() not in taken:
             return candidate

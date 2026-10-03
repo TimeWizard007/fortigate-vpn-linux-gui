@@ -22,8 +22,10 @@ from fortigate_vpn_gui.profiles.model import (
     build_profile,
     new_profile_id,
     unique_copy_name,
+    unique_imported_name,
 )
 from fortigate_vpn_gui.profiles.storage import ProfileStore
+from fortigate_vpn_gui.profiles.transfer import export_profile_document, parse_exported_profile
 from fortigate_vpn_gui.system.psk_store import PskStore, default_psk_store
 
 _UNSET = object()
@@ -184,6 +186,33 @@ class ProfileManager:
             trusted_cert_sha256=existing.trusted_cert_sha256,
             vpn_type=existing.vpn_type,
             ipsec=existing.ipsec_payload(),
+        )
+
+    def export_profile(self, profile_id: str) -> dict[str, object]:
+        """Return a secret-free, versioned export document for *profile_id*."""
+        existing = self.get(profile_id)
+        if existing is None:
+            raise ProfileNotFoundError(profile_id)
+        return export_profile_document(existing)
+
+    def import_profile(self, payload: object) -> ConnectionProfile:
+        """Validate and add a profile from an export document.
+
+        Duplicate names are renamed. Secrets are never imported. The new
+        profile receives its own id and keyring namespace.
+        """
+        fields = parse_exported_profile(payload)
+        name = unique_imported_name(str(fields["name"]), (item.name for item in self._profiles))
+        return self.add(
+            name=name,
+            gateway=fields["gateway"],
+            port=fields["port"],
+            description=fields["description"],
+            username_hint=fields["username_hint"],
+            use_sso=fields["use_sso"],
+            trusted_cert_sha256=fields["trusted_cert_sha256"],
+            vpn_type=fields["vpn_type"],
+            ipsec=fields["ipsec"],
         )
 
     def set_default(self, profile_id: str) -> ConnectionProfile:

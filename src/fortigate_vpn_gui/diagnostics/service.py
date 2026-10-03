@@ -29,7 +29,9 @@ from fortigate_vpn_gui.diagnostics.checks import (
     check_polkit_authorization,
     check_polkit_policy,
     check_profile_context,
+    check_profile_supported,
     check_route,
+    check_saml_service,
     check_tcp,
     check_vpn_interface,
     check_vpn_routes,
@@ -275,6 +277,17 @@ class DiagnosticService:
                 ),
             ),
             (
+                "profile.supported",
+                lambda: add(
+                    self._safe(
+                        "profile.supported",
+                        "Profile can connect",
+                        GROUP_PROFILE,
+                        lambda: check_profile_supported(request.profile),
+                    )
+                ),
+            ),
+            (
                 "profile.certificate",
                 lambda: add(
                     self._safe(
@@ -327,6 +340,24 @@ class DiagnosticService:
                     "Gateway TCP",
                     GROUP_NETWORK,
                     lambda: check_tcp(
+                        request.profile,
+                        dns_addresses,
+                        dns_failed=dns_failed,
+                        include_network=request.include_network,
+                        connect=self._deps.tcp_connect,
+                    ),
+                )
+            )
+        elif not cancelled:
+            cancelled = True
+
+        if not cancelled and not should_stop():
+            add(
+                self._safe(
+                    "network.saml",
+                    "SAML service",
+                    GROUP_NETWORK,
+                    lambda: check_saml_service(
                         request.profile,
                         dns_addresses,
                         dns_failed=dns_failed,

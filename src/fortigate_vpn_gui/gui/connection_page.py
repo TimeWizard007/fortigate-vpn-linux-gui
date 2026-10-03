@@ -289,7 +289,7 @@ class ConnectionPage(QWidget):
         previous_index: int | None = None
         default_index: int | None = None
         for index, profile in enumerate(profiles):
-            type_label = "IPsec" if profile.is_ipsec() else "SSL"
+            type_label = profile.vpn_type_label()
             label = f"{profile.name} · {type_label}"
             if profile.id == default_id:
                 label = f"{profile.name} · {type_label} (default)"
@@ -394,6 +394,8 @@ class ConnectionPage(QWidget):
 
     def _sync_button(self, snapshot: VpnSnapshot, has_profile: bool) -> None:
         profile = self.selected_profile()
+        blocked = None if profile is None else profile.connect_block_reason()
+        self._action_button.setToolTip(blocked or "")
         state = snapshot.state
         closing = snapshot.shutdown_in_progress or state is ConnectionState.CLOSING
         self._reconnect_button.setVisible(state is ConnectionState.CONNECTED and not closing)
@@ -438,7 +440,7 @@ class ConnectionPage(QWidget):
             return
         if state is ConnectionState.FAILED:
             self._action_button.setText("Connect again")
-            self._action_button.setEnabled(has_profile)
+            self._action_button.setEnabled(has_profile and self._profile_is_connectable(profile))
             return
         if profile is not None and (
             profile.is_ipsec_saml_preauth() or (profile.is_ssl() and profile.use_sso)
@@ -446,7 +448,11 @@ class ConnectionPage(QWidget):
             self._action_button.setText("Connect with SSO")
         else:
             self._action_button.setText("Connect")
-        self._action_button.setEnabled(has_profile)
+        self._action_button.setEnabled(has_profile and self._profile_is_connectable(profile))
+
+    @staticmethod
+    def _profile_is_connectable(profile: ConnectionProfile | None) -> bool:
+        return profile is not None and profile.is_connectable()
 
     def _on_reconnect_clicked(self) -> None:
         if self._vpn.snapshot().shutdown_in_progress:
@@ -485,6 +491,14 @@ class ConnectionPage(QWidget):
         profile = self.selected_profile()
         if profile is None:
             return
+        if not profile.is_connectable():
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                "Cannot connect",
+                profile.connect_block_reason() or "This profile cannot be connected.",
+            )
+            return
+        self._action_button.setEnabled(False)
         proceed, credentials = collect_ipsec_connect_credentials(
             profile,
             parent=dialog_parent_for(self),
@@ -492,6 +506,7 @@ class ConnectionPage(QWidget):
             manager=self._manager,
         )
         if not proceed:
+            self.apply_snapshot(self._vpn.snapshot())
             return
         self._vpn.connect(profile, credentials=credentials)
 

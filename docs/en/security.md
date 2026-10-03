@@ -85,7 +85,8 @@ because query strings can carry session identifiers.
 - Every backend log line passes through `redact_log_line` (case-insensitive)
   before it is shown.
 - Copied and exported diagnostic reports are sanitized the same way. They must not include
-  passwords, tokens, cookies, SAML payloads, or helper request bodies.
+  passwords, tokens, cookies, SAML payloads, PSK, tokenid, FCT UID, or helper request bodies.
+- Profile **Export** never includes secrets. Profile **Import** rejects credential-bearing files.
 - Opening Diagnostics does not launch pkexec and does not request interactive
   authorization.
 - Connection profile files contain **no authentication secrets**.

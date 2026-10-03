@@ -33,7 +33,7 @@ install system packages automatically.
 
 The GUI from this checkout expects helper **0.9.0** with advertised
 capabilities `ipsec_ikev1_psk_xauth` and `ipsec_ikev2_eap`. The packaged
-**1.3.0** helper is the same capability version. JSON-lines
+**1.4.0** helper is the same capability version. JSON-lines
 `protocol_version` remains **1**; do not use `--version` alone to decide
 whether IKEv2 SSO can run. A leftover packaged **1.2.0** helper is **0.8.0**
 and only implements IKEv1 Aggressive + PSK + XAuth.
