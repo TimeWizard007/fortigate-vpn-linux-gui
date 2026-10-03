@@ -25,8 +25,8 @@ from fortigate_vpn_gui.metadata import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_application_version_is_1_5_0() -> None:
-    assert __version__ == "1.5.0"
+def test_application_version_is_1_6_0() -> None:
+    assert __version__ == "1.6.0"
 
 
 def test_helper_protocol_is_0_9_0() -> None:
@@ -64,6 +64,9 @@ def test_desktop_entry_static_content() -> None:
     assert entry["Icon"] == ICON_NAME
     assert entry["Terminal"] == "false"
     assert "Network" in entry["Categories"]
+    assert "IPsec" in entry["Keywords"]
+    assert "IKEv1" in entry["Keywords"]
+    assert "IKEv2" in entry["Keywords"]
     assert "Security" in entry["Categories"]
     assert entry["Categories"].startswith("Network")
     assert "/home/" not in body
@@ -105,7 +108,8 @@ def test_launcher_script_has_no_shell_injection() -> None:
 def test_debian_control_metadata() -> None:
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "Package: fortigate-vpn-linux-gui" in control
-    assert "Version: 1.5.0-1" in control
+    assert "Version: 1.6.0-1" in control
+    assert "1.5.0-1" not in control.split("Depends:", 1)[0]
     assert "1.4.0-1" not in control.split("Depends:", 1)[0]
     assert "1.3.0-1" not in control.split("Depends:", 1)[0]
     assert "1.2.0-1" not in control.split("Depends:", 1)[0]
@@ -127,12 +131,14 @@ def test_debian_control_metadata() -> None:
     assert "keyring==25.7.0" in bundle
     assert "SecretStorage==3.5.0" in bundle
     assert "jeepney==0.9.0" in bundle
+    assert "cryptography==50.0.1" in bundle
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "keyring" in pyproject
+    assert "cryptography" in pyproject
     changelog = (ROOT / "packaging" / "debian" / "changelog").read_text(encoding="utf-8")
-    assert changelog.startswith("fortigate-vpn-linux-gui (1.5.0-1)")
+    assert changelog.startswith("fortigate-vpn-linux-gui (1.6.0-1)")
     script = (ROOT / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
-    assert 'VERSION="1.5.0"' in script
+    assert 'VERSION="1.6.0"' in script
     assert 'REVISION="1"' in script
     assert "import keyring" in script
     assert 'OPENFORTIVPN_VERSION="1.24.1"' in script

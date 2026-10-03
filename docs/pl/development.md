@@ -17,7 +17,7 @@ instaluje pakietów sama.
 ## Pomocnik uprzywilejowany (rozwój)
 
 GUI z tego checkoutu oczekuje pomocnika **0.9.0** z capabilities
-`ipsec_ikev1_psk_xauth` oraz `ipsec_ikev2_eap`. Paczka **1.5.0** ma tę
+`ipsec_ikev1_psk_xauth` oraz `ipsec_ikev2_eap`. Paczka **1.6.0** ma tę
 samą wersję możliwości. `protocol_version` nadal wynosi **1**. Starszy
 pomocnik **1.2.0** to **0.8.0** (tylko IKEv1 PSK+XAuth). Przy testowaniu
 niewydanych zmian pomocnika zainstaluj go ze źródła:

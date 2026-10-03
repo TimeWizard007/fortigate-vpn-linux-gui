@@ -87,6 +87,10 @@ because query strings can carry session identifiers.
 - Copied and exported diagnostic reports are sanitized the same way. They must not include
   passwords, tokens, cookies, SAML payloads, PSK, tokenid, FCT UID, or helper request bodies.
 - Profile **Export** never includes secrets. Profile **Import** rejects credential-bearing files.
+- Encrypted **Backup** (`.fvbackup`) may include saved IPsec PSK and XAuth
+  password only inside Argon2id + AES-256-GCM. SSL passwords, SAML cookies,
+  tokens, tokenid, and FCT UID are never backed up. See
+  [`backup.md`](backup.md).
 - Opening Diagnostics does not launch pkexec and does not request interactive
   authorization.
 - Connection profile files contain **no authentication secrets**.
@@ -111,8 +115,10 @@ replaced automatically.
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
 - No automatic package installation from the GUI. Ubuntu 24.04 uses the
-  `fortigate-vpn-linux-gui` `.deb` or, once published, `apt` from the project
-  repository. About only reports that a newer GitHub Release exists.
+  `fortigate-vpn-linux-gui` `.deb` or `apt` from the project repository.
+  About reports GitHub Releases availability and local Debian/APT install
+  context. The GUI never runs `apt`, `sudo`, or `pkexec` to upgrade itself.
+  Copyable upgrade commands are for the user to run in a terminal.
 - Update checks use HTTPS to the public GitHub Releases API. They do not send
   tokens, profiles, gateways, or telemetry. Failure is not treated as an
   available update.

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
+
+### Added
+
+- Encrypted **Backup** / **Restore** of all profiles and saved IPsec secrets (Argon2id + AES-256-GCM, `.fvbackup`)
+- Profiles-page Backup/Restore entry points, separate from secret-free Import/Export
+- APT-aware About context: Debian package version, install method, copyable apt instructions (never executed)
+- Tray notification once per newly observed GitHub release version
+- Desktop Keywords for IPsec / IKEv1 / IKEv2
+
+### Changed
+
+- Application version is 1.6.0; helper capability version remains 0.9.0; JSON-lines `protocol_version` remains 1; Debian package is 1.6.0-1
+- Frozen v1.4.0 / v1.3.0 VPN protocol backend is unchanged
+- About shows Installed vs Available on update, plus Protocol 1 and Debian/install method
+- `profiles.json` writes use mode 0600
+- `cryptography` is a direct project dependency (already bundled at 50.0.1)
+
+### Security
+
+- Export remains secret-free; Backup may include PSK and XAuth password only inside authenticated encryption
+- SSL passwords, SAML cookies/tokens/tokenid/FCT UID are not backed up
+- Restore is all-or-nothing: keyring failure or mid-write errors roll back
+- The GUI still never installs packages and never calls sudo/pkexec/apt to upgrade itself
+
 ## [1.5.0] - 2026-10-03
 
 Application **1.5.0**, Debian **1.5.0-1**. Tagged, published, and production-verified.

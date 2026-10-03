@@ -42,6 +42,9 @@ def test_profiles_page_empty_state(qapp, profile_manager: ProfileManager) -> Non
     imported = page.findChild(QPushButton, "emptyImportProfileButton")
     assert imported is not None
     assert imported.text() == "Import"
+    restore = page.findChild(QPushButton, "emptyRestoreProfilesButton")
+    assert restore is not None
+    assert "Restore" in restore.text()
 
 
 def test_profiles_page_add_via_dialog(qapp, profile_manager: ProfileManager) -> None:

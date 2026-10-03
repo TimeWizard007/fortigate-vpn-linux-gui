@@ -1,5 +1,5 @@
 Package: fortigate-vpn-linux-gui
-Version: 1.5.0-1
+Version: 1.6.0-1
 Section: net
 Priority: optional
 Architecture: amd64
@@ -13,7 +13,7 @@ Description: Native Linux desktop GUI client for FortiGate SSL VPN and IPsec
  PSK, XAuth, Mode Config, NAT-T, and FortiGate/Cisco Unity split include,
  IKEv2 + SAML/SSO with FortiClient-compatible EAP-MSCHAPv2 and negotiated
  split-tunnel, a polkit privileged helper, certificate pinning,
- Diagnostics, and a system tray.
+ Diagnostics, encrypted Backup/Restore of saved IPsec secrets, and a system tray.
  .
  This package includes a private SAML-capable openfortivpn 1.24.1 at
  /usr/libexec/fortigate-vpn-linux-gui/openfortivpn. Ubuntu 24.04's

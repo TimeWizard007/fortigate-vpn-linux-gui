@@ -1,12 +1,13 @@
 # Installation, updates, and APT repository
 
-v1.5.0 is a distribution and update-experience release. It introduced the
-production APT repository. SSL VPN, IPsec, SAML, and helper protocol behavior
+v1.6.0 keeps the production APT repository introduced in v1.5.0 and adds
+APT-aware About context. SSL VPN, IPsec, SAML, and helper protocol behavior
 remain the frozen v1.4.0 / v1.3.0 baseline.
 
 The GUI never downloads or installs packages and never calls `sudo`, `pkexec`,
-or `apt` to upgrade itself. `apt` remains responsible for installed-package
-upgrades.
+`apt-get`, or `apt` to upgrade itself. About may show copyable commands such
+as `sudo apt update` and `sudo apt install --only-upgrade fortigate-vpn-linux-gui`
+for the user to run. `apt` remains responsible for installed-package upgrades.
 
 Validated install platform: **Ubuntu 24.04 LTS (`noble`), amd64**. Other
 distributions are untested.
@@ -90,12 +91,12 @@ stable GitHub Release `.deb` files.
 
 ## Direct `.deb` install (alternative)
 
-Download `fortigate-vpn-linux-gui_1.5.0-1_amd64.deb` from
+Download `fortigate-vpn-linux-gui_1.6.0-1_amd64.deb` from
 [GitHub Releases](https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases)
 and install:
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 Upgrade later by installing a newer downloaded `.deb` the same way, or by
@@ -116,12 +117,21 @@ most once per 24 hours after startup. Checks use the public GitHub Releases
 API over HTTPS, do not require a token, and do not send profile, gateway, or
 user information. There is no telemetry.
 
-States: `Up to date`, `Update available: vX.Y.Z`, `Checking...`,
-`Unable to check for updates`. Network failures are not treated as an
-available update.
+States: `Up to date`, `Update available` with Installed vs Available,
+`Checking...`, `Unable to check for updates`. Network failures are not treated
+as an available update. Local Debian/APT information may still be shown when
+GitHub is unreachable.
+
+When GitHub latest is newer than the application but the APT Candidate is
+still older, About shows both states and does not claim APT already has the
+update. Packaged users see copyable `apt` instructions. Direct `.deb`
+installs without the project APT source are told they can install the newer
+`.deb` from GitHub Releases or configure the APT repository. Source/dev
+checkouts are told the application is running from source.
 
 **View release** opens the GitHub Release page in the system browser after an
-explicit click. The GUI does not self-update.
+explicit click. The GUI does not self-update. This application does not
+install system updates itself.
 
 ## Trust model
 
@@ -136,7 +146,7 @@ explicit click. The GUI does not self-update.
 ## Maintainer release procedure
 
 1. Keep application version, `pyproject.toml`, Debian changelog/control, and
-   `scripts/build-deb.sh` aligned (`1.5.0` / `1.5.0-1`).
+   `scripts/build-deb.sh` aligned (`1.6.0` / `1.6.0-1`).
    `python scripts/check-version-consistency.py` must pass.
 2. Do not move historical tags. `v1.4.0` and `v1.5.0` are immutable.
 3. After review, tag `vX.Y.Z` on the release commit. The **Release** workflow

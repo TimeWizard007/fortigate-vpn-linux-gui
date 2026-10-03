@@ -1,12 +1,14 @@
 # Instalacja, aktualizacje i repozytorium APT
 
-v1.5.0 to wydanie dystrybucji i aktualizacji. Wprowadziło produkcyjne
-repozytorium APT. SSL VPN, IPsec, SAML i protokół pomocnika pozostają
-zamrożonym baseline v1.4.0 / v1.3.0.
+v1.6.0 zachowuje produkcyjne repozytorium APT wprowadzone w v1.5.0 i dodaje
+kontekst About świadomy APT. SSL VPN, IPsec, SAML i protokół pomocnika
+pozostają zamrożonym baseline v1.4.0 / v1.3.0.
 
 GUI nigdy nie pobiera ani nie instaluje pakietów i nigdy nie woła `sudo`,
-`pkexec` ani `apt`, żeby się samo zaktualizować. Za aktualizacje zainstalowanej
-paczki odpowiada `apt`.
+`pkexec`, `apt-get` ani `apt`, żeby się samo zaktualizować. About może pokazać
+kopiowalne polecenia, na przykład `sudo apt update` i
+`sudo apt install --only-upgrade fortigate-vpn-linux-gui`, do uruchomienia
+przez użytkownika. Za aktualizacje zainstalowanej paczki odpowiada `apt`.
 
 Zweryfikowana platforma: **Ubuntu 24.04 LTS (`noble`), amd64**. Inne
 dystrybucje nie były testowane.
@@ -89,12 +91,12 @@ publisher APT odbudowuje `pool/` ze stabilnych plików `.deb`.
 
 ## Instalacja bezpośredniego `.deb` (alternatywa)
 
-Pobierz `fortigate-vpn-linux-gui_1.5.0-1_amd64.deb` z
+Pobierz `fortigate-vpn-linux-gui_1.6.0-1_amd64.deb` z
 [GitHub Releases](https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases)
 i zainstaluj:
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 Późniejsza aktualizacja to nowszy pobrany `.deb` albo repozytorium APT powyżej.
@@ -114,11 +116,21 @@ najwyżej raz na 24 godziny po starcie. Zapytania idą do publicznego API GitHub
 Releases przez HTTPS, bez tokenu i bez danych profilu, bramy ani użytkownika.
 Brak telemetrii.
 
-Stany: `Up to date`, `Update available: vX.Y.Z`, `Checking...`,
-`Unable to check for updates`. Awaria sieci nie oznacza dostępnej aktualizacji.
+Stany: `Up to date`, `Update available` z Installed vs Available,
+`Checking...`, `Unable to check for updates`. Awaria sieci nie oznacza
+dostępnej aktualizacji. Lokalne informacje Debian/APT mogą być nadal
+pokazane, gdy GitHub jest niedostępny.
+
+Gdy najnowsze GitHub jest nowsze niż aplikacja, a kandydat APT jest nadal
+starszy, About pokazuje oba stany i nie twierdzi, że APT już ma aktualizację.
+Użytkownicy APT widzą kopiowalne polecenia. Instalacje bezpośredniego `.deb`
+bez repozytorium projektu dostają informację, że nowszy `.deb` można wziąć
+z GitHub Releases albo skonfigurować repozytorium APT. Uruchomienie ze
+źródła jest opisane jako source/dev.
 
 **View release** otwiera stronę wydania w systemowej przeglądarce dopiero po
-kliknięciu. GUI samo się nie aktualizuje.
+kliknięciu. GUI samo się nie aktualizuje. Ta aplikacja nie instaluje
+aktualizacji systemowych.
 
 ## Model zaufania
 
@@ -133,7 +145,7 @@ kliknięciu. GUI samo się nie aktualizuje.
 ## Procedura wydania (opiekun)
 
 1. Wersja aplikacji, `pyproject.toml`, changelog/control Debiana i
-   `scripts/build-deb.sh` muszą być zgodne (`1.5.0` / `1.5.0-1`).
+   `scripts/build-deb.sh` muszą być zgodne (`1.6.0` / `1.6.0-1`).
    `python scripts/check-version-consistency.py` musi przejść.
 2. Nie przesuwaj historycznych tagów. `v1.4.0` i `v1.5.0` są niezmienne.
 3. Po przeglądzie oznacz commit tagiem `vX.Y.Z`. Workflow **Release** buduje

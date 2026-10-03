@@ -13,15 +13,16 @@ odpowiednich właścicieli.
 Główny cel wydania: **Ubuntu 24.04 LTS, amd64**. Inne dystrybucje z rodziny
 Debian nie były testowane.
 
-Aktualna wersja to **1.5.0**. Wersja możliwości pomocnika to **0.9.0**
+Aktualna wersja to **1.6.0**. Wersja możliwości pomocnika to **0.9.0**
 (`protocol_version` pozostaje **1**). Zachowanie protokołu VPN to zamrożony
-backend v1.3.0 (jak w potwierdzonym live v1.4.0). v1.5.0 dodaje sprawdzanie
-aktualizacji, wersje komponentów w About, automatyzację wydań i produkcyjne
-repozytorium APT.
+backend v1.3.0 (jak w potwierdzonym live v1.4.0). v1.6.0 to zamierzone
+wydanie kompletne: szyfrowany Backup/Restore, status aktualizacji świadomy
+APT i dopracowanie pulpitu. Po v1.6.0 projekt wchodzi w tryb utrzymania.
 
 ## Funkcje
 
 - Trwałe profile połączeń (tworzenie, edycja, duplikowanie, usuwanie, import, eksport, domyślny)
+- Szyfrowany Backup/Restore profili i zapisanych sekretów IPsec (`.fvbackup`; Export nie jest kopią sekretów)
 - Łączenie ze strony Profiles lub Connection
 - SAML/SSO przez `openfortivpn --saml-login` i systemową przeglądarkę
 - Profile SSL z hasłem, gdy SSO nie jest używane
@@ -36,8 +37,8 @@ repozytorium APT.
 - Opcjonalne ponawianie po nieoczekiwanej utracie tunelu (domyślnie wyłączone)
 - Diagnostyka: DNS, routing, TCP, usługa SAML, tunel, pomocnik, IPsec, polkit
 - Kopiowanie raportu diagnostycznego i eksport diagnostyki (ocenzurowany tekst lub ZIP do zgłoszenia)
-- About: wersje komponentów i sprawdzenie aktualizacji z GitHub Releases (bez telemetrii; GUI samo się nie aktualizuje)
-- Produkcyjne repozytorium APT dla Ubuntu 24.04 (`noble`) amd64 (v1.5.0)
+- About: wersje komponentów, metoda instalacji Debian i sprawdzenie aktualizacji z GitHub Releases (bez telemetrii; GUI samo się nie aktualizuje)
+- Produkcyjne repozytorium APT dla Ubuntu 24.04 (`noble`) amd64
 
 ## Instalacja (Ubuntu 24.04)
 
@@ -47,7 +48,7 @@ Pełne instrukcje instalacji, aktualizacji, zaufania i rollback:
 ### A. Bezpośredni `.deb` z GitHub Releases
 
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 `apt` dociąga biblioteki runtime, `pkexec`, `ppp`, `iproute2` oraz pakiety
@@ -159,6 +160,11 @@ konfiguracji strongSwan ani openfortivpn. Duplikat i import dostają własną
 tożsamość; zapisane sekrety nie są kopiowane. Przed połączeniem uzupełnij
 wymagane sekrety.
 
+**Backup** to osobna, szyfrowana operacja `.fvbackup`. Może zawierać zapisane
+klucze wstępne IPsec i hasła XAuth w uwierzytelnionym szyfrowaniu.
+**Export nie jest kopią zapasową sekretów.** Hasła SSL i sesje SAML nigdy
+nie są kopiowane. Zobacz [`docs/pl/backup.md`](docs/pl/backup.md).
+
 Profile SSL, IKEv1 i IKEv2 SAML/SSO z v1.3.0 nadal się wczytują.
 
 ## Model bezpieczeństwa
@@ -204,7 +210,7 @@ strongSwan. Paczka nigdy nie wyłącza systemowego strongSwan automatycznie.
 - Środowisko FortiGate / FortiOS użyte do walidacji SSL, IPsec IKEv1 oraz
   v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, trzy udane cykle).
   v1.4.0 zachowuje to zachowanie VPN i dodaje zarządzanie profilami w GUI.
-  v1.5.0 nie zmienia zachowania protokołu VPN.
+  v1.5.0 i v1.6.0 nie zmieniają zachowania protokołu VPN.
 - Test zainstalowanej paczki v1.2.0: odmowa IPsec gdy systemowy charon miał
   UDP/500/4500; prywatny IPsec po zatrzymaniu tego IKE; SSL/SAML po sprzątaniu
   IPsec z przywróconym systemowym strongSwan

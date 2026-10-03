@@ -8,6 +8,7 @@ import time
 LAST_CHECK_UNIX_KEY = "updates/last_check_unix"
 LAST_KNOWN_VERSION_KEY = "updates/last_known_version"
 LAST_KNOWN_URL_KEY = "updates/last_known_url"
+LAST_NOTIFIED_VERSION_KEY = "updates/last_notified_version"
 CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 
 
@@ -47,3 +48,23 @@ def last_known_version(settings) -> str:
 def last_known_url(settings) -> str:
     value = settings.value(LAST_KNOWN_URL_KEY, "")
     return str(value or "")
+
+
+def last_notified_version(settings) -> str:
+    value = settings.value(LAST_NOTIFIED_VERSION_KEY, "")
+    return str(value or "")
+
+
+def should_notify_update(settings, latest: str) -> bool:
+    """Return True once per newly observed latest version."""
+    version = str(latest or "").strip()
+    if not version:
+        return False
+    return last_notified_version(settings) != version
+
+
+def record_notified_version(settings, latest: str) -> None:
+    version = str(latest or "").strip()
+    if not version:
+        return
+    settings.setValue(LAST_NOTIFIED_VERSION_KEY, version)

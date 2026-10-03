@@ -102,7 +102,17 @@ Dates are not committed. Order may change as design work proceeds.
 - Application 1.5.0; helper capability version remains 0.9.0; `protocol_version` 1; Debian package 1.5.0-1
 - Frozen v1.4.0 / v1.3.0 VPN protocol backend (no protocol research in this release)
 
-## Later (not claimed in v1.5.0)
+## v1.6.0 — feature complete / maintenance mode
+
+- Encrypted Backup/Restore (`.fvbackup`; Argon2id + AES-256-GCM)
+- Export remains secret-free; Backup is the secrets-capable copy
+- APT-aware About/update status (read-only; the GUI never runs apt/sudo/pkexec to update itself)
+- One tray notification per newly observed GitHub release
+- Desktop Keywords; `profiles.json` writes mode 0600
+- Application 1.6.0; helper capability version remains 0.9.0; `protocol_version` 1; Debian package 1.6.0-1
+- Frozen v1.4.0 / v1.3.0 VPN protocol backend (no protocol research in this release)
+
+## Later (maintenance; not claimed as new features)
 
 - IKEv1 Main Mode, certificate authentication, manual-address IPsec
 - Debian 13, Fedora, Windows, macOS

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QScrollArea
+from PySide6.QtWidgets import QLabel, QScrollArea
 
 from fortigate_vpn_gui.gui.certificate_dialog import CertificateTrustDialog
 from fortigate_vpn_gui.gui.main_window import MainWindow
@@ -106,4 +106,17 @@ def test_pages_use_scroll_areas(qapp, profile_manager: ProfileManager, tmp_path)
         area = page.findChild(QScrollArea, "pageScrollArea")
         assert area is not None
         assert area.widgetResizable()
+    window.close()
+
+
+def test_settings_page_explains_close_to_tray_and_backup(
+    qapp, profile_manager: ProfileManager, tmp_path
+) -> None:
+    window = _window(qapp, profile_manager, tmp_path)
+    close_note = window.settings_page.findChild(QLabel, "closeBehaviorNote")
+    assert close_note is not None
+    assert "Quit on the tray menu" in close_note.text()
+    backup_note = window.settings_page.findChild(QLabel, "backupRestoreNote")
+    assert backup_note is not None
+    assert "Export does not include passwords" in backup_note.text()
     window.close()

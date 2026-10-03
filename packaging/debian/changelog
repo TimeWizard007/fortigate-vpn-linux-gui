@@ -1,3 +1,15 @@
+fortigate-vpn-linux-gui (1.6.0-1) noble; urgency=medium
+
+  * Feature-complete release: encrypted Backup/Restore of profiles and
+    saved IPsec secrets, APT-aware update status, and desktop polish.
+  * Profile Export remains secret-free and is not a backup of passwords
+    or IPsec pre-shared keys.
+  * The GUI never installs updates; apt remains responsible.
+  * Application version 1.6.0. Helper capability version remains 0.9.0;
+    JSON-lines protocol_version remains 1.
+
+ -- TimeWizard007 <mwi@mwatkowski.eu>  Sat, 03 Oct 2026 20:00:00 +0200
+
 fortigate-vpn-linux-gui (1.5.0-1) noble; urgency=medium
 
   * Distribution and update-experience release on the frozen v1.4.0 /

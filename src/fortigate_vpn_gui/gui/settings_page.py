@@ -102,9 +102,23 @@ class SettingsPage(QWidget):
         )
         update_note.setWordWrap(True)
         update_note.setObjectName("autoCheckUpdatesNote")
+        backup_note = QLabel(
+            "Encrypted Backup and Restore are on the Profiles page. "
+            "Export does not include passwords or IPsec pre-shared keys."
+        )
+        backup_note.setWordWrap(True)
+        backup_note.setObjectName("backupRestoreNote")
 
         form = QFormLayout()
         form.addRow("Close button behavior:", self._close_combo)
+        close_note = QLabel(
+            "Close button behavior applies to the window Close button. "
+            "Minimize to system tray keeps the application running in the tray. "
+            "Use Quit on the tray menu, or choose Exit application, to stop "
+            "completely."
+        )
+        close_note.setWordWrap(True)
+        close_note.setObjectName("closeBehaviorNote")
 
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
@@ -114,11 +128,13 @@ class SettingsPage(QWidget):
         inner_layout.addWidget(intro)
         inner_layout.addWidget(self._always_on_top)
         inner_layout.addLayout(form)
+        inner_layout.addWidget(close_note)
         inner_layout.addWidget(self._autostart)
         inner_layout.addWidget(self._auto_reconnect)
         inner_layout.addWidget(reconnect_note)
         inner_layout.addWidget(self._auto_check_updates)
         inner_layout.addWidget(update_note)
+        inner_layout.addWidget(backup_note)
         inner_layout.addWidget(ProfileConfigPathWidget(manager.storage_path))
         inner_layout.addStretch(1)
 

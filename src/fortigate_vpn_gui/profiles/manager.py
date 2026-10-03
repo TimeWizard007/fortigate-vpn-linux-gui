@@ -100,6 +100,18 @@ class ProfileManager:
         """Persist the current list. Creates the config directory if needed."""
         self._store.save(self._profiles, default_profile_id=self._default_profile_id)
 
+    def install_profiles(
+        self,
+        profiles: list[ConnectionProfile],
+        *,
+        default_profile_id: str | None = None,
+    ) -> None:
+        """Replace the in-memory list and persist. Used by encrypted restore."""
+        self._profiles = list(profiles)
+        known = {profile.id for profile in self._profiles}
+        self._default_profile_id = default_profile_id if default_profile_id in known else None
+        self._persist_and_notify()
+
     def add(
         self,
         *,

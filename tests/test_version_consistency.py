@@ -18,14 +18,14 @@ def _load():
     return module
 
 
-def test_source_versions_are_1_5_0() -> None:
+def test_source_versions_are_1_6_0() -> None:
     module = _load()
     versions = module.collect_versions()
-    assert versions["application"] == "1.5.0"
-    assert versions["pyproject"] == "1.5.0"
-    assert versions["debian_control"] == "1.5.0-1"
-    assert versions["debian_changelog"] == "1.5.0-1"
-    assert versions["build_script"] == "1.5.0-1"
+    assert versions["application"] == "1.6.0"
+    assert versions["pyproject"] == "1.6.0"
+    assert versions["debian_control"] == "1.6.0-1"
+    assert versions["debian_changelog"] == "1.6.0-1"
+    assert versions["build_script"] == "1.6.0-1"
 
 
 def test_validate_passes_without_tag(monkeypatch) -> None:
@@ -44,8 +44,8 @@ def test_tag_must_match_application(monkeypatch) -> None:
     module = _load()
     monkeypatch.setattr(module, "detect_release_tag", lambda: "v1.4.0")
     errors = module.validate()
-    assert any("v1.4.0" in item and "v1.5.0" in item for item in errors)
-    monkeypatch.setattr(module, "detect_release_tag", lambda: "v1.5.0")
+    assert any("v1.4.0" in item and "v1.6.0" in item for item in errors)
+    monkeypatch.setattr(module, "detect_release_tag", lambda: "v1.6.0")
     assert module.validate(require_tag=True) == []
 
 
@@ -71,7 +71,7 @@ def test_expected_tag_wins_over_workflow_run_github_ref(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
     monkeypatch.setattr(module, "detect_release_tag", lambda: None)
     assert module.validate(require_tag=True)
-    assert module.validate(require_tag=True, expected_tag="v1.5.0") == []
+    assert module.validate(require_tag=True, expected_tag="v1.6.0") == []
 
 
 def test_expected_tag_must_be_stable() -> None:
@@ -83,8 +83,8 @@ def test_expected_tag_must_be_stable() -> None:
 
 def test_expected_tag_must_match_source_version() -> None:
     module = _load()
-    errors = module.validate(require_tag=True, expected_tag="v1.5.1")
-    assert any("v1.5.1" in item and "v1.5.0" in item for item in errors)
+    errors = module.validate(require_tag=True, expected_tag="v1.6.1")
+    assert any("v1.6.1" in item and "v1.6.0" in item for item in errors)
 
 
 def test_expected_tag_rejects_wrong_deb_version(monkeypatch) -> None:
@@ -92,14 +92,14 @@ def test_expected_tag_rejects_wrong_deb_version(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "debian_package_fields",
-        lambda _path: ("fortigate-vpn-linux-gui", "1.5.1-1", "amd64"),
+        lambda _path: ("fortigate-vpn-linux-gui", "1.6.1-1", "amd64"),
     )
     errors = module.validate(
         require_tag=True,
-        expected_tag="v1.5.0",
-        deb=Path("fortigate-vpn-linux-gui_1.5.1-1_amd64.deb"),
+        expected_tag="v1.6.0",
+        deb=Path("fortigate-vpn-linux-gui_1.6.1-1_amd64.deb"),
     )
-    assert any("1.5.1-1" in item and "1.5.0-1" in item for item in errors)
+    assert any("1.6.1-1" in item and "1.6.0-1" in item for item in errors)
 
 
 def test_expected_tag_rejects_wrong_package(monkeypatch) -> None:
@@ -107,12 +107,12 @@ def test_expected_tag_rejects_wrong_package(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "debian_package_fields",
-        lambda _path: ("unrelated-vpn", "1.5.0-1", "amd64"),
+        lambda _path: ("unrelated-vpn", "1.6.0-1", "amd64"),
     )
     errors = module.validate(
         require_tag=True,
-        expected_tag="v1.5.0",
-        deb=Path("fortigate-vpn-linux-gui_1.5.0-1_amd64.deb"),
+        expected_tag="v1.6.0",
+        deb=Path("fortigate-vpn-linux-gui_1.6.0-1_amd64.deb"),
     )
     assert any("Package" in item and "unrelated-vpn" in item for item in errors)
 
@@ -122,11 +122,11 @@ def test_expected_tag_rejects_wrong_architecture(monkeypatch) -> None:
     monkeypatch.setattr(
         module,
         "debian_package_fields",
-        lambda _path: ("fortigate-vpn-linux-gui", "1.5.0-1", "arm64"),
+        lambda _path: ("fortigate-vpn-linux-gui", "1.6.0-1", "arm64"),
     )
     errors = module.validate(
         require_tag=True,
-        expected_tag="v1.5.0",
-        deb=Path("fortigate-vpn-linux-gui_1.5.0-1_amd64.deb"),
+        expected_tag="v1.6.0",
+        deb=Path("fortigate-vpn-linux-gui_1.6.0-1_amd64.deb"),
     )
     assert any("Architecture" in item and "arm64" in item for item in errors)

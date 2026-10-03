@@ -22,6 +22,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fortigate_vpn_gui.backup.payload import format_restore_summary
+from fortigate_vpn_gui.backup.service import (
+    BackupError,
+    RestorePlan,
+    create_backup,
+    ensure_backup_suffix,
+    preflight_restore,
+    restore_backup,
+)
+from fortigate_vpn_gui.gui.backup_dialog import BackupPasswordDialog, RestorePasswordDialog
 from fortigate_vpn_gui.gui.ipsec_connect import collect_ipsec_connect_credentials
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.profile_editor_dialog import ProfileEditorDialog
@@ -64,8 +74,9 @@ class ProfilesPage(QWidget):
 
         intro = QLabel(
             "Profiles are stored on this computer only. They do not contain "
-            "passwords, SAML tokens, cookies, or other secrets. Export never "
-            "includes saved credentials."
+            "passwords, SAML tokens, cookies, or other secrets.\n\n"
+            "Export does not include passwords or IPsec pre-shared keys. "
+            "Use Backup to create an encrypted copy including saved IPsec secrets."
         )
         intro.setWordWrap(True)
 
@@ -80,12 +91,20 @@ class ProfilesPage(QWidget):
         self._import_button = QPushButton("Import")
         self._import_button.setObjectName("importProfileButton")
         self._import_button.clicked.connect(self.import_profile)
+        self._backup_button = QPushButton("Backup…")
+        self._backup_button.setObjectName("backupProfilesButton")
+        self._backup_button.clicked.connect(self.backup_profiles)
+        self._restore_button = QPushButton("Restore…")
+        self._restore_button.setObjectName("restoreProfilesButton")
+        self._restore_button.clicked.connect(self.restore_profiles)
 
         header_buttons = QVBoxLayout()
         header_buttons.setContentsMargins(0, 0, 0, 0)
         header_buttons.setSpacing(6)
         header_buttons.addWidget(self._add_button)
         header_buttons.addWidget(self._import_button)
+        header_buttons.addWidget(self._backup_button)
+        header_buttons.addWidget(self._restore_button)
 
         header_row = QHBoxLayout()
         header_row.addWidget(intro, stretch=1)
@@ -107,9 +126,17 @@ class ProfilesPage(QWidget):
         self._empty_import = QPushButton("Import")
         self._empty_import.setObjectName("emptyImportProfileButton")
         self._empty_import.clicked.connect(self.import_profile)
+        self._empty_backup = QPushButton("Backup…")
+        self._empty_backup.setObjectName("emptyBackupProfilesButton")
+        self._empty_backup.clicked.connect(self.backup_profiles)
+        self._empty_restore = QPushButton("Restore…")
+        self._empty_restore.setObjectName("emptyRestoreProfilesButton")
+        self._empty_restore.clicked.connect(self.restore_profiles)
         empty_layout.addWidget(empty_hint)
         empty_layout.addWidget(self._empty_add, alignment=Qt.AlignmentFlag.AlignLeft)
         empty_layout.addWidget(self._empty_import, alignment=Qt.AlignmentFlag.AlignLeft)
+        empty_layout.addWidget(self._empty_backup, alignment=Qt.AlignmentFlag.AlignLeft)
+        empty_layout.addWidget(self._empty_restore, alignment=Qt.AlignmentFlag.AlignLeft)
         empty_layout.addStretch(1)
 
         self._list = QWidget()
@@ -150,6 +177,8 @@ class ProfilesPage(QWidget):
         self._list.setVisible(not empty)
         self._add_button.setVisible(not empty)
         self._import_button.setVisible(not empty)
+        self._backup_button.setVisible(not empty)
+        self._restore_button.setVisible(not empty)
         for profile in profiles:
             self._list_layout.addWidget(self._build_card(profile))
         if profiles:
@@ -243,6 +272,144 @@ class ProfilesPage(QWidget):
         )
         self._feedback.show()
         return written
+
+    def backup_profiles(
+        self,
+        destination: Path | None = None,
+        *,
+        password: str | None = None,
+        confirmation: str | None = None,
+        memory_kib: int | None = None,
+        time_cost: int | None = None,
+    ) -> Path | None:
+        """Create an encrypted backup of all profiles and saved IPsec secrets."""
+        interactive = destination is None or password is None
+        path = destination
+        if path is None:
+            chosen, _filter = QFileDialog.getSaveFileName(
+                dialog_parent_for(self),
+                "Backup profiles",
+                "fortigate-vpn-linux-gui.fvbackup",
+                "FortiGate VPN Linux GUI backup (*.fvbackup)",
+            )
+            if not chosen:
+                return None
+            path = ensure_backup_suffix(Path(chosen))
+        if password is None:
+            dialog = BackupPasswordDialog(dialog_parent_for(self))
+            if dialog.exec() != dialog.DialogCode.Accepted:
+                return None
+            password = dialog.password()
+            confirmation = dialog.confirmation()
+        kwargs: dict[str, int] = {}
+        if memory_kib is not None:
+            kwargs["memory_kib"] = memory_kib
+        if time_cost is not None:
+            kwargs["time_cost"] = time_cost
+        try:
+            written = create_backup(
+                self._manager,
+                path,
+                password,
+                confirmation=confirmation,
+                **kwargs,
+            )
+        except BackupError as exc:
+            QMessageBox.warning(dialog_parent_for(self), "Backup failed", str(exc))
+            return None
+        except OSError:
+            QMessageBox.warning(
+                dialog_parent_for(self),
+                "Backup failed",
+                "The backup file could not be written.",
+            )
+            return None
+        self._feedback.setText(
+            "Encrypted backup saved. Store the file and password separately. "
+            "Export is not a backup of secrets."
+        )
+        self._feedback.show()
+        if interactive:
+            QMessageBox.information(
+                dialog_parent_for(self),
+                "Backup saved",
+                "Backup saved. Store this file and password separately.",
+            )
+        return written
+
+    def restore_profiles(
+        self,
+        source: Path | None = None,
+        *,
+        password: str | None = None,
+        confirmed: bool | None = None,
+    ) -> RestorePlan | None:
+        """Restore profiles and saved IPsec secrets from an encrypted backup."""
+        interactive = source is None or password is None or confirmed is None
+        path = source
+        if path is None:
+            chosen, _filter = QFileDialog.getOpenFileName(
+                dialog_parent_for(self),
+                "Restore backup",
+                "",
+                "FortiGate VPN Linux GUI backup (*.fvbackup);;All files (*)",
+            )
+            if not chosen:
+                return None
+            path = Path(chosen)
+        if password is None:
+            dialog = RestorePasswordDialog(dialog_parent_for(self))
+            if dialog.exec() != dialog.DialogCode.Accepted:
+                return None
+            password = dialog.password()
+        snapshot = self._current_snapshot()
+        try:
+            plan = preflight_restore(
+                self._manager,
+                path,
+                password,
+                snapshot=snapshot,
+            )
+        except BackupError as exc:
+            QMessageBox.warning(dialog_parent_for(self), "Restore failed", str(exc))
+            return None
+        summary = format_restore_summary(plan)
+        if confirmed is None:
+            answer = QMessageBox.question(
+                dialog_parent_for(self),
+                "Restore backup",
+                summary,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            confirmed = answer == QMessageBox.StandardButton.Yes
+        if not confirmed:
+            plan.wipe()
+            return None
+        try:
+            restore_backup(
+                self._manager,
+                path,
+                password,
+                snapshot=snapshot,
+                plan=plan,
+            )
+        except BackupError as exc:
+            QMessageBox.warning(dialog_parent_for(self), "Restore failed", str(exc))
+            return None
+        plan.wipe()
+        self._feedback.setText(
+            f"Restored {len(plan.rows)} profile(s). IPsec secrets were written "
+            "to the desktop keyring when present."
+        )
+        self._feedback.show()
+        if interactive:
+            QMessageBox.information(
+                dialog_parent_for(self),
+                "Restore complete",
+                self._feedback.text(),
+            )
+        return plan
 
     def edit_profile(self, profile_id: str) -> None:
         profile = self._manager.get(profile_id)

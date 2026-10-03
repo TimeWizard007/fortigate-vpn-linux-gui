@@ -1,8 +1,10 @@
 # Znane ograniczenia
 
-Wersja v1.5.0 to wydanie dystrybucji i aktualizacji na zamrożonych
+Wersja v1.6.0 to zamierzone wydanie kompletne na zamrożonych
 backendach SSL i IPsec z v1.4.0 / v1.3.0 (zasobnik, opcjonalny autostart i
-opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje.
+opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje. Szyfrowany
+Backup obejmuje profile i zapisane sekrety IPsec; hasła SSL i sesje SAML
+nie są zapisywane.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -53,12 +55,17 @@ opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje.
 - Hasła SSL, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - GUI samo nie instaluje pakietów. Instalacja na Ubuntu 24.04 używa
-  pakietu `.deb` `fortigate-vpn-linux-gui` albo, po publikacji, `apt install`
-  z repozytorium projektu. Sprawdzenie aktualizacji tylko otwiera przeglądarkę.
+  pakietu `.deb` `fortigate-vpn-linux-gui` albo `apt` z repozytorium
+  projektu. Sprawdzenie aktualizacji pokazuje GitHub Releases i lokalny
+  kontekst paczki. GUI nigdy nie uruchamia `apt`, `sudo` ani `pkexec`,
+  żeby się zaktualizować.
 - Logi są tylko w pamięci i są ocenzurowane.
 - Skopiowane i eksportowane raporty diagnostyczne są ocenzurowane i nie zawierają sekretów.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.
-- Profile to lokalny JSON per-użytkownik.
+- Profile to lokalny JSON per-użytkownik. Szyfrowany Backup (`.fvbackup`)
+  może skopiować profile i zapisane sekrety IPsec; hasła SSL i sesje SAML
+  nigdy nie są zapisywane ani kopiowane. Restore wymaga Secret Service,
+  gdy kopia zawiera sekrety IPsec.
 - Tylko Linux; wspieraną platformą wydania jest Ubuntu 24.04 LTS amd64.
 - Dokumentacja jest po angielsku i polsku.
 - Brak `libxcb-cursor.so.0` pokazuje dialog `sudo apt install libxcb-cursor0`.

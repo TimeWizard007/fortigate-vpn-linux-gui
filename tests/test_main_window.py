@@ -122,7 +122,8 @@ def test_main_window_auto_check_uses_injected_checker(
         qapp.processEvents()
         time.sleep(0.01)
     assert seen
-    assert window.about_page.update_status_text() == "Update available: v1.5.0"
+    assert "Update available" in window.about_page.update_status_text()
+    assert "Available: 1.5.0" in window.about_page.update_status_text()
     window.close()
     qapp.processEvents()
 
@@ -150,5 +151,64 @@ def test_main_window_skips_auto_check_when_disabled(
         time.sleep(0.01)
     assert seen == []
     assert window.settings_page.auto_check_updates_checked() is False
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_notifies_update_once(qapp, profile_manager: ProfileManager, tmp_path) -> None:
+    import time
+
+    result = UpdateCheckResult(
+        status="update_available",
+        installed="1.6.0",
+        latest="1.7.0",
+        html_url="https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases/tag/v1.7.0",
+    )
+    window = _make_window(
+        profile_manager,
+        tmp_path,
+        tray_available=True,
+        update_checker=lambda _installed: result,
+        auto_check_delay_ms=0,
+    )
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not window.tray.messages:
+        qapp.processEvents()
+        time.sleep(0.01)
+    update_messages = [item for item in window.tray.messages if "Update available" in item[1]]
+    assert len(update_messages) == 1
+    window._on_update_check_finished(result)
+    update_messages = [item for item in window.tray.messages if "Update available" in item[1]]
+    assert len(update_messages) == 1
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_does_not_notify_when_current(
+    qapp, profile_manager: ProfileManager, tmp_path
+) -> None:
+    import time
+
+    result = UpdateCheckResult(
+        status="up_to_date",
+        installed="1.6.0",
+        latest="1.6.0",
+        html_url="https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases/tag/v1.6.0",
+    )
+    window = _make_window(
+        profile_manager,
+        tmp_path,
+        tray_available=True,
+        update_checker=lambda _installed: result,
+        auto_check_delay_ms=0,
+    )
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+        if window.about_page.update_status_text() == "Up to date":
+            break
+    assert window.about_page.update_status_text() == "Up to date"
+    assert [item for item in window.tray.messages if "Update available" in item[1]] == []
     window.close()
     qapp.processEvents()

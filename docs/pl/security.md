@@ -46,7 +46,10 @@ PSK IPsec i hasło XAuth mogą być zapisane w Secret Service tylko po zgodzie
 użytkownika; nigdy w `profiles.json` i bez zapisu jawnego. Skopiowane raporty
 diagnostyczne są ocenzurowane i nie mogą zawierać haseł, tokenów, ciasteczek
 ani ładunków SAML. Eksport profilu nigdy nie zawiera sekretów. Import odrzuca
-pliki z hasłami. Otwarcie Diagnostics nie uruchamia pkexec.
+pliki z hasłami. Szyfrowany **Backup** (`.fvbackup`) może zawierać zapisany
+PSK IPsec i hasło XAuth tylko wewnątrz Argon2id + AES-256-GCM. Hasła SSL,
+ciasteczka SAML, tokeny, tokenid i FCT UID nigdy nie są kopiowane. Zobacz
+[`backup.md`](backup.md). Otwarcie Diagnostics nie uruchamia pkexec.
 `trusted_cert_sha256` to publiczny pin certyfikatu, nie hasło.
 Poświadczenia IPsec aplikacji ładują się tylko do prywatnego charon przez
 `/run/charon.fvl.vici`, nigdy do systemowego `/run/charon.vici`. Odzyskiwanie
@@ -64,8 +67,10 @@ automatycznie.
 - Brak sudo i sudoers.
 - Brak dowolnego wykonywania poleceń root przez pomocnika.
 - Brak automatycznej instalacji pakietów z GUI. Ubuntu 24.04 używa pakietu
-  `.deb` `fortigate-vpn-linux-gui` albo, po publikacji, `apt` z repozytorium
-  projektu. About tylko informuje, że nowsze GitHub Release istnieje.
+  `.deb` `fortigate-vpn-linux-gui` albo `apt` z repozytorium projektu.
+  About pokazuje dostępność GitHub Releases i lokalny kontekst Debian/APT.
+  GUI nigdy nie uruchamia `apt`, `sudo` ani `pkexec`, żeby się zaktualizować.
+  Kopiowalne polecenia aktualizacji są do uruchomienia przez użytkownika.
 - Sprawdzenie aktualizacji używa HTTPS do publicznego API GitHub Releases.
   Nie wysyła tokenów, profili, bram ani telemetrii. Awaria nie oznacza
   dostępnej aktualizacji.

@@ -8,6 +8,6 @@ Exec=fortigate-vpn-linux-gui
 Icon=fortigate-vpn-linux-gui
 Terminal=false
 Categories=Network;Security;
-Keywords=VPN;FortiGate;SSL;SAML;openfortivpn;
+Keywords=VPN;FortiGate;SSL;IPsec;IKEv1;IKEv2;
 StartupNotify=true
 StartupWMClass=fortigate-vpn-linux-gui

@@ -98,7 +98,17 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Aplikacja 1.5.0; wersja możliwości pomocnika nadal 0.9.0; `protocol_version` 1; paczka Debian 1.5.0-1
 - Zamrożony backend protokołu v1.4.0 / v1.3.0 (ten release nie jest badaniami protokołu)
 
-## Później (nie deklarowane w v1.5.0)
+## v1.6.0 — kompletność funkcji / tryb utrzymania
+
+- Szyfrowany Backup/Restore (`.fvbackup`; Argon2id + AES-256-GCM)
+- Export pozostaje bez sekretów; Backup jest kopią mogącą zawierać sekrety IPsec
+- Status aktualizacji świadomy APT (tylko odczyt; GUI nigdy nie uruchamia apt/sudo/pkexec, żeby się zaktualizować)
+- Jedno powiadomienie zasobnika na nowo zaobserwowane wydanie GitHub
+- Słowa kluczowe pulpitu; zapisy `profiles.json` w trybie 0600
+- Aplikacja 1.6.0; wersja możliwości pomocnika nadal 0.9.0; `protocol_version` 1; paczka Debian 1.6.0-1
+- Zamrożony backend protokołu v1.4.0 / v1.3.0 (ten release nie jest badaniami protokołu)
+
+## Później (utrzymanie; nie deklarowane jako nowe funkcje)
 
 - IKEv1 Main Mode, uwierzytelnianie certyfikatem, adresacja ręczna IPsec
 - Debian 13, Fedora, Windows, macOS

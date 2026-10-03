@@ -42,7 +42,7 @@ https://timewizard007.github.io/fortigate-vpn-linux-gui/apt
 ## Generate locally (unsigned or synthetic key)
 
 ```bash
-python3 scripts/apt_repo.py --repo-root /tmp/fvl-apt --deb dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+python3 scripts/apt_repo.py --repo-root /tmp/fvl-apt --deb dist/fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 Signing requires a GnuPG homedir. Do **not** generate a production private key
@@ -51,7 +51,7 @@ in this checkout. Tests use a throwaway key.
 ```bash
 python3 scripts/apt_repo.py \
   --repo-root /tmp/fvl-apt \
-  --deb dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb \
+  --deb dist/fortigate-vpn-linux-gui_1.6.0-1_amd64.deb \
   --sign \
   --gnupg-home "$GNUPGHOME" \
   --import-key /path/to/private.asc \

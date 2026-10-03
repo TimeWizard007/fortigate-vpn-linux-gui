@@ -10,12 +10,12 @@ network.
 ./scripts/build-deb.sh
 ```
 
-Builds `dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb` from this checkout.
+Builds `dist/fortigate-vpn-linux-gui_1.6.0-1_amd64.deb` from this checkout.
 Fails on errors. Does not install, publish, or modify user configuration.
 
 ```bash
 python3 scripts/check-version-consistency.py
-bash scripts/inspect-deb.sh dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+bash scripts/inspect-deb.sh dist/fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 `check-version-consistency.py` compares the application version, pyproject,
@@ -32,7 +32,7 @@ published stable GitHub Release and the exact expected `.deb`.
 ## APT repository (generated, not committed to main)
 
 ```bash
-python3 scripts/apt_repo.py --repo-root /tmp/fvl-apt --deb dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+python3 scripts/apt_repo.py --repo-root /tmp/fvl-apt --deb dist/fortigate-vpn-linux-gui_1.6.0-1_amd64.deb
 ```
 
 Writes `dists/` and `pool/` for Ubuntu 24.04 (`noble`). Signing uses a local

@@ -18,7 +18,10 @@ Sprawdzenie aktualizacji działa w wątku Qt po jawnej akcji About albo po
 opcjonalnym, opóźnionym sprawdzeniu automatycznym (najwyżej raz na 24 godziny).
 Pyta publiczne GitHub Releases przez HTTPS i nie wysyła identyfikatorów
 profilu ani VPN. **View release** używa systemowej przeglądarki. GUI nie
-pobiera plików `.deb` i nie woła `apt`.
+pobiera plików `.deb` i nie woła `apt`. About pokazuje też lokalny kontekst
+instalacji (`dpkg-query` / `apt-cache policy` / źródło). Gdy GitHub i APT
+się różnią, oba stany są widoczne. Kopiowalne polecenia `apt` nie są
+wykonywane przez aplikację.
 
 ## Warstwy
 
@@ -168,6 +171,10 @@ przechowywane. Duplikowanie kopiuje bezpieczne metadane i pin certyfikatu,
 nie sekrety z Secret Service. **Export** zapisuje wersjonowany dokument
 aplikacji bez sekretów. **Import** sprawdza format, wersję i obsługiwany
 typ VPN; nie przyjmuje haseł jawnym tekstem ani ścieżek/konfiguracji.
+**Backup** / **Restore** używają osobnego szyfrowanego kontenera `.fvbackup`
+(Argon2id + AES-256-GCM). Backup może zawierać zapisany PSK IPsec i hasło
+XAuth z Secret Service. Nie komunikuje się z pomocnikiem uprzywilejowanym.
+Restore jest transakcyjny i all-or-nothing. Zobacz [`backup.md`](backup.md).
 
 ## Cenzura logów
 
@@ -196,6 +203,7 @@ pomocnika.
 | `fortigate_vpn_gui.vpn` | Stan VPN po stronie GUI, SAML, przeglądarka |
 | `fortigate_vpn_gui.helper` | Protokół uprzywilejowany i właściciel procesu |
 | `fortigate_vpn_gui.profiles` | Model i zapis JSON XDG |
+| `fortigate_vpn_gui.backup` | Szyfrowany Backup/Restore (`.fvbackup`; bez komunikacji z pomocnikiem) |
 | `fortigate_vpn_gui.system` | Preflight i klient polkit |
 | `fortigate_vpn_gui.diagnostics` | Nieuprzywilejowane testy i ocenzurowane raporty |
-| `fortigate_vpn_gui.updates` | Publiczne GitHub Releases (HTTPS, bez tokenu, bez danych VPN) |
+| `fortigate_vpn_gui.updates` | Publiczne GitHub Releases plus lokalny kontekst Debian/APT |

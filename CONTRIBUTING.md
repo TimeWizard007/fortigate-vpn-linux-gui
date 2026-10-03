@@ -7,13 +7,16 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v1.5.0 is the in-tree packaged Ubuntu 24.04 target. The GUI must never
+v1.6.0 is the in-tree packaged Ubuntu 24.04 target and the intended
+feature-complete release. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
 auto-trust certificates or skip SAML. Helper capability version 0.9.0 and
 JSON-lines `protocol_version` 1 must stay unchanged unless a real
 compatibility break requires it. Do not change the frozen v1.4.0 / v1.3.0
-VPN backends in this release line. Do not move tag `v1.4.0`.
+VPN backends in this release line. Do not move tags `v1.4.0` or `v1.5.0`.
+Backup must never send data to the privileged helper. Export must remain
+secret-free.
 
 Please do not send pull requests that:
 

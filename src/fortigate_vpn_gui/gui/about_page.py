@@ -22,6 +22,7 @@ from fortigate_vpn_gui.diagnostics.platform_info import (
 )
 from fortigate_vpn_gui.gui.page_container import create_page_scroll_area
 from fortigate_vpn_gui.gui.windowing import dialog_parent_for
+from fortigate_vpn_gui.helper.protocol import PROTOCOL_VERSION
 from fortigate_vpn_gui.metadata import (
     ABOUT_LICENSE_TEXT,
     APP_NAME,
@@ -40,6 +41,11 @@ from fortigate_vpn_gui.updates.checker import (
     is_allowed_release_url,
 )
 from fortigate_vpn_gui.updates.components import collect_component_versions
+from fortigate_vpn_gui.updates.install_source import (
+    InstallInfo,
+    detect_install_info,
+    format_update_instructions,
+)
 from fortigate_vpn_gui.vpn.browser import BrowserLauncher, BrowserLaunchError, SystemBrowserLauncher
 
 Checker = Callable[[str], UpdateCheckResult]
@@ -77,12 +83,14 @@ class AboutPage(QWidget):
         checker: Checker | None = None,
         helper_detected: str | None = None,
         on_check_finished: Callable[[UpdateCheckResult], None] | None = None,
+        install_info: InstallInfo | None = None,
     ) -> None:
         super().__init__(parent)
         self._browser = browser if browser is not None else SystemBrowserLauncher()
         self._open_url = open_url
         self._checker = checker or (lambda installed: check_for_update(installed))
         self._on_check_finished = on_check_finished
+        self._install_info = install_info if install_info is not None else detect_install_info()
         self._release_url = ""
         self._thread: QThread | None = None
         self._worker: _UpdateWorker | None = None
@@ -93,8 +101,13 @@ class AboutPage(QWidget):
         self._name = QLabel(APP_NAME)
         self._name.setObjectName("aboutAppName")
         self._name.setStyleSheet("font-size: 18px; font-weight: 600;")
-        self._version = QLabel(f"Version {__version__}")
+        self._version = QLabel(f"Application: {__version__}")
         self._version.setObjectName("aboutVersion")
+        debian = self._install_info.debian_version or "not installed as a Debian package"
+        self._debian = QLabel(f"Debian package: {debian}")
+        self._debian.setObjectName("aboutDebianPackage")
+        self._install_method = QLabel(f"Install method: {self._install_info.method_label()}")
+        self._install_method.setObjectName("aboutInstallMethod")
         self._ssl_backend = QLabel(ssl_backend_label())
         self._ssl_backend.setObjectName("aboutSslBackend")
         self._ipsec_backend = QLabel(ipsec_backend_label())
@@ -104,6 +117,8 @@ class AboutPage(QWidget):
         self._helper_expected.setObjectName("aboutHelperExpected")
         self._helper_detected = QLabel(f"Helper detected: {components.helper_detected}")
         self._helper_detected.setObjectName("aboutHelperDetected")
+        self._protocol = QLabel(f"Protocol: {PROTOCOL_VERSION}")
+        self._protocol.setObjectName("aboutProtocol")
         self._python = QLabel(f"Python: {components.python}")
         self._python.setObjectName("aboutPython")
         self._qt = QLabel(f"Qt: {components.qt}")
@@ -123,6 +138,14 @@ class AboutPage(QWidget):
         self._update_status = QLabel("Update status has not been checked yet.")
         self._update_status.setObjectName("aboutUpdateStatus")
         self._update_status.setWordWrap(True)
+        self._update_instructions = QLabel(
+            "This application does not install system updates itself."
+        )
+        self._update_instructions.setObjectName("aboutUpdateInstructions")
+        self._update_instructions.setWordWrap(True)
+        self._update_instructions.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self._check_button = QPushButton("Check for updates")
         self._check_button.setObjectName("aboutCheckUpdatesButton")
         self._check_button.clicked.connect(self.start_check)
@@ -179,8 +202,11 @@ class AboutPage(QWidget):
         layout.addWidget(title)
         layout.addWidget(self._name)
         layout.addWidget(self._version)
+        layout.addWidget(self._debian)
+        layout.addWidget(self._install_method)
         layout.addWidget(self._helper_expected)
         layout.addWidget(self._helper_detected)
+        layout.addWidget(self._protocol)
         layout.addWidget(self._python)
         layout.addWidget(self._qt)
         layout.addWidget(self._pyside)
@@ -190,6 +216,7 @@ class AboutPage(QWidget):
         layout.addWidget(self._ssl_backend)
         layout.addWidget(self._ipsec_backend)
         layout.addWidget(self._update_status)
+        layout.addWidget(self._update_instructions)
         layout.addLayout(actions)
         layout.addWidget(privacy)
         layout.addWidget(description)
@@ -269,7 +296,9 @@ class AboutPage(QWidget):
             self._release_url = ""
             self._view_release_button.setEnabled(False)
         elif result.status == "update_available" and result.latest and result.html_url:
-            self._update_status.setText(f"Update available: v{result.latest}")
+            self._update_status.setText(
+                f"Update available\nInstalled: {result.installed}\nAvailable: {result.latest}"
+            )
             if is_allowed_release_url(result.html_url):
                 self._release_url = result.html_url
                 self._view_release_button.setEnabled(True)
@@ -280,6 +309,7 @@ class AboutPage(QWidget):
             self._update_status.setText("Unable to check for updates")
             self._release_url = ""
             self._view_release_button.setEnabled(False)
+        self._update_instructions.setText(format_update_instructions(result, self._install_info))
         if self._on_check_finished is not None:
             self._on_check_finished(result)
 

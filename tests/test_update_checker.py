@@ -180,3 +180,27 @@ def test_auto_check_interval() -> None:
     assert should_auto_check(_Settings(0), now=1000) is True
     assert should_auto_check(_Settings(1000), now=1000 + CHECK_INTERVAL_SECONDS - 1) is False
     assert should_auto_check(_Settings(1000), now=1000 + CHECK_INTERVAL_SECONDS) is True
+
+
+def test_notify_once_per_version() -> None:
+    from fortigate_vpn_gui.updates.cache import (
+        record_notified_version,
+        should_notify_update,
+    )
+
+    class _Settings:
+        def __init__(self) -> None:
+            self.values: dict[str, object] = {}
+
+        def value(self, key: str, default: object = "") -> object:
+            return self.values.get(key, default)
+
+        def setValue(self, key: str, value: object) -> None:
+            self.values[key] = value
+
+    settings = _Settings()
+    assert should_notify_update(settings, "1.7.0") is True
+    record_notified_version(settings, "1.7.0")
+    assert should_notify_update(settings, "1.7.0") is False
+    assert should_notify_update(settings, "1.8.0") is True
+    assert should_notify_update(settings, "") is False

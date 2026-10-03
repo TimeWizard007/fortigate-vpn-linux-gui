@@ -42,7 +42,12 @@ from fortigate_vpn_gui.gui.windowing import (
 )
 from fortigate_vpn_gui.helper.ipsec_runtime import inspect_owned_ipsec_state
 from fortigate_vpn_gui.profiles.manager import ProfileManager
-from fortigate_vpn_gui.updates.cache import record_check, should_auto_check
+from fortigate_vpn_gui.updates.cache import (
+    record_check,
+    record_notified_version,
+    should_auto_check,
+    should_notify_update,
+)
 from fortigate_vpn_gui.updates.checker import UpdateCheckResult, check_for_update
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
@@ -315,6 +320,15 @@ class MainWindow(QMainWindow):
             version=result.latest,
             html_url=result.html_url if result.status != "error" else None,
         )
+        if result.status != "update_available" or not result.latest:
+            return
+        if not should_notify_update(self._settings, result.latest):
+            return
+        self.tray.notify(
+            APP_NAME,
+            f"Update available: {result.installed} → {result.latest}",
+        )
+        record_notified_version(self._settings, result.latest)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 — Qt API
         super().showEvent(event)

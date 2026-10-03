@@ -19,7 +19,10 @@ Update checks run in a background Qt thread after an explicit About action or
 an optional delayed automatic check (at most once per 24 hours). They query
 public GitHub Releases over HTTPS and never send profile or VPN identifiers.
 **View release** uses the system browser. The GUI does not download `.deb`
-files and does not invoke `apt`.
+files and does not invoke `apt`. About also shows read-only local install
+context (`dpkg-query` / `apt-cache policy` / source detection). When GitHub
+and APT disagree, both states are shown. Copyable `apt` commands are never
+executed by the application.
 
 ## Layers
 
@@ -280,6 +283,11 @@ copies safe metadata and the certificate pin; it does not copy credentials.
 **Export** writes a versioned application-owned document without secrets.
 **Import** validates format, version, and supported VPN type; it never
 accepts plaintext credentials or path/config fragments.
+**Backup** / **Restore** use a separate encrypted `.fvbackup` container
+(Argon2id + AES-256-GCM). Backup may include saved IPsec PSK and XAuth
+password retrieved from Secret Service. It never talks to the privileged
+helper. Restore is transactional and all-or-nothing. See
+[`backup.md`](backup.md).
 
 `ProfileManager` notifies listeners after add/update/delete/duplicate/default
 changes so the Connection page refreshes without restarting. Connect from
@@ -336,6 +344,7 @@ desktop process.
 | `fortigate_vpn_gui.vpn` | GUI-side VPN state, SAML, browser, redacted logs |
 | `fortigate_vpn_gui.helper` | Privileged protocol, validation, process owner |
 | `fortigate_vpn_gui.profiles` | Profile model, XDG JSON storage, manager |
+| `fortigate_vpn_gui.backup` | Encrypted Backup/Restore (`.fvbackup`; never talks to helper) |
 | `fortigate_vpn_gui.system` | Preflight checks; polkit helper client |
 | `fortigate_vpn_gui.diagnostics` | Unprivileged health checks and sanitized reports |
-| `fortigate_vpn_gui.updates` | Public GitHub Releases check (HTTPS, no token, no VPN data) |
+| `fortigate_vpn_gui.updates` | Public GitHub Releases check plus read-only local Debian/APT context |

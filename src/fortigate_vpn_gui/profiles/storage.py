@@ -202,7 +202,7 @@ def _without_secrets(value: object) -> object:
     return value
 
 
-def atomic_write_text(path: Path, text: str) -> None:
+def atomic_write_text(path: Path, text: str, *, mode: int = 0o600) -> None:
     """Write *text* to *path* via a temporary file in the same directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
@@ -211,11 +211,13 @@ def atomic_write_text(path: Path, text: str) -> None:
         dir=str(path.parent),
     )
     try:
+        os.fchmod(fd, mode)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_name, path)
+        os.chmod(path, mode)
     except Exception:
         try:
             os.unlink(tmp_name)
