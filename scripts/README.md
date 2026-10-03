@@ -26,8 +26,8 @@ preferred over `GITHUB_REF` (required for `workflow_run` APT publishing).
 `inspect-deb.sh` fails if the package contains credentials, private keys,
 research binaries, or FortiClient proprietary files.
 `verify-github-release.py` is used by the APT publisher to fail closed unless
-the completed Release workflow matches a published stable GitHub Release and
-the exact expected `.deb`.
+the completed Release workflow, or a tag-only recovery dispatch, matches a
+published stable GitHub Release and the exact expected `.deb`.
 
 ## APT repository (generated, not committed to main)
 

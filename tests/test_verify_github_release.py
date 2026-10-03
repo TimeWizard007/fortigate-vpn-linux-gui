@@ -35,6 +35,28 @@ def test_parse_stable_tag_rejects_branches_and_prereleases() -> None:
     assert module.application_version_from_tag("v1.5.0") == "1.5.0"
 
 
+def test_recovery_tag_accepts_only_bare_stable_tags() -> None:
+    module = _load()
+    assert module.parse_recovery_tag("v1.5.0") == "v1.5.0"
+    assert module.parse_recovery_tag("v2.0.0") == "v2.0.0"
+    assert module.require_recovery_tag("v1.5.0") == "v1.5.0"
+    for value in (
+        "main",
+        "feature/foo",
+        "refs/heads/main",
+        "refs/tags/v1.5.0",
+        "d9cc4364ec117068bd8555725dd748b3f1f226c9",
+        "v1.5.0-rc1",
+        "v1.5",
+        "1.5.0",
+        "../anything",
+        "",
+    ):
+        assert module.parse_recovery_tag(value) is None
+        with pytest.raises(module.ReleaseVerifyError, match="not a stable"):
+            module.require_recovery_tag(value)
+
+
 def test_workflow_run_must_be_successful_release_tag_push() -> None:
     module = _load()
     module.validate_workflow_run(name="Release", event="push", conclusion="success")
@@ -104,3 +126,5 @@ def test_release_document_requires_exact_stable_deb() -> None:
             },
             "v1.5.0",
         )
+    with pytest.raises(module.ReleaseVerifyError, match="!= v1.5.0"):
+        module.validate_release_document({**ok, "tag_name": "v1.4.0"}, "v1.5.0")

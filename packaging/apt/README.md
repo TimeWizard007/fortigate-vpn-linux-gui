@@ -92,11 +92,11 @@ until the first production deployment is verified.
   signing secrets).
 - `.github/workflows/release.yml` — `push` of tag `vX.Y.Z`; builds, inspects,
   and attaches the `.deb` plus `.sha256` to the GitHub Release.
-- `.github/workflows/apt-publish.yml` — runs only after the **Release**
-  workflow **completes successfully** (`workflow_run`). It verifies the
-  triggering tag, published stable GitHub Release, and exact expected `.deb`
-  **before** importing `APT_SIGNING_KEY`. There is no `workflow_dispatch` and
-  no `release.published` trigger. Version consistency uses the verified tag
-  from that step (`--expected-tag`), not `GITHUB_REF` from the `workflow_run`
-  default-branch context. `pages: write` and `id-token: write` are limited to
-  that job.
+- `.github/workflows/apt-publish.yml` — automatic after **Release** succeeds
+  (`workflow_run`), or a **tag-only** `workflow_dispatch` recovery for an
+  already-published stable `vX.Y.Z` GitHub Release. Both paths run the same
+  fail-closed verifier before importing `APT_SIGNING_KEY`. Manual recovery
+  accepts only a bare stable tag (not branches, SHAs, or refs) and never
+  mutates GitHub Releases. There is no `release.published` trigger. Version
+  consistency uses `--expected-tag`, not `GITHUB_REF`. `contents: read`,
+  `pages: write`, and `id-token: write` only.

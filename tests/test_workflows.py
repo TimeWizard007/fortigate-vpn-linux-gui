@@ -59,23 +59,45 @@ def test_apt_publish_does_not_trigger_on_release_published() -> None:
 def test_apt_publish_requires_successful_release_workflow() -> None:
     text = _apt_publish()
     header = _on_block(text)
-    assert "workflow_dispatch" not in header
-    assert "workflow_dispatch" not in text
-    assert "github.event.inputs" not in text
+    assert "workflow_run:" in header
     assert "github.event.workflow_run.conclusion == 'success'" in text
     assert "github.event.workflow_run.name == 'Release'" in text
     assert "github.event.workflow_run.event == 'push'" in text
+    assert "github.event_name == 'workflow_dispatch'" in text
 
 
 def test_apt_publish_cannot_use_arbitrary_branch_or_ref() -> None:
     text = _apt_publish()
     assert "github.head_ref" not in text
     assert "github.event.pull_request" not in text
-    assert "github.event.inputs" not in text
+    assert "github.event.inputs.ref" not in text
+    assert "github.event.inputs.sha" not in text
+    assert "github.event.inputs.branch" not in text
     assert "ref: ${{ github.ref }}" not in text
     assert "ref: ${{ github.event.workflow_run.head_branch }}" not in text
+    assert "ref: ${{ github.event.inputs.tag }}" not in text
     assert "ref: ${{ steps.release.outputs.sha }}" in text
     assert "persist-credentials: false" in text
+    assert "contents: write" not in text
+    assert "contents: read" in text
+    assert "softprops/action-gh-release" not in text
+    assert "gh release create" not in text
+    assert "gh release upload" not in text
+    assert "gh release edit" not in text
+
+
+def test_apt_publish_recovery_is_tag_only() -> None:
+    text = _apt_publish()
+    header = _on_block(text)
+    assert "workflow_dispatch:" in header
+    assert "inputs:" in header
+    assert "tag:" in header
+    assert "--mode recovery" in text
+    assert "--requested-tag" in text
+    assert "github.event.inputs.tag" in text
+    assert "--mode workflow_run" in text
+    assert "python3 scripts/verify-github-release.py" in text
+    assert header.count("type: string") == 1
 
 
 def test_apt_signing_secrets_are_not_in_ci_or_pr_workflows() -> None:

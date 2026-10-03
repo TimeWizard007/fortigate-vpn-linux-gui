@@ -6,6 +6,12 @@ on:
       - Release
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag to publish to APT
+        required: true
+        type: string
 
 concurrency:
   group: apt-publish
@@ -18,10 +24,15 @@ jobs:
     name: Publish static APT repository
     if: >
       github.repository == 'TimeWizard007/fortigate-vpn-linux-gui' &&
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.name == 'Release' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.conclusion == 'success'
+      (
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.name == 'Release' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.conclusion == 'success'
+        ) ||
+        (github.event_name == 'workflow_dispatch')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,14 +54,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python3 scripts/verify-github-release.py \
-            --head-branch "${{ github.event.workflow_run.head_branch }}" \
-            --head-sha "${{ github.event.workflow_run.head_sha }}" \
-            --run-event "${{ github.event.workflow_run.event }}" \
-            --run-name "${{ github.event.workflow_run.name }}" \
-            --run-conclusion "${{ github.event.workflow_run.conclusion }}" \
-            --repository "${{ github.repository }}" \
-            --download-dir "${RUNNER_TEMP}/incoming"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            python3 scripts/verify-github-release.py \
+              --mode recovery \
+              --requested-tag "${{ github.event.inputs.tag }}" \
+              --repository "${{ github.repository }}" \
+              --download-dir "${RUNNER_TEMP}/incoming"
+          else
+            python3 scripts/verify-github-release.py \
+              --mode workflow_run \
+              --head-branch "${{ github.event.workflow_run.head_branch }}" \
+              --head-sha "${{ github.event.workflow_run.head_sha }}" \
+              --run-event "${{ github.event.workflow_run.event }}" \
+              --run-name "${{ github.event.workflow_run.name }}" \
+              --run-conclusion "${{ github.event.workflow_run.conclusion }}" \
+              --repository "${{ github.repository }}" \
+              --download-dir "${RUNNER_TEMP}/incoming"
+          fi
 
       - name: Checkout immutable tag commit
         uses: actions/checkout@v4

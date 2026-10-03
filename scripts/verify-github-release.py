@@ -38,6 +38,21 @@ def parse_stable_tag(value: str) -> str | None:
     return text
 
 
+def parse_recovery_tag(value: str) -> str | None:
+    """Accept only a bare stable ``vX.Y.Z`` tag. Refs, branches, and SHAs fail."""
+    text = str(value or "").strip()
+    if STABLE_TAG_RE.fullmatch(text) is None:
+        return None
+    return text
+
+
+def require_recovery_tag(value: str) -> str:
+    parsed = parse_recovery_tag(value)
+    if parsed is None:
+        raise ReleaseVerifyError(f"recovery tag {value!r} is not a stable vX.Y.Z tag")
+    return parsed
+
+
 def application_version_from_tag(tag: str) -> str:
     parsed = parse_stable_tag(tag)
     if parsed is None:
@@ -294,6 +309,25 @@ def download_stable_debs(*, repository: str, token: str, dest: Path, required_ta
             continue
 
 
+def verify_existing_release(*, repository: str, tag: str, token: str, dest: Path) -> tuple[str, str]:
+    """Shared fail-closed path: existing tag + published Release + exact .deb."""
+    commit_sha = resolve_tag_commit_sha(repository=repository, tag=tag, token=token)
+    release = load_release(repository=repository, tag=tag, token=token)
+    expected = validate_release_document(release, tag)
+    dest.mkdir(parents=True, exist_ok=True)
+    download_stable_debs(
+        repository=repository,
+        token=token,
+        dest=dest,
+        required_tag=tag,
+    )
+    local_deb = dest / expected
+    if not local_deb.is_file():
+        raise ReleaseVerifyError(f"triggering asset {expected} was not downloaded")
+    verify_local_deb(local_deb, tag)
+    return commit_sha, expected
+
+
 def write_github_output(path: Path, values: dict[str, str]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         for key, value in values.items():
@@ -302,11 +336,13 @@ def write_github_output(path: Path, values: dict[str, str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--head-branch", required=True)
-    parser.add_argument("--head-sha", required=True)
-    parser.add_argument("--run-event", required=True)
-    parser.add_argument("--run-name", required=True)
-    parser.add_argument("--run-conclusion", required=True)
+    parser.add_argument("--mode", choices=("workflow_run", "recovery"), required=True)
+    parser.add_argument("--requested-tag")
+    parser.add_argument("--head-branch")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--run-event")
+    parser.add_argument("--run-name")
+    parser.add_argument("--run-conclusion")
     parser.add_argument("--repository", required=True)
     parser.add_argument("--download-dir", type=Path, required=True)
     parser.add_argument(
@@ -320,30 +356,34 @@ def main(argv: list[str] | None = None) -> int:
         print("error: GITHUB_TOKEN is required", file=sys.stderr)
         return 1
     try:
-        validate_workflow_run(
-            name=args.run_name,
-            event=args.run_event,
-            conclusion=args.run_conclusion,
-        )
-        tag, commit_sha = resolve_release_tag(
-            head_branch=args.head_branch,
-            head_sha=args.head_sha,
+        if args.mode == "recovery":
+            if not args.requested_tag:
+                raise ReleaseVerifyError("recovery mode requires --requested-tag")
+            tag = require_recovery_tag(args.requested_tag)
+        else:
+            if args.head_sha is None or args.run_event is None or args.run_name is None or args.run_conclusion is None:
+                raise ReleaseVerifyError("workflow_run mode requires run identity arguments")
+            validate_workflow_run(
+                name=args.run_name,
+                event=args.run_event,
+                conclusion=args.run_conclusion,
+            )
+            tag, _resolved = resolve_release_tag(
+                head_branch=args.head_branch or "",
+                head_sha=args.head_sha,
+                repository=args.repository,
+                token=token,
+            )
+        commit_sha, expected = verify_existing_release(
             repository=args.repository,
-            token=token,
-        )
-        release = load_release(repository=args.repository, tag=tag, token=token)
-        expected = validate_release_document(release, tag)
-        args.download_dir.mkdir(parents=True, exist_ok=True)
-        download_stable_debs(
-            repository=args.repository,
+            tag=tag,
             token=token,
             dest=args.download_dir,
-            required_tag=tag,
         )
-        local_deb = args.download_dir / expected
-        if not local_deb.is_file():
-            raise ReleaseVerifyError(f"triggering asset {expected} was not downloaded")
-        verify_local_deb(local_deb, tag)
+        if args.mode == "workflow_run" and commit_sha != str(args.head_sha or "").strip():
+            raise ReleaseVerifyError(
+                f"tag {tag} commit {commit_sha} != workflow head_sha {args.head_sha}"
+            )
     except ReleaseVerifyError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
