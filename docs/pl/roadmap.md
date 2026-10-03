@@ -90,7 +90,15 @@ Daty nie są zobowiązaniem. Kolejność może się zmieniać.
 - Aplikacja 1.4.0; wersja możliwości pomocnika nadal 0.9.0; `protocol_version` 1; paczka Debian 1.4.0-1
 - Potwierdzone live: SSL VPN SAML/SSO; IKEv1 PSK + XAuth w tym Edit/Save i ponowne połączenie; IKEv2 SAML/SSO
 
-## Później (nie deklarowane w v1.4.0)
+## v1.5.0 — dystrybucja i aktualizacje
+
+- Sprawdzenie aktualizacji GitHub Releases i wersje komponentów w About
+- Workflow GitHub Actions na tagu buduje i dołącza paczkę Debian
+- Statyczne repozytorium APT (keyring signed-by; bez samoaktualizacji)
+- Aplikacja 1.5.0; wersja możliwości pomocnika nadal 0.9.0; `protocol_version` 1; paczka Debian 1.5.0-1
+- Zamrożony backend protokołu v1.4.0 / v1.3.0 (ten release nie jest badaniami protokołu)
+
+## Później (nie deklarowane w v1.5.0)
 
 - IKEv1 Main Mode, uwierzytelnianie certyfikatem, adresacja ręczna IPsec
 - Debian 13, Fedora, Windows, macOS

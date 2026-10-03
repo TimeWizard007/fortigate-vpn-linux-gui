@@ -72,3 +72,6 @@ jobs:
 
       - name: Pytest
         run: python -m pytest
+
+      - name: Version consistency
+        run: python scripts/check-version-consistency.py

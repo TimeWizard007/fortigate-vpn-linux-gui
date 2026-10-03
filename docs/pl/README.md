@@ -7,10 +7,11 @@ FortiGate SSL VPN na Linuxie.
 Fortinet, FortiGate i FortiClient są znakami towarowymi odpowiednich
 właścicieli.
 
-Wersja v1.4.0 jest aktualnym pakietem Ubuntu 24.04 (amd64). Spakowany
+Wersja v1.5.0 jest celem paczki Ubuntu 24.04 (amd64) w tym drzewie. Spakowany
 pomocnik to **0.9.0** (`protocol_version` pozostaje 1). Zachowanie protokołu
-VPN to zamrożony backend v1.3.0; v1.4.0 dodaje zarządzanie profilami w GUI,
-import/eksport i diagnostykę. `sudo ./scripts/install-dev-helper.sh` jest
+VPN to zamrożony backend v1.3.0 (potwierdzony live w v1.4.0). v1.5.0 dodaje
+sprawdzanie aktualizacji, automatyzację wydań i ścieżkę APT.
+`sudo ./scripts/install-dev-helper.sh` jest
 potrzebny tylko przy testowaniu niewydanych zmian pomocnika.
 
 | Temat | Dokument |
@@ -21,4 +22,5 @@ potrzebny tylko przy testowaniu niewydanych zmian pomocnika.
 | Plan rozwoju | [roadmap.md](roadmap.md) |
 | Model bezpieczeństwa | [security.md](security.md) |
 | Znane ograniczenia | [limitations.md](limitations.md) |
+| Instalacja, aktualizacje, APT | [distribution.md](distribution.md) |
 | Badania (historia protokołu, EN) | [../research/README.md](../research/README.md) |

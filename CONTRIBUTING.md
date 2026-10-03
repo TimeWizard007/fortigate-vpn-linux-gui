@@ -7,12 +7,13 @@ endorsed by, or sponsored by Fortinet.
 
 ## Development status
 
-v1.4.0 is the current packaged Ubuntu 24.04 release. The GUI must never
+v1.5.0 is the in-tree packaged Ubuntu 24.04 target. The GUI must never
 run as root and must never call `sudo`. Privileged VPN work belongs only in
 the project helper. Autostart must stay user-level. Reconnect must not
 auto-trust certificates or skip SAML. Helper capability version 0.9.0 and
 JSON-lines `protocol_version` 1 must stay unchanged unless a real
-compatibility break requires it.
+compatibility break requires it. Do not change the frozen v1.4.0 / v1.3.0
+VPN backends in this release line. Do not move tag `v1.4.0`.
 
 Please do not send pull requests that:
 
@@ -77,4 +78,7 @@ Qt widget tests use the `offscreen` platform plugin and do not need a display.
 3. Ensure Ruff and pytest pass locally.
 4. Fill in a clear description of what changed and why.
 
-CI runs Ruff and pytest on every push and pull request.
+CI runs Ruff and pytest on every push and pull request. Tag `vX.Y.Z` runs
+the Release workflow (package build). APT signing secrets are not available
+to pull requests. Keep application / pyproject / Debian versions aligned with
+`python scripts/check-version-consistency.py`.

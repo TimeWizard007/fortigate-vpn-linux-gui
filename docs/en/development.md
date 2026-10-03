@@ -33,7 +33,7 @@ install system packages automatically.
 
 The GUI from this checkout expects helper **0.9.0** with advertised
 capabilities `ipsec_ikev1_psk_xauth` and `ipsec_ikev2_eap`. The packaged
-**1.4.0** helper is the same capability version. JSON-lines
+**1.5.0** helper is the same capability version. JSON-lines
 `protocol_version` remains **1**; do not use `--version` alone to decide
 whether IKEv2 SSO can run. A leftover packaged **1.2.0** helper is **0.8.0**
 and only implements IKEv1 Aggressive + PSK + XAuth.
@@ -182,7 +182,7 @@ src/fortigate_vpn_gui/   application package
   system/                preflight catalog and polkit client
   diagnostics/           redacted snapshots
 packaging/               helper, polkit policy, desktop entry, Debian metadata
-scripts/                 package build (`./scripts/build-deb.sh`)
+scripts/                 package build, version check, APT repo generator
 native/                  application-owned charon plugin (IKEv2 SSO only)
 tests/                   pytest suite (mocked processes)
 docs/en/                 English documentation

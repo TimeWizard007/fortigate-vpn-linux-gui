@@ -13,9 +13,10 @@ their respective owner(s).
 Primary release target: **Ubuntu 24.04 LTS, amd64**. Other Debian-family
 distributions are untested.
 
-The current version is **1.4.0**. Helper capability version is **0.9.0**
+The current version is **1.5.0**. Helper capability version is **0.9.0**
 (`protocol_version` remains **1**). The VPN protocol behavior is the frozen
-v1.3.0 backend.
+v1.3.0 backend (same as live-proven v1.4.0). v1.5.0 adds update checks,
+About component versions, release automation, and an APT publishing path.
 
 ## Features
 
@@ -34,11 +35,17 @@ v1.3.0 backend.
 - Optional auto-reconnect after unexpected tunnel loss (off by default)
 - Diagnostics with DNS, routing, TCP, SAML service, tunnel, helper, IPsec, and polkit checks
 - Copy diagnostic report and Export diagnostics (sanitized text or ZIP for GitHub issues)
+- About: component versions and a GitHub Releases update check (no telemetry; the GUI does not self-update)
 
 ## Install (Ubuntu 24.04)
 
+Full install, update, trust, and rollback notes:
+[`docs/en/distribution.md`](docs/en/distribution.md).
+
+### A. Direct `.deb` from GitHub Releases
+
 ```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.4.0-1_amd64.deb
+sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
 ```
 
 `apt` resolves runtime libraries, `pkexec`, `ppp`, `iproute2`, and the
@@ -76,6 +83,18 @@ sudo apt remove fortigate-vpn-linux-gui
 User profiles in `~/.config/fortigate-vpn-linux-gui/` are preserved.
 `apt purge` also leaves those files; delete them yourself if you want them
 gone.
+
+### B. APT repository (not live until first signed deployment is verified)
+
+GitHub Pages is configured to deploy from GitHub Actions. Production APT
+publication has not happened yet. After that first signed deployment is
+verified, the intended commands are `sudo apt update` then
+`sudo apt install fortigate-vpn-linux-gui`. Use a dedicated keyring and
+`Signed-By`; do not run `apt-key add`.
+
+The APT repository is **not** claimed live in this working tree. Use method A
+until a signed Pages deployment has been tested. See
+[`docs/en/distribution.md`](docs/en/distribution.md).
 
 ## Usage
 
@@ -169,7 +188,7 @@ is running. This package never disables system strongSwan automatically.
 - The FortiGate / FortiOS environment used to validate SSL, IKEv1 IPsec, and
   v1.3.0 IKEv2 + SAML/SSO (Connect → Disconnect → Connect, three successful
   live cycles). v1.4.0 keeps that VPN behavior and adds GUI profile
-  management on top of it.
+  management on top of it. v1.5.0 does not change VPN protocol behavior.
 - v1.2.0 installed-package smoke: IPsec refused while system charon owned
   UDP/500/4500; private IPsec after that IKE was stopped; SSL/SAML after IPsec
   cleanup with system strongSwan restored

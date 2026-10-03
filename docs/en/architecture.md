@@ -15,6 +15,12 @@ The GUI must never become the helper and must never run as root. `pkexec`
 starts only `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. The desktop
 application is not launched with pkexec or sudo.
 
+Update checks run in a background Qt thread after an explicit About action or
+an optional delayed automatic check (at most once per 24 hours). They query
+public GitHub Releases over HTTPS and never send profile or VPN identifiers.
+**View release** uses the system browser. The GUI does not download `.deb`
+files and does not invoke `apt`.
+
 ## Layers
 
 ### GUI
@@ -332,3 +338,4 @@ desktop process.
 | `fortigate_vpn_gui.profiles` | Profile model, XDG JSON storage, manager |
 | `fortigate_vpn_gui.system` | Preflight checks; polkit helper client |
 | `fortigate_vpn_gui.diagnostics` | Unprivileged health checks and sanitized reports |
+| `fortigate_vpn_gui.updates` | Public GitHub Releases check (HTTPS, no token, no VPN data) |

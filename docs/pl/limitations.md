@@ -1,8 +1,8 @@
 # Znane ograniczenia
 
-Wersja v1.4.0 to wydanie zarządzania profilami w GUI na zamrożonych
-backendach SSL i IPsec z v1.3.0 (zasobnik, opcjonalny autostart i
-opcjonalne ponawianie bez zmian).
+Wersja v1.5.0 to wydanie dystrybucji i aktualizacji na zamrożonych
+backendach SSL i IPsec z v1.4.0 / v1.3.0 (zasobnik, opcjonalny autostart i
+opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.
@@ -53,7 +53,8 @@ opcjonalne ponawianie bez zmian).
 - Hasła SSL, ciasteczka SAML i tokeny nie są przechowywane.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - GUI samo nie instaluje pakietów. Instalacja na Ubuntu 24.04 używa
-  pakietu `.deb` `fortigate-vpn-linux-gui`.
+  pakietu `.deb` `fortigate-vpn-linux-gui` albo, po publikacji, `apt install`
+  z repozytorium projektu. Sprawdzenie aktualizacji tylko otwiera przeglądarkę.
 - Logi są tylko w pamięci i są ocenzurowane.
 - Skopiowane i eksportowane raporty diagnostyczne są ocenzurowane i nie zawierają sekretów.
 - Pełny URL SAML nie jest pokazywany; kopiowanie używa origin+ścieżka.

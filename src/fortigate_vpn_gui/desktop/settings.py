@@ -10,6 +10,7 @@ CLOSE_TO_TRAY_KEY = "ui/close_to_tray"
 AUTOSTART_KEY = "desktop/autostart"
 AUTO_RECONNECT_KEY = "vpn/auto_reconnect"
 TRAY_HINT_SHOWN_KEY = "ui/tray_minimize_hint_shown"
+AUTO_CHECK_UPDATES_KEY = "updates/auto_check"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class DesktopPreferences:
     autostart: bool = False
     auto_reconnect: bool = False
     tray_hint_shown: bool = False
+    auto_check_updates: bool = True
 
 
 def _as_bool(value: object, default: bool = False) -> bool:
@@ -41,6 +43,7 @@ def load_desktop_preferences(settings) -> DesktopPreferences:
         autostart=_as_bool(settings.value(AUTOSTART_KEY, False)),
         auto_reconnect=_as_bool(settings.value(AUTO_RECONNECT_KEY, False)),
         tray_hint_shown=_as_bool(settings.value(TRAY_HINT_SHOWN_KEY, False)),
+        auto_check_updates=_as_bool(settings.value(AUTO_CHECK_UPDATES_KEY, True), True),
     )
 
 
@@ -51,6 +54,7 @@ def save_desktop_preferences(settings, prefs: DesktopPreferences) -> None:
     settings.setValue(AUTOSTART_KEY, prefs.autostart)
     settings.setValue(AUTO_RECONNECT_KEY, prefs.auto_reconnect)
     settings.setValue(TRAY_HINT_SHOWN_KEY, prefs.tray_hint_shown)
+    settings.setValue(AUTO_CHECK_UPDATES_KEY, prefs.auto_check_updates)
 
 
 def close_behavior_label(close_to_tray: bool) -> str:
