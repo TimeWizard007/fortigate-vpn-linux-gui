@@ -20,6 +20,7 @@ def test_desktop_preference_defaults() -> None:
     assert prefs.autostart is False
     assert prefs.auto_reconnect is False
     assert prefs.tray_hint_shown is False
+    assert prefs.auto_check_updates is True
 
 
 def test_load_defaults_from_empty_settings(tmp_path) -> None:
@@ -48,6 +49,7 @@ def test_desktop_preferences_persist(tmp_path) -> None:
             autostart=True,
             auto_reconnect=True,
             tray_hint_shown=True,
+            auto_check_updates=False,
         ),
     )
     settings.sync()
@@ -57,3 +59,4 @@ def test_desktop_preferences_persist(tmp_path) -> None:
     assert loaded.autostart is True
     assert loaded.auto_reconnect is True
     assert loaded.tray_hint_shown is True
+    assert loaded.auto_check_updates is False

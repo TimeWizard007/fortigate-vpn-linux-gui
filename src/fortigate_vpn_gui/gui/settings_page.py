@@ -37,6 +37,7 @@ class SettingsPage(QWidget):
         on_always_on_top: Callable[[bool], None] | None = None,
         on_close_to_tray: Callable[[bool], None] | None = None,
         on_auto_reconnect: Callable[[bool], None] | None = None,
+        on_auto_check_updates: Callable[[bool], None] | None = None,
         on_autostart: Callable[[bool], None] | None = None,
         log_buffer: LogBuffer | None = None,
         tray_available: bool = True,
@@ -46,6 +47,7 @@ class SettingsPage(QWidget):
         self._on_always_on_top = on_always_on_top
         self._on_close_to_tray = on_close_to_tray
         self._on_auto_reconnect = on_auto_reconnect
+        self._on_auto_check_updates = on_auto_check_updates
         self._on_autostart = on_autostart
         self._log = log_buffer
         self._updating = False
@@ -87,6 +89,20 @@ class SettingsPage(QWidget):
         )
         reconnect_note.setWordWrap(True)
 
+        self._auto_check_updates = QCheckBox(
+            "Check for updates automatically (at most once per day)"
+        )
+        self._auto_check_updates.setObjectName("autoCheckUpdatesCheckbox")
+        self._auto_check_updates.setChecked(prefs.auto_check_updates)
+        self._auto_check_updates.toggled.connect(self._emit_auto_check_updates)
+        update_note = QLabel(
+            "Update checks query public GitHub Releases over HTTPS. They do not "
+            "send profiles, gateways, or other VPN data. The GUI never downloads "
+            "or installs packages; apt remains responsible for upgrades."
+        )
+        update_note.setWordWrap(True)
+        update_note.setObjectName("autoCheckUpdatesNote")
+
         form = QFormLayout()
         form.addRow("Close button behavior:", self._close_combo)
 
@@ -101,6 +117,8 @@ class SettingsPage(QWidget):
         inner_layout.addWidget(self._autostart)
         inner_layout.addWidget(self._auto_reconnect)
         inner_layout.addWidget(reconnect_note)
+        inner_layout.addWidget(self._auto_check_updates)
+        inner_layout.addWidget(update_note)
         inner_layout.addWidget(ProfileConfigPathWidget(manager.storage_path))
         inner_layout.addStretch(1)
 
@@ -120,6 +138,9 @@ class SettingsPage(QWidget):
     def auto_reconnect_checked(self) -> bool:
         return self._auto_reconnect.isChecked()
 
+    def auto_check_updates_checked(self) -> bool:
+        return self._auto_check_updates.isChecked()
+
     def apply_preferences(self, prefs: DesktopPreferences, *, tray_available: bool = True) -> None:
         self._updating = True
         self._always_on_top.setChecked(prefs.always_on_top)
@@ -127,6 +148,7 @@ class SettingsPage(QWidget):
         self._close_combo.setEnabled(tray_available)
         self._autostart.setChecked(prefs.autostart)
         self._auto_reconnect.setChecked(prefs.auto_reconnect)
+        self._auto_check_updates.setChecked(prefs.auto_check_updates)
         self._updating = False
 
     def _emit_always_on_top(self, checked: bool) -> None:
@@ -146,6 +168,12 @@ class SettingsPage(QWidget):
             return
         if self._on_auto_reconnect is not None:
             self._on_auto_reconnect(checked)
+
+    def _emit_auto_check_updates(self, checked: bool) -> None:
+        if self._updating:
+            return
+        if self._on_auto_check_updates is not None:
+            self._on_auto_check_updates(checked)
 
     def _emit_autostart(self, checked: bool) -> None:
         if self._updating:

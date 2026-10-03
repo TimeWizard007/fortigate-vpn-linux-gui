@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  QT_QPA_PLATFORM: offscreen
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  build:
+    name: Build Debian package
+    if: github.ref_type == 'tag' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            autoconf \
+            automake \
+            binutils \
+            dpkg-dev \
+            gcc \
+            gzip \
+            libcharon-extauth-plugins \
+            libcharon-extra-plugins \
+            libdbus-1-3 \
+            libegl1 \
+            libfontconfig1 \
+            libgl1 \
+            libglib2.0-0 \
+            libssl-dev \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-x11-0 \
+            libxkbcommon0 \
+            make \
+            pkg-config \
+            python3.12 \
+            python3.12-venv \
+            strongswan \
+            strongswan-swanctl \
+            xz-utils
+
+      - name: Install the project and development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Ruff
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+
+      - name: Version consistency
+        run: python scripts/check-version-consistency.py --require-tag
+
+      - name: Pytest
+        run: python -m pytest
+
+      - name: Native compatibility plugin
+        run: |
+          ./scripts/build-fvl-forticlient-vid.sh build
+          PLUGIN="native/fvl-forticlient-vid/libstrongswan-fvl-forticlient-vid.so"
+          ./scripts/check-fvl-forticlient-vid-symbols.sh "${PLUGIN}"
+          LD_LIBRARY_PATH="/usr/lib/ipsec${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" ldd -r "${PLUGIN}"
+
+      - name: Build Debian package
+        run: ./scripts/build-deb.sh
+
+      - name: Verify package metadata and inspect contents
+        run: |
+          set -euo pipefail
+          DEB="$(find dist -maxdepth 1 -name 'fortigate-vpn-linux-gui_*_amd64.deb' -print)"
+          test -n "${DEB}"
+          test -f "${DEB}"
+          python scripts/check-version-consistency.py --require-tag --deb "${DEB}"
+          bash scripts/inspect-deb.sh "${DEB}"
+          sha256sum "${DEB}" | tee "${DEB}.sha256"
+          dpkg-deb -f "${DEB}" Version
+          dpkg-deb -I "${DEB}"
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          path: |
+            dist/*.deb
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Attach to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-package
+          path: dist
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+            dist/*.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

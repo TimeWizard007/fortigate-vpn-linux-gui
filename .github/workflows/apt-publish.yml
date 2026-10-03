@@ -1,0 +1,138 @@
+name: APT repository
+
+on:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+
+concurrency:
+  group: apt-publish
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish static APT repository
+    if: >
+      github.repository == 'TimeWizard007/fortigate-vpn-linux-gui' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'Release' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout trusted default-branch workflow revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify Release tag, GitHub Release, and exact .deb
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-github-release.py \
+            --head-branch "${{ github.event.workflow_run.head_branch }}" \
+            --head-sha "${{ github.event.workflow_run.head_sha }}" \
+            --run-event "${{ github.event.workflow_run.event }}" \
+            --run-name "${{ github.event.workflow_run.name }}" \
+            --run-conclusion "${{ github.event.workflow_run.conclusion }}" \
+            --repository "${{ github.repository }}" \
+            --download-dir "${RUNNER_TEMP}/incoming"
+
+      - name: Checkout immutable tag commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          path: tagged-src
+          persist-credentials: false
+
+      - name: Version-consistency against triggering package
+        env:
+          GITHUB_REF_TYPE: tag
+          GITHUB_REF_NAME: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 tagged-src/scripts/check-version-consistency.py --require-tag \
+            --deb "${RUNNER_TEMP}/incoming/${{ steps.release.outputs.deb }}"
+
+      - name: Generate signed repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APT_SIGNING_KEY}" ]]; then
+            echo "error: APT_SIGNING_KEY is not configured" >&2
+            exit 1
+          fi
+          umask 077
+          GNUPG_HOME="${RUNNER_TEMP}/apt-gnupg"
+          KEY_FILE="${RUNNER_TEMP}/apt-signing.key"
+          PASS_FILE="${RUNNER_TEMP}/apt-signing.pass"
+          mkdir -p "${GNUPG_HOME}"
+          printf '%s\n' "${APT_SIGNING_KEY}" > "${KEY_FILE}"
+          echo "GNUPG_HOME=${GNUPG_HOME}" >> "${GITHUB_ENV}"
+          echo "APT_KEY_FILE=${KEY_FILE}" >> "${GITHUB_ENV}"
+          ARGS=(
+            python3 scripts/apt_repo.py
+            --repo-root site/apt
+            --sign
+            --gnupg-home "${GNUPG_HOME}"
+            --import-key "${KEY_FILE}"
+          )
+          if [[ -n "${APT_SIGNING_PASSPHRASE}" ]]; then
+            printf '%s\n' "${APT_SIGNING_PASSPHRASE}" > "${PASS_FILE}"
+            echo "APT_PASS_FILE=${PASS_FILE}" >> "${GITHUB_ENV}"
+            ARGS+=(--passphrase-file "${PASS_FILE}")
+          fi
+          shopt -s nullglob
+          debs=("${RUNNER_TEMP}/incoming"/*.deb)
+          if [[ "${#debs[@]}" -eq 0 ]]; then
+            echo "error: no .deb files were downloaded" >&2
+            exit 1
+          fi
+          expected="${RUNNER_TEMP}/incoming/${{ steps.release.outputs.deb }}"
+          test -f "${expected}"
+          for deb in "${debs[@]}"; do
+            ARGS+=(--deb "${deb}")
+          done
+          "${ARGS[@]}"
+          test -f site/apt/dists/noble/InRelease
+          test -f site/apt/fortigate-vpn-linux-gui.gpg
+          if grep -R "BEGIN PGP PRIVATE KEY BLOCK" site; then
+            echo "error: private key leaked into the Pages artifact" >&2
+            exit 1
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          set +e
+          rm -rf "${GNUPG_HOME:-}"
+          shred -u "${APT_KEY_FILE:-}" "${APT_PASS_FILE:-}" 2>/dev/null || true
+          rm -f "${APT_KEY_FILE:-}" "${APT_PASS_FILE:-}"

@@ -1,8 +1,8 @@
 # Known limitations
 
-v1.4.0 is a GUI profile-management release on the frozen v1.3.0 SSL and
-IPsec backends (tray, optional autostart, and optional auto-reconnect
-unchanged).
+v1.5.0 is a distribution and update-experience release on the frozen v1.4.0 /
+v1.3.0 SSL and IPsec backends (tray, optional autostart, and optional
+auto-reconnect unchanged). The GUI does not self-update.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing
@@ -50,7 +50,8 @@ unchanged).
   time. There is no plaintext fallback. `username_hint` is not a secret.
 - The GUI does not modify firewall rules, routes, or DNS itself.
 - Packages are never installed automatically by the GUI. Ubuntu 24.04
-  installation uses the `fortigate-vpn-linux-gui` `.deb`.
+  installation uses the `fortigate-vpn-linux-gui` `.deb` or, once published,
+  `apt install` from the project repository. Update checks only open a browser.
 - Logs are in-memory only and are redacted. They are not written to disk.
 - Copied and exported diagnostic reports are sanitized and must not contain
   secrets. Inspect an export before attaching it to a GitHub issue.

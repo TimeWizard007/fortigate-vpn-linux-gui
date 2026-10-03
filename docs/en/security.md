@@ -111,7 +111,13 @@ replaced automatically.
 - No sudo or sudoers integration.
 - No arbitrary root command execution through the helper.
 - No automatic package installation from the GUI. Ubuntu 24.04 uses the
-  `fortigate-vpn-linux-gui` `.deb`.
+  `fortigate-vpn-linux-gui` `.deb` or, once published, `apt` from the project
+  repository. About only reports that a newer GitHub Release exists.
+- Update checks use HTTPS to the public GitHub Releases API. They do not send
+  tokens, profiles, gateways, or telemetry. Failure is not treated as an
+  available update.
+- APT clients trust a dedicated keyring with `signed-by=`. `apt-key add` is
+  not used. The repository signing private key is not in git.
 - No direct firewall, route, or DNS changes by the GUI.
 - No secrets in `profiles.json`. Optional IPsec PSK/XAuth storage uses Secret
   Service only; there is no plaintext fallback.

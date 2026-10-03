@@ -49,6 +49,18 @@ def psk_store(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_github_update_check(monkeypatch):
+    """GUI tests must never contact GitHub Releases."""
+    from fortigate_vpn_gui.updates.checker import UpdateCheckResult
+
+    def fake(installed: str, **_kwargs):
+        return UpdateCheckResult(status="up_to_date", installed=installed, latest=installed)
+
+    monkeypatch.setattr("fortigate_vpn_gui.gui.main_window.check_for_update", fake)
+    monkeypatch.setattr("fortigate_vpn_gui.gui.about_page.check_for_update", fake)
+
+
+@pytest.fixture(autouse=True)
 def _reap_qt_toplevels():
     """Destroy leaked top-level widgets so the session QApplication stays clean.
 

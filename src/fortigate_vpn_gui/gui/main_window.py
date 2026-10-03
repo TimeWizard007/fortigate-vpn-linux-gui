@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt, Signal
+from collections.abc import Callable
+from dataclasses import replace
+
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,7 +23,6 @@ from PySide6.QtWidgets import (
 
 from fortigate_vpn_gui import APP_NAME, __version__
 from fortigate_vpn_gui.desktop.settings import (
-    DesktopPreferences,
     load_desktop_preferences,
     save_desktop_preferences,
 )
@@ -40,6 +42,8 @@ from fortigate_vpn_gui.gui.windowing import (
 )
 from fortigate_vpn_gui.helper.ipsec_runtime import inspect_owned_ipsec_state
 from fortigate_vpn_gui.profiles.manager import ProfileManager
+from fortigate_vpn_gui.updates.cache import record_check, should_auto_check
+from fortigate_vpn_gui.updates.checker import UpdateCheckResult, check_for_update
 from fortigate_vpn_gui.vpn.backend import VpnBackend, VpnEvent
 from fortigate_vpn_gui.vpn.detect import detect_openfortivpn
 from fortigate_vpn_gui.vpn.log_buffer import LogBuffer, LogLevel
@@ -72,6 +76,8 @@ class MainWindow(QMainWindow):
         detect=detect_openfortivpn,
         settings: QSettings | None = None,
         tray_available: bool | None = None,
+        update_checker: Callable[[str], UpdateCheckResult] | None = None,
+        auto_check_delay_ms: int = 2500,
     ) -> None:
         super().__init__(None)
         _ = parent
@@ -125,11 +131,17 @@ class MainWindow(QMainWindow):
             on_always_on_top=self.set_always_on_top,
             on_close_to_tray=self.set_close_to_tray,
             on_auto_reconnect=self.set_auto_reconnect,
+            on_auto_check_updates=self.set_auto_check_updates,
             on_autostart=self.set_autostart,
             log_buffer=self._log_buffer,
             tray_available=True,
         )
-        self._about_page = AboutPage()
+        self._update_checker = update_checker or (lambda installed: check_for_update(installed))
+        self._auto_check_delay_ms = max(0, int(auto_check_delay_ms))
+        self._about_page = AboutPage(
+            checker=self._update_checker,
+            on_check_finished=self._on_update_check_finished,
+        )
 
         self._stack = QStackedWidget()
         self._stack.addWidget(self._connection_page)
@@ -195,6 +207,8 @@ class MainWindow(QMainWindow):
         self._diagnostics_page.refresh(include_version=False)
 
         self._apply_style()
+        if self._prefs.auto_check_updates:
+            QTimer.singleShot(self._auto_check_delay_ms, self._maybe_auto_check)
 
     def _desktop_diagnostics(self) -> dict[str, str]:
         tray = self._tray
@@ -262,46 +276,45 @@ class MainWindow(QMainWindow):
 
     def set_always_on_top(self, enabled: bool) -> None:
         self._always_on_top = bool(enabled)
-        self._prefs = DesktopPreferences(
-            always_on_top=self._always_on_top,
-            close_to_tray=self._prefs.close_to_tray,
-            autostart=self._prefs.autostart,
-            auto_reconnect=self._prefs.auto_reconnect,
-            tray_hint_shown=self._prefs.tray_hint_shown,
-        )
+        self._prefs = replace(self._prefs, always_on_top=self._always_on_top)
         save_desktop_preferences(self._settings, self._prefs)
         apply_always_on_top(self, self._always_on_top)
 
     def set_close_to_tray(self, enabled: bool) -> None:
-        self._prefs = DesktopPreferences(
-            always_on_top=self._prefs.always_on_top,
+        self._prefs = replace(
+            self._prefs,
             close_to_tray=bool(enabled) and self.tray.available,
-            autostart=self._prefs.autostart,
-            auto_reconnect=self._prefs.auto_reconnect,
-            tray_hint_shown=self._prefs.tray_hint_shown,
         )
         save_desktop_preferences(self._settings, self._prefs)
 
     def set_auto_reconnect(self, enabled: bool) -> None:
-        self._prefs = DesktopPreferences(
-            always_on_top=self._prefs.always_on_top,
-            close_to_tray=self._prefs.close_to_tray,
-            autostart=self._prefs.autostart,
-            auto_reconnect=bool(enabled),
-            tray_hint_shown=self._prefs.tray_hint_shown,
-        )
+        self._prefs = replace(self._prefs, auto_reconnect=bool(enabled))
         save_desktop_preferences(self._settings, self._prefs)
         self._vpn.set_auto_reconnect(enabled)
 
-    def set_autostart(self, enabled: bool) -> None:
-        self._prefs = DesktopPreferences(
-            always_on_top=self._prefs.always_on_top,
-            close_to_tray=self._prefs.close_to_tray,
-            autostart=bool(enabled),
-            auto_reconnect=self._prefs.auto_reconnect,
-            tray_hint_shown=self._prefs.tray_hint_shown,
-        )
+    def set_auto_check_updates(self, enabled: bool) -> None:
+        self._prefs = replace(self._prefs, auto_check_updates=bool(enabled))
         save_desktop_preferences(self._settings, self._prefs)
+
+    def set_autostart(self, enabled: bool) -> None:
+        self._prefs = replace(self._prefs, autostart=bool(enabled))
+        save_desktop_preferences(self._settings, self._prefs)
+
+    def _maybe_auto_check(self) -> None:
+        if self._close_finalized or self._quit_started:
+            return
+        if not self._prefs.auto_check_updates:
+            return
+        if not should_auto_check(self._settings):
+            return
+        self._about_page.start_check()
+
+    def _on_update_check_finished(self, result: UpdateCheckResult) -> None:
+        record_check(
+            self._settings,
+            version=result.latest,
+            html_url=result.html_url if result.status != "error" else None,
+        )
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 — Qt API
         super().showEvent(event)
@@ -341,13 +354,7 @@ class MainWindow(QMainWindow):
                 self.tray.notify(APP_NAME, TRAY_STILL_RUNNING_MESSAGE)
                 if self._interactive_tray_hint:
                     QMessageBox.information(self, APP_NAME, TRAY_STILL_RUNNING_MESSAGE)
-                self._prefs = DesktopPreferences(
-                    always_on_top=self._prefs.always_on_top,
-                    close_to_tray=self._prefs.close_to_tray,
-                    autostart=self._prefs.autostart,
-                    auto_reconnect=self._prefs.auto_reconnect,
-                    tray_hint_shown=True,
-                )
+                self._prefs = replace(self._prefs, tray_hint_shown=True)
                 save_desktop_preferences(self._settings, self._prefs)
             return
         if self._can_finish_close:
@@ -372,6 +379,7 @@ class MainWindow(QMainWindow):
             return
         self._close_finalized = True
         self._can_finish_close = True
+        self._about_page.shutdown_update_thread()
         self._pump.stop()
         if self._tray is not None:
             self._tray.dispose()

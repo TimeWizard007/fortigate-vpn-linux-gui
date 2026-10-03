@@ -14,6 +14,12 @@ GUI nigdy nie może stać się pomocnikiem i nigdy nie może działać jako root
 `pkexec` uruchamia tylko `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`.
 Aplikacja pulpitu nie jest uruchamiana przez pkexec ani sudo.
 
+Sprawdzenie aktualizacji działa w wątku Qt po jawnej akcji About albo po
+opcjonalnym, opóźnionym sprawdzeniu automatycznym (najwyżej raz na 24 godziny).
+Pyta publiczne GitHub Releases przez HTTPS i nie wysyła identyfikatorów
+profilu ani VPN. **View release** używa systemowej przeglądarki. GUI nie
+pobiera plików `.deb` i nie woła `apt`.
+
 ## Warstwy
 
 ### GUI
@@ -192,3 +198,4 @@ pomocnika.
 | `fortigate_vpn_gui.profiles` | Model i zapis JSON XDG |
 | `fortigate_vpn_gui.system` | Preflight i klient polkit |
 | `fortigate_vpn_gui.diagnostics` | Nieuprzywilejowane testy i ocenzurowane raporty |
+| `fortigate_vpn_gui.updates` | Publiczne GitHub Releases (HTTPS, bez tokenu, bez danych VPN) |

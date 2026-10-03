@@ -64,7 +64,13 @@ automatycznie.
 - Brak sudo i sudoers.
 - Brak dowolnego wykonywania poleceń root przez pomocnika.
 - Brak automatycznej instalacji pakietów z GUI. Ubuntu 24.04 używa pakietu
-  `.deb` `fortigate-vpn-linux-gui`.
+  `.deb` `fortigate-vpn-linux-gui` albo, po publikacji, `apt` z repozytorium
+  projektu. About tylko informuje, że nowsze GitHub Release istnieje.
+- Sprawdzenie aktualizacji używa HTTPS do publicznego API GitHub Releases.
+  Nie wysyła tokenów, profili, bram ani telemetrii. Awaria nie oznacza
+  dostępnej aktualizacji.
+- Klienci APT ufają osobnemu keyringowi z `signed-by=`. `apt-key add` nie jest
+  używane. Prywatny klucz podpisu repozytorium nie jest w git.
 - GUI samo nie zmienia zapory, tras ani DNS.
 - Brak sekretów w `profiles.json`. Opcjonalny zapis PSK/XAuth tylko przez
   Secret Service; bez zapisu jawnego.

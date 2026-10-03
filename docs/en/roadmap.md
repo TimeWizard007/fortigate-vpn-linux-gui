@@ -94,7 +94,15 @@ Dates are not committed. Order may change as design work proceeds.
 - Application 1.4.0; helper capability version remains 0.9.0; `protocol_version` 1; Debian package 1.4.0-1
 - Live-validated: SSL VPN SAML/SSO; IKEv1 PSK + XAuth including Edit/Save reconnect; IKEv2 SAML/SSO
 
-## Later (not claimed in v1.4.0)
+## v1.5.0 — distribution and updates
+
+- GitHub Releases update check and About component versions
+- GitHub Actions tag workflow builds and attaches the Debian package
+- Static APT repository path (signed-by keyring; not self-update)
+- Application 1.5.0; helper capability version remains 0.9.0; `protocol_version` 1; Debian package 1.5.0-1
+- Frozen v1.4.0 / v1.3.0 VPN protocol backend (no protocol research in this release)
+
+## Later (not claimed in v1.5.0)
 
 - IKEv1 Main Mode, certificate authentication, manual-address IPsec
 - Debian 13, Fedora, Windows, macOS
