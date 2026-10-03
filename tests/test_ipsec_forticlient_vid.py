@@ -511,9 +511,9 @@ def test_c_plugin_consumes_cfg_reply_split_include_without_changing_cp16() -> No
         post_window = child_text[max(0, post_idx - 250) : post_idx + 250]
         assert "if (ike_auth)" in post_window
         assert "NARROW_INITIATOR_POST_AUTH" in child_text[post_idx : post_idx + 400]
-        pre_block = child_text.split(
-            "if (message->get_exchange_type(message) == IKE_AUTH)"
-        )[1].split("if (!build_payloads")[0]
+        pre_block = child_text.split("if (message->get_exchange_type(message) == IKE_AUTH)")[
+            1
+        ].split("if (!build_payloads")[0]
         assert "NARROW_INITIATOR_PRE_NOAUTH" in pre_block
         assert "NARROW_INITIATOR_POST_NOAUTH" not in pre_block
     assert "INTERNAL_IP4_SUBNET" in text

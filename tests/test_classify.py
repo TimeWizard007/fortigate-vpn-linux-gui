@@ -196,18 +196,13 @@ def test_stock_cfg_attribute_handler_miss_is_not_a_failure() -> None:
     line = "12[CFG] handling INTERNAL_IP4_SUBNET attribute failed"
     assert classify_output(line) is OutputHint.NONE
     assert (
-        classify_output("12[CFG] handling INTERNAL_IP4_NETMASK attribute failed")
-        is OutputHint.NONE
+        classify_output("12[CFG] handling INTERNAL_IP4_NETMASK attribute failed") is OutputHint.NONE
     )
     assert (
-        classify_output("12[CFG] handling INTERNAL_IP6_SUBNET attribute failed")
-        is OutputHint.NONE
+        classify_output("12[CFG] handling INTERNAL_IP6_SUBNET attribute failed") is OutputHint.NONE
     )
     assert (
-        classify_output("12[CFG] handling APPLICATION_VERSION attribute failed")
-        is OutputHint.NONE
+        classify_output("12[CFG] handling APPLICATION_VERSION attribute failed") is OutputHint.NONE
     )
-    assert (
-        classify_output("13[IKE] establishing CHILD_SA failed") is OutputHint.CHILD_SA_FAILURE
-    )
+    assert classify_output("13[IKE] establishing CHILD_SA failed") is OutputHint.CHILD_SA_FAILURE
     assert classify_output("plugin 'openssl' failed to load: not found") is not OutputHint.NONE

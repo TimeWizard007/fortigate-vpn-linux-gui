@@ -105,9 +105,7 @@ def test_fortinet_private_540c_used_when_standard_attrs_absent() -> None:
 
 
 def test_wildcard_prefix_keeps_full_tunnel() -> None:
-    info = classify_cfg_reply_attributes(
-        {INTERNAL_IP4_SUBNET: [_addr_mask("0.0.0.0/0")]}
-    )
+    info = classify_cfg_reply_attributes({INTERNAL_IP4_SUBNET: [_addr_mask("0.0.0.0/0")]})
     assert info.is_split is False
     assert info.routes() == (WILDCARD_PREFIX,)
     assert installs_default_route(info) is True

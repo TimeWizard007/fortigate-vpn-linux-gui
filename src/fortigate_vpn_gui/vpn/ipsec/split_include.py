@@ -41,12 +41,8 @@ _SPLIT_INCLUDE_RE = re.compile(
     r"FortiClient compatibility: CFG_REPLY split-include "
     r"count=(\d+) prefixes=(\S+) source=(\S+)"
 )
-_DNS_RE = re.compile(
-    r"FortiClient compatibility: CFG_REPLY dns servers=(\S+) domains=(\S+)"
-)
-_TUNNEL_MODE_RE = re.compile(
-    r"FortiClient compatibility: CFG_REPLY tunnel-mode=(split|full)"
-)
+_DNS_RE = re.compile(r"FortiClient compatibility: CFG_REPLY dns servers=(\S+) domains=(\S+)")
+_TUNNEL_MODE_RE = re.compile(r"FortiClient compatibility: CFG_REPLY tunnel-mode=(split|full)")
 _DOMAIN_RE = re.compile(r"^[A-Za-z0-9._~-]+$")
 
 

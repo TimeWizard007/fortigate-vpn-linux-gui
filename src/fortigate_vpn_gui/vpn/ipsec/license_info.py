@@ -110,9 +110,7 @@ def format_mac_list(adapters: Sequence[NetAdapter]) -> str:
 
 def ascii_field(value: str) -> str:
     """Strip CR/LF/NUL and drop non-ASCII so framing stays KEY=value LF."""
-    cleaned = (
-        value.replace("\r", " ").replace("\n", " ").replace("\0", "").strip()
-    )
+    cleaned = value.replace("\r", " ").replace("\n", " ").replace("\0", "").strip()
     return cleaned.encode("ascii", "ignore").decode("ascii")
 
 

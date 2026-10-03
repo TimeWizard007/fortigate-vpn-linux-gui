@@ -72,9 +72,7 @@ def snapshot_explicit_host_route(
     resolve: ResolveHost | None = None,
 ) -> GatewayHostRoute | None:
     """Return a pre-existing main-table /32 route to *gateway*, if any."""
-    route, _reason = snapshot_explicit_host_route_with_reason(
-        gateway, run=run, resolve=resolve
-    )
+    route, _reason = snapshot_explicit_host_route_with_reason(gateway, run=run, resolve=resolve)
     return route
 
 

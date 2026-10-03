@@ -124,9 +124,7 @@ def test_raw_plugin_line_is_not_copied_to_vpn_source(tmp_path: Path) -> None:
     joined = "\n".join(item.format_line() for item in harness.log.records())
     assert "INTERNAL_IP4_SUBNET attribute failed" not in joined
     failures = [
-        item
-        for item in harness.log.records()
-        if "establishing CHILD_SA failed" in item.message
+        item for item in harness.log.records() if "establishing CHILD_SA failed" in item.message
     ]
     assert len(failures) == 1
     assert failures[0].source == "ipsec"

@@ -908,9 +908,7 @@ class HelperService:
                                 f"dev={route.device}"
                             )
                         else:
-                            self._on_output(
-                                f"Gateway route restore failed: {result.detail}"
-                            )
+                            self._on_output(f"Gateway route restore failed: {result.detail}")
                 finally:
                     wipe_ipsec_runtime(target)
                     with self._lock:

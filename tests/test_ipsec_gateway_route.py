@@ -53,9 +53,7 @@ class FakeIp:
             return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")
         if argv[:4] == ["ip", "-4", "route", "replace"]:
             if self.replace_error is not None:
-                return subprocess.CompletedProcess(
-                    argv, 1, stdout="", stderr=self.replace_error
-                )
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr=self.replace_error)
             dest = argv[4].split("/", 1)[0]
             if self.hide_after_replace:
                 self.host_routes.pop(dest, None)
@@ -249,9 +247,7 @@ def _second_saml_bootstrap_follows_host_route(fake_ip: FakeIp) -> bool:
 def test_full_teardown_restores_slash32_after_all_route_mutations(
     tmp_path: Path, monkeypatch
 ) -> None:
-    service, fake_ip, ordered, logs, held = _connect_helper(
-        tmp_path, monkeypatch, async_exit=True
-    )
+    service, fake_ip, ordered, logs, held = _connect_helper(tmp_path, monkeypatch, async_exit=True)
     assert any("Gateway route snapshot captured:" in line for line in logs)
     assert _DEST in fake_ip.host_routes
     service.disconnect(wait=True)
@@ -281,9 +277,7 @@ def test_full_teardown_restores_slash32_after_all_route_mutations(
     assert held["proc"].terminate_called is True
 
 
-def test_normal_disconnect_restores_slash32_after_dns_reapply(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_normal_disconnect_restores_slash32_after_dns_reapply(tmp_path: Path, monkeypatch) -> None:
     service, fake_ip, ordered, logs, held = _connect_helper(tmp_path, monkeypatch)
     service.disconnect(wait=True)
     assert _DEST in fake_ip.host_routes
