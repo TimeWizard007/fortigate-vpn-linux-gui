@@ -354,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
                 "tag": tag,
                 "sha": commit_sha,
                 "deb": expected,
+                "app_version": application_version_from_tag(tag),
                 "debian_version": debian_version_from_tag(tag),
             },
         )

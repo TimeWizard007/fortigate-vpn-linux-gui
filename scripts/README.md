@@ -20,6 +20,9 @@ bash scripts/inspect-deb.sh dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
 
 `check-version-consistency.py` compares the application version, pyproject,
 Debian changelog/control, `build-deb.sh`, and an optional `vX.Y.Z` git tag.
+`--expected-tag vX.Y.Z` supplies an already-verified stable tag and is
+preferred over `GITHUB_REF` (required for `workflow_run` APT publishing).
+`--root` selects the source tree whose metadata is compared.
 `inspect-deb.sh` fails if the package contains credentials, private keys,
 research binaries, or FortiClient proprietary files.
 `verify-github-release.py` is used by the APT publisher to fail closed unless

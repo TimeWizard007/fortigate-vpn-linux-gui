@@ -96,5 +96,7 @@ until the first production deployment is verified.
   workflow **completes successfully** (`workflow_run`). It verifies the
   triggering tag, published stable GitHub Release, and exact expected `.deb`
   **before** importing `APT_SIGNING_KEY`. There is no `workflow_dispatch` and
-  no `release.published` trigger. `pages: write` and `id-token: write` are
-  limited to that job.
+  no `release.published` trigger. Version consistency uses the verified tag
+  from that step (`--expected-tag`), not `GITHUB_REF` from the `workflow_run`
+  default-branch context. `pages: write` and `id-token: write` are limited to
+  that job.

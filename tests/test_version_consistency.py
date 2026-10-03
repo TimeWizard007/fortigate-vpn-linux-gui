@@ -54,3 +54,79 @@ def test_github_ref_tag_is_detected(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
     monkeypatch.setenv("GITHUB_REF_NAME", "v1.5.0")
     assert module.detect_release_tag() == "v1.5.0"
+
+
+def test_parse_stable_tag_rejects_non_release_refs() -> None:
+    module = _load()
+    assert module.parse_stable_tag("v1.5.0") == "v1.5.0"
+    assert module.parse_stable_tag("main") is None
+    assert module.parse_stable_tag("v1.5.0-rc1") is None
+    assert module.parse_stable_tag("1.5.0") is None
+
+
+def test_expected_tag_wins_over_workflow_run_github_ref(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+    monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
+    monkeypatch.setattr(module, "detect_release_tag", lambda: None)
+    assert module.validate(require_tag=True)
+    assert module.validate(require_tag=True, expected_tag="v1.5.0") == []
+
+
+def test_expected_tag_must_be_stable() -> None:
+    module = _load()
+    for value in ("main", "v1.5.0-rc1", "1.5.0", "v1.5.0-1", ""):
+        errors = module.validate(require_tag=True, expected_tag=value)
+        assert any("not a stable vX.Y.Z tag" in item for item in errors)
+
+
+def test_expected_tag_must_match_source_version() -> None:
+    module = _load()
+    errors = module.validate(require_tag=True, expected_tag="v1.5.1")
+    assert any("v1.5.1" in item and "v1.5.0" in item for item in errors)
+
+
+def test_expected_tag_rejects_wrong_deb_version(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(
+        module,
+        "debian_package_fields",
+        lambda _path: ("fortigate-vpn-linux-gui", "1.5.1-1", "amd64"),
+    )
+    errors = module.validate(
+        require_tag=True,
+        expected_tag="v1.5.0",
+        deb=Path("fortigate-vpn-linux-gui_1.5.1-1_amd64.deb"),
+    )
+    assert any("1.5.1-1" in item and "1.5.0-1" in item for item in errors)
+
+
+def test_expected_tag_rejects_wrong_package(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(
+        module,
+        "debian_package_fields",
+        lambda _path: ("unrelated-vpn", "1.5.0-1", "amd64"),
+    )
+    errors = module.validate(
+        require_tag=True,
+        expected_tag="v1.5.0",
+        deb=Path("fortigate-vpn-linux-gui_1.5.0-1_amd64.deb"),
+    )
+    assert any("Package" in item and "unrelated-vpn" in item for item in errors)
+
+
+def test_expected_tag_rejects_wrong_architecture(monkeypatch) -> None:
+    module = _load()
+    monkeypatch.setattr(
+        module,
+        "debian_package_fields",
+        lambda _path: ("fortigate-vpn-linux-gui", "1.5.0-1", "arm64"),
+    )
+    errors = module.validate(
+        require_tag=True,
+        expected_tag="v1.5.0",
+        deb=Path("fortigate-vpn-linux-gui_1.5.0-1_amd64.deb"),
+    )
+    assert any("Architecture" in item and "arm64" in item for item in errors)

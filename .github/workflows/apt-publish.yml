@@ -60,13 +60,20 @@ jobs:
           persist-credentials: false
 
       - name: Version-consistency against triggering package
-        env:
-          GITHUB_REF_TYPE: tag
-          GITHUB_REF_NAME: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          python3 tagged-src/scripts/check-version-consistency.py --require-tag \
-            --deb "${RUNNER_TEMP}/incoming/${{ steps.release.outputs.deb }}"
+          TAG="${{ steps.release.outputs.tag }}"
+          SHA="${{ steps.release.outputs.sha }}"
+          DEB_NAME="${{ steps.release.outputs.deb }}"
+          if [[ -z "${TAG}" || -z "${SHA}" || -z "${DEB_NAME}" ]]; then
+            echo "error: verified release outputs are missing" >&2
+            exit 1
+          fi
+          python3 scripts/check-version-consistency.py \
+            --require-tag \
+            --expected-tag "${TAG}" \
+            --root tagged-src \
+            --deb "${RUNNER_TEMP}/incoming/${DEB_NAME}"
 
       - name: Generate signed repository
         env:

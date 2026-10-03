@@ -125,3 +125,20 @@ def test_apt_publish_pages_deploy_is_after_signed_generation() -> None:
     deploy = text.index("actions/deploy-pages")
     assert generate < inrelease < upload < deploy
     assert "Configure GitHub Pages" in text[inrelease:]
+
+
+def test_apt_publish_uses_verified_tag_not_github_ref() -> None:
+    text = _apt_publish()
+    verify = text.index("Verify Release tag, GitHub Release, and exact .deb")
+    consistency = text.index("Version-consistency against triggering package")
+    signing = text.index("secrets.APT_SIGNING_KEY")
+    assert verify < consistency < signing
+    assert '--expected-tag "${TAG}"' in text or '--expected-tag "${TAG}"' in text
+    assert "steps.release.outputs.tag" in text
+    assert "--root tagged-src" in text
+    assert "python3 scripts/check-version-consistency.py" in text
+    assert "python3 tagged-src/scripts/check-version-consistency.py" not in text
+    assert "verified release outputs are missing" in text
+    assert "GITHUB_REF_TYPE" not in text
+    assert "GITHUB_REF_NAME" not in text
+    assert "--require-tag" in text

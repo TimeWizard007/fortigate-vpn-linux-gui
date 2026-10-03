@@ -13,10 +13,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "fortigate-vpn-linux-gui"
+STABLE_TAG_RE = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
+ARCH = "amd64"
 
 
 class VersionError(RuntimeError):
     """Version metadata is inconsistent."""
+
+
+def configure_root(path: Path) -> None:
+    """Read version metadata from *path* instead of this script's repository root."""
+    global ROOT
+    ROOT = path.resolve()
+
+
+def parse_stable_tag(value: str) -> str | None:
+    """Return *value* when it is a stable ``vX.Y.Z`` tag, otherwise None."""
+    text = str(value or "").strip()
+    if STABLE_TAG_RE.fullmatch(text) is None:
+        return None
+    return text
 
 
 def _read(path: Path) -> str:
@@ -98,17 +114,28 @@ def detect_release_tag() -> str | None:
         return None
 
 
-def debian_package_version_from_deb(path: Path) -> str:
+def debian_package_fields(path: Path) -> tuple[str, str, str]:
+    """Return ``(Package, Version, Architecture)`` from *path*. Fail closed."""
     try:
-        output = subprocess.check_output(
-            ["dpkg-deb", "-f", str(path), "Version"],
-            text=True,
+        package = subprocess.check_output(
+            ["dpkg-deb", "-f", str(path), "Package"], text=True
+        ).strip()
+        version = subprocess.check_output(
+            ["dpkg-deb", "-f", str(path), "Version"], text=True
+        ).strip()
+        architecture = subprocess.check_output(
+            ["dpkg-deb", "-f", str(path), "Architecture"], text=True
         ).strip()
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise VersionError(f"could not read package Version from {path}") from exc
-    if not output:
-        raise VersionError(f"empty package Version in {path}")
-    return output
+        raise VersionError(f"could not read package identity from {path}") from exc
+    if not package or not version or not architecture:
+        raise VersionError(f"incomplete package identity in {path}")
+    return package, version, architecture
+
+
+def debian_package_version_from_deb(path: Path) -> str:
+    _package, version, _architecture = debian_package_fields(path)
+    return version
 
 
 def collect_versions() -> dict[str, str]:
@@ -134,7 +161,29 @@ def collect_versions() -> dict[str, str]:
     }
 
 
-def validate(*, require_tag: bool = False, deb: Path | None = None) -> list[str]:
+def resolve_checked_tag(*, require_tag: bool, expected_tag: str | None) -> tuple[str | None, list[str]]:
+    """Return the tag used for consistency, preferring an explicit verified tag."""
+    errors: list[str] = []
+    if expected_tag is not None:
+        parsed = parse_stable_tag(expected_tag)
+        if parsed is None:
+            errors.append(f"expected-tag {expected_tag!r} is not a stable vX.Y.Z tag")
+            return None, errors
+        return parsed, errors
+    tag = detect_release_tag()
+    if tag:
+        return tag, errors
+    if require_tag:
+        errors.append("a vX.Y.Z git tag is required for this release check")
+    return None, errors
+
+
+def validate(
+    *,
+    require_tag: bool = False,
+    deb: Path | None = None,
+    expected_tag: str | None = None,
+) -> list[str]:
     versions = collect_versions()
     errors: list[str] = []
     app = versions["application"]
@@ -150,18 +199,21 @@ def validate(*, require_tag: bool = False, deb: Path | None = None) -> list[str]
         errors.append(
             f"build-deb.sh VERSION {versions['script_version']} != application {app}"
         )
-    tag = detect_release_tag()
-    if tag:
-        expected_tag = f"v{app}"
-        if tag != expected_tag:
-            errors.append(f"git tag {tag} != expected {expected_tag}")
-    elif require_tag:
-        errors.append("a vX.Y.Z git tag is required for this release check")
+    tag, tag_errors = resolve_checked_tag(require_tag=require_tag, expected_tag=expected_tag)
+    errors.extend(tag_errors)
+    if tag is not None:
+        expected = f"v{app}"
+        if tag != expected:
+            errors.append(f"git tag {tag} != expected {expected}")
     if deb is not None:
-        package_version = debian_package_version_from_deb(deb)
+        package, package_version, architecture = debian_package_fields(deb)
+        if package != PACKAGE_NAME:
+            errors.append(f"package {deb.name} Package {package} != {PACKAGE_NAME}")
+        if architecture != ARCH:
+            errors.append(f"package {deb.name} Architecture {architecture} != {ARCH}")
         if package_version != expected_deb:
             errors.append(f"package {deb.name} Version {package_version} != {expected_deb}")
-        expected_name = f"{PACKAGE_NAME}_{expected_deb}_amd64.deb"
+        expected_name = f"{PACKAGE_NAME}_{expected_deb}_{ARCH}.deb"
         if deb.name != expected_name:
             errors.append(f"package filename {deb.name} != {expected_name}")
     return errors
@@ -172,12 +224,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--require-tag",
         action="store_true",
-        help="fail when HEAD / GITHUB_REF is not the matching vX.Y.Z tag",
+        help="fail when no matching vX.Y.Z tag is available",
+    )
+    parser.add_argument(
+        "--expected-tag",
+        help="authoritative already-verified stable vX.Y.Z tag; preferred over GITHUB_REF",
+    )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        help="source tree to read application/packaging versions from",
     )
     parser.add_argument("--deb", type=Path, help="built .deb to check against source versions")
     args = parser.parse_args(argv)
+    if args.root is not None:
+        configure_root(args.root)
     try:
-        errors = validate(require_tag=args.require_tag, deb=args.deb)
+        errors = validate(
+            require_tag=args.require_tag,
+            deb=args.deb,
+            expected_tag=args.expected_tag,
+        )
     except VersionError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -188,7 +255,9 @@ def main(argv: list[str] | None = None) -> int:
     versions = collect_versions()
     print(f"application {versions['application']}")
     print(f"debian {versions['debian_control']}")
-    tag = detect_release_tag()
+    tag, _errors = resolve_checked_tag(
+        require_tag=args.require_tag, expected_tag=args.expected_tag
+    )
     if tag:
         print(f"tag {tag}")
     return 0
