@@ -2,25 +2,31 @@
 
 Static Debian repository layout for Ubuntu 24.04 (`noble`) amd64. Generated
 files are **not** committed to `main`. GitHub Pages serves `dists/` and `pool/`
-after a trusted **Release** workflow succeeds.
+after a trusted **Release** workflow succeeds, or after a tag-only APT recovery
+dispatch for an already-published stable GitHub Release.
 
-The GUI does not consume this repository. Users add it with `signed-by=` and
+The GUI does not consume this repository. Users add it with `Signed-By` and
 upgrade with `apt`.
+
+v1.5.0 introduced the production APT repository. It is **live**.
 
 ## Current status
 
-- GitHub Pages **Source = GitHub Actions** is configured.
-- Production APT deployment has **not** happened yet.
-- Do not treat this repository as live until the first signed Pages
-  deployment has been verified.
-- Until then, install from the GitHub Release `.deb` only.
+- Canonical URL:
+  `https://timewizard007.github.io/fortigate-vpn-linux-gui/apt`
+- GitHub Pages **Source = GitHub Actions**.
+- `fortigate-vpn-linux-gui.gpg` is a **binary** OpenPGP public keyring for
+  apt `Signed-By`. Clients download it directly; they must not run
+  `gpg --dearmor`.
+- Direct GitHub Release `.deb` install remains an alternative, not the only
+  supported production method.
 
 ## Layout
 
 ```text
 apt/
   index.html
-  fortigate-vpn-linux-gui.gpg          # public key only
+  fortigate-vpn-linux-gui.gpg          # binary public keyring only
   dists/noble/Release
   dists/noble/Release.gpg
   dists/noble/InRelease
@@ -28,8 +34,6 @@ apt/
   dists/noble/main/binary-amd64/Packages.gz
   pool/main/f/fortigate-vpn-linux-gui/*.deb
 ```
-
-Expected Pages URL after the first verified signed deployment:
 
 ```text
 https://timewizard007.github.io/fortigate-vpn-linux-gui/apt
@@ -59,6 +63,10 @@ and Debian `Version` `X.Y.Z-N` whose filename is
 `fortigate-vpn-linux-gui_X.Y.Z-N_amd64.deb`. Old `.deb` files already in
 `pool/` are kept. A file with the same name but different contents is rejected.
 
+Export writes a binary public keyring (`gpg --no-armor --export`). The committed
+source public key remains ASCII-armored
+`packaging/apt/fortigate-vpn-linux-gui-apt.asc` (public only).
+
 ## GitHub Secrets (names only)
 
 | Secret | Purpose |
@@ -67,24 +75,21 @@ and Debian `Version` `X.Y.Z-N` whose filename is
 | `APT_SIGNING_PASSPHRASE` | Optional passphrase for that private key |
 
 Never put secret values in this repository, in workflow logs, or in Pages
-artifacts. The public key is exported to `fortigate-vpn-linux-gui.gpg`.
-The committed public key is `packaging/apt/fortigate-vpn-linux-gui-apt.asc`.
+artifacts. Pages contains only the binary public keyring
+`fortigate-vpn-linux-gui.gpg`. The committed public key is
+`packaging/apt/fortigate-vpn-linux-gui-apt.asc`.
 
 ## GitHub settings
 
 1. **Settings → Pages**: Source = **GitHub Actions** (configured).
 2. Allow the **github-pages** environment for the `APT repository` workflow
-   (created on first `actions/deploy-pages` run; restrict to this repository
-   and do not allow pull requests).
+   (restrict to this repository and do not allow pull requests).
 3. Repository secrets `APT_SIGNING_KEY` and `APT_SIGNING_PASSPHRASE` exist.
    Do not print, echo, or retrieve their values.
 4. Do not grant the APT workflow to forks or `pull_request` events.
 5. Keep historical GitHub Release `.deb` assets. The publisher rebuilds `pool/`
    from all stable (non-draft, non-prerelease) release packages so rollback
    remains possible.
-
-Pages hosting is configured. The signed APT repository is still **not live**
-until the first production deployment is verified.
 
 ## Workflows
 

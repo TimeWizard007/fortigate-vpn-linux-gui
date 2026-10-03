@@ -12,6 +12,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from email.utils import formatdate
 from pathlib import Path
@@ -32,6 +33,18 @@ FORBIDDEN_OUTPUT_MARKERS = (
     "BEGIN RSA PRIVATE KEY",
     "GITHUB_TOKEN=",
     "ghp_",
+)
+
+ASCII_ARMOR_MARKERS = (
+    b"BEGIN PGP PUBLIC KEY BLOCK",
+    b"BEGIN PGP PRIVATE KEY BLOCK",
+    b"BEGIN OPENSSH PRIVATE KEY",
+    b"BEGIN RSA PRIVATE KEY",
+)
+
+SECRET_PACKET_MARKERS = (
+    ":secret key packet:",
+    ":secret sub key packet:",
 )
 
 
@@ -254,7 +267,8 @@ def gpg_argv(
     elif mode == "clearsign":
         argv.extend(["--clearsign", "--output", str(output), str(source)])
     else:
-        argv.extend(["--armor", "--export", "--output", str(output)])
+        # apt Signed-By on a .gpg path requires a binary OpenPGP keyring.
+        argv.extend(["--no-armor", "--export", "--output", str(output)])
         if key_id:
             argv.append(key_id)
     if any(part.startswith("--passphrase=") or part == "--passphrase" for part in argv):
@@ -302,6 +316,68 @@ def sign_release(
     return detached, inrelease
 
 
+def validate_binary_public_keyring(path: Path) -> None:
+    """Fail closed unless *path* is a public-only binary OpenPGP keyring."""
+    if not path.is_file():
+        raise AptRepoError(f"exported repository key is missing: {path}")
+    data = path.read_bytes()
+    if not data:
+        path.unlink(missing_ok=True)
+        raise AptRepoError("exported repository key is empty")
+    if data.lstrip().startswith(b"-----"):
+        path.unlink(missing_ok=True)
+        raise AptRepoError(
+            "exported repository key is ASCII-armored; apt Signed-By requires a binary OpenPGP keyring"
+        )
+    for marker in ASCII_ARMOR_MARKERS:
+        if marker in data:
+            path.unlink(missing_ok=True)
+            raise AptRepoError("exported repository key contains ASCII-armored OpenPGP material")
+    with tempfile.TemporaryDirectory(prefix="fvl-apt-keyring-") as raw:
+        inspect_home = Path(raw)
+        inspect_home.chmod(stat.S_IRWXU)
+        env = os.environ.copy()
+        env["GNUPGHOME"] = str(inspect_home)
+        packets = _run(
+            [
+                "gpg",
+                "--homedir",
+                str(inspect_home),
+                "--batch",
+                "--yes",
+                "--list-packets",
+                str(path),
+            ],
+            env=env,
+        )
+        lowered = packets.lower()
+        for marker in SECRET_PACKET_MARKERS:
+            if marker in lowered:
+                path.unlink(missing_ok=True)
+                raise AptRepoError("refusing to publish a private key")
+        shown = _run(
+            [
+                "gpg",
+                "--homedir",
+                str(inspect_home),
+                "--batch",
+                "--yes",
+                "--show-keys",
+                "--with-colons",
+                str(path),
+            ],
+            env=env,
+        )
+    if "pub:" not in shown:
+        path.unlink(missing_ok=True)
+        raise AptRepoError("exported repository key is not an OpenPGP public key")
+    for line in shown.splitlines():
+        kind = line.split(":", 1)[0]
+        if kind in {"sec", "ssb"}:
+            path.unlink(missing_ok=True)
+            raise AptRepoError("refusing to publish a private key")
+
+
 def export_public_key(
     repo_root: Path,
     *,
@@ -323,12 +399,7 @@ def export_public_key(
         ),
         env=env,
     )
-    text = dest.read_text(encoding="utf-8")
-    if "BEGIN PGP PUBLIC KEY BLOCK" not in text:
-        raise AptRepoError("exported repository key is not an OpenPGP public key")
-    if "BEGIN PGP PRIVATE KEY BLOCK" in text:
-        dest.unlink(missing_ok=True)
-        raise AptRepoError("refusing to publish a private key")
+    validate_binary_public_keyring(dest)
     dest.chmod(0o644)
     return dest
 

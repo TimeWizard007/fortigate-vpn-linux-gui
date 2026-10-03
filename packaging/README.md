@@ -44,9 +44,9 @@ install and is not a user venv. A clean `.deb` install does not require
 sudo apt install ./dist/fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
 ```
 
-APT repository publishing (GitHub Pages, `signed-by`, not live until the
-first signed deployment is verified) is documented in
-[`apt/README.md`](apt/README.md) and
+The production APT repository (GitHub Pages, binary public keyring,
+`Signed-By`) is live for Ubuntu 24.04 amd64 since v1.5.0. Direct `.deb`
+install remains an alternative. See [`apt/README.md`](apt/README.md) and
 [`docs/en/distribution.md`](../docs/en/distribution.md).
 
 Launch:

@@ -16,7 +16,8 @@ distributions are untested.
 The current version is **1.5.0**. Helper capability version is **0.9.0**
 (`protocol_version` remains **1**). The VPN protocol behavior is the frozen
 v1.3.0 backend (same as live-proven v1.4.0). v1.5.0 adds update checks,
-About component versions, release automation, and an APT publishing path.
+About component versions, release automation, and the production APT
+repository.
 
 ## Features
 
@@ -36,6 +37,7 @@ About component versions, release automation, and an APT publishing path.
 - Diagnostics with DNS, routing, TCP, SAML service, tunnel, helper, IPsec, and polkit checks
 - Copy diagnostic report and Export diagnostics (sanitized text or ZIP for GitHub issues)
 - About: component versions and a GitHub Releases update check (no telemetry; the GUI does not self-update)
+- Production APT repository for Ubuntu 24.04 (`noble`) amd64 (v1.5.0)
 
 ## Install (Ubuntu 24.04)
 
@@ -84,16 +86,34 @@ User profiles in `~/.config/fortigate-vpn-linux-gui/` are preserved.
 `apt purge` also leaves those files; delete them yourself if you want them
 gone.
 
-### B. APT repository (not live until first signed deployment is verified)
+### B. APT repository (production, live since v1.5.0)
 
-GitHub Pages is configured to deploy from GitHub Actions. Production APT
-publication has not happened yet. After that first signed deployment is
-verified, the intended commands are `sudo apt update` then
-`sudo apt install fortigate-vpn-linux-gui`. Use a dedicated keyring and
-`Signed-By`; do not run `apt-key add`.
+Canonical URL: `https://timewizard007.github.io/fortigate-vpn-linux-gui/apt`.
+Ubuntu 24.04 (`noble`) amd64 only. Download the **binary** public keyring
+directly (do not run `gpg --dearmor`). Use a dedicated DEB822 source and
+`Signed-By`. Do not use `apt-key`, `trusted=yes`, or
+`--allow-unauthenticated`.
 
-The APT repository is **not** claimed live in this working tree. Use method A
-until a signed Pages deployment has been tested. See
+```bash
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/fortigate-vpn-linux-gui.gpg \
+  | sudo tee /etc/apt/keyrings/fortigate-vpn-linux-gui.gpg >/dev/null
+sudo chmod 0644 /etc/apt/keyrings/fortigate-vpn-linux-gui.gpg
+sudo tee /etc/apt/sources.list.d/fortigate-vpn-linux-gui.sources >/dev/null <<'EOF'
+Types: deb
+URIs: https://timewizard007.github.io/fortigate-vpn-linux-gui/apt
+Suites: noble
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/fortigate-vpn-linux-gui.gpg
+EOF
+sudo apt update
+sudo apt install fortigate-vpn-linux-gui
+```
+
+Upgrade with `sudo apt update` then `sudo apt upgrade`. Discover published
+versions with `apt-cache madison fortigate-vpn-linux-gui`. Direct `.deb`
+install (method A) remains an alternative. Full notes:
 [`docs/en/distribution.md`](docs/en/distribution.md).
 
 ## Usage

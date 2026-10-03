@@ -1,62 +1,27 @@
 # Instalacja, aktualizacje i repozytorium APT
 
-v1.5.0 to wydanie dystrybucji i aktualizacji. SSL VPN, IPsec, SAML i protokół
-pomocnika pozostają zamrożonym baseline v1.4.0 / v1.3.0.
+v1.5.0 to wydanie dystrybucji i aktualizacji. Wprowadziło produkcyjne
+repozytorium APT. SSL VPN, IPsec, SAML i protokół pomocnika pozostają
+zamrożonym baseline v1.4.0 / v1.3.0.
 
 GUI nigdy nie pobiera ani nie instaluje pakietów i nigdy nie woła `sudo`,
 `pkexec` ani `apt`, żeby się samo zaktualizować. Za aktualizacje zainstalowanej
 paczki odpowiada `apt`.
 
-## Instalacja bezpośredniego `.deb` (zawsze dostępna)
+Zweryfikowana platforma: **Ubuntu 24.04 LTS (`noble`), amd64**. Inne
+dystrybucje nie były testowane.
 
-Pobierz `fortigate-vpn-linux-gui_1.5.0-1_amd64.deb` z
-[GitHub Releases](https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases)
-i zainstaluj:
+## Repozytorium APT (produkcja, live)
 
-```bash
-sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
-```
-
-Późniejsza aktualizacja to nowszy pobrany `.deb` albo repozytorium APT, gdy
-zostanie opublikowane.
-
-Usuwanie:
-
-```bash
-sudo apt remove fortigate-vpn-linux-gui
-```
-
-Profile w `~/.config/fortigate-vpn-linux-gui/` zostają.
-
-## Repozytorium APT (nie jest live, dopóki pierwszy podpisany deployment nie zostanie zweryfikowany)
-
-GitHub Pages jest skonfigurowane na GitHub Actions. Produkcyjna publikacja APT
-jeszcze się nie odbyła. Zamierzony przebieg po weryfikacji pierwszego
-podpisanego deploymentu:
-
-```bash
-sudo apt update
-sudo apt install fortigate-vpn-linux-gui
-sudo apt upgrade
-```
-
-**To repozytorium nie jest live, dopóki podpisany deployment GitHub Pages nie
-zostanie przetestowany.** Poniższe URL-e nie są produkcyjnym źródłem, zanim
-to się stanie. Do tego czasu wspieraną ścieżką jest `.deb` z GitHub Releases.
-
-Oczekiwany układ Pages po wdrożeniu:
+Kanoniczne repozytorium:
 
 ```text
-https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/
-https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/dists/noble/
-https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/pool/
-https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/fortigate-vpn-linux-gui.gpg
+https://timewizard007.github.io/fortigate-vpn-linux-gui/apt
 ```
 
-### Dodanie repozytorium (Ubuntu 24.04)
-
-Użyj osobnego keyringu i `Signed-By`. Nie używaj `apt-key add` i nie ufaj
-kluczowi globalnie.
+`fortigate-vpn-linux-gui.gpg` to **binarny** keyring OpenPGP. Pobierz go
+bezpośrednio do `/etc/apt/keyrings/`. Nie uruchamiaj `gpg --dearmor`. Nie
+używaj `apt-key`, `trusted=yes` ani `--allow-unauthenticated`.
 
 ```bash
 sudo mkdir -p /etc/apt/keyrings
@@ -89,6 +54,15 @@ albo:
 sudo apt install --only-upgrade fortigate-vpn-linux-gui
 ```
 
+Oczekiwany układ Pages:
+
+```text
+https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/
+https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/fortigate-vpn-linux-gui.gpg
+https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/dists/noble/
+https://timewizard007.github.io/fortigate-vpn-linux-gui/apt/pool/
+```
+
 ### Usunięcie repozytorium
 
 ```bash
@@ -113,6 +87,26 @@ sudo apt install fortigate-vpn-linux-gui=1.4.0-1
 Opcjonalnie `apt-mark hold`. Nie usuwaj historycznych zasobów GitHub Release;
 publisher APT odbudowuje `pool/` ze stabilnych plików `.deb`.
 
+## Instalacja bezpośredniego `.deb` (alternatywa)
+
+Pobierz `fortigate-vpn-linux-gui_1.5.0-1_amd64.deb` z
+[GitHub Releases](https://github.com/TimeWizard007/fortigate-vpn-linux-gui/releases)
+i zainstaluj:
+
+```bash
+sudo apt install ./fortigate-vpn-linux-gui_1.5.0-1_amd64.deb
+```
+
+Późniejsza aktualizacja to nowszy pobrany `.deb` albo repozytorium APT powyżej.
+
+Usuwanie:
+
+```bash
+sudo apt remove fortigate-vpn-linux-gui
+```
+
+Profile w `~/.config/fortigate-vpn-linux-gui/` zostają.
+
 ## Sprawdzanie aktualizacji w GUI
 
 About ma **Check for updates**. Settings może włączyć automatyczne sprawdzenie
@@ -128,7 +122,9 @@ kliknięciu. GUI samo się nie aktualizuje.
 
 ## Model zaufania
 
-- Klient ufa tylko kluczowi publicznemu tego repozytorium przez `signed-by=`.
+- Klient ufa tylko kluczowi publicznemu tego repozytorium przez `Signed-By`.
+- Pages publikuje binarny keyring publiczny. Zcommitowane źródło publiczne to
+  ASCII-armored `packaging/apt/fortigate-vpn-linux-gui-apt.asc`.
 - Klucz **prywatny** nigdy nie jest commitowany. GitHub Actions używa sekretów
   `APT_SIGNING_KEY` i opcjonalnie `APT_SIGNING_PASSPHRASE`.
 - Tymczasowy materiał klucza jest usuwany po zadaniu publikacji.
@@ -139,14 +135,12 @@ kliknięciu. GUI samo się nie aktualizuje.
 1. Wersja aplikacji, `pyproject.toml`, changelog/control Debiana i
    `scripts/build-deb.sh` muszą być zgodne (`1.5.0` / `1.5.0-1`).
    `python scripts/check-version-consistency.py` musi przejść.
-2. Nie przesuwaj historycznych tagów. `v1.4.0` jest niezmienne.
-3. Po przeglądzie oznacz commit tagiem `v1.5.0`. Workflow **Release** buduje
+2. Nie przesuwaj historycznych tagów. `v1.4.0` i `v1.5.0` są niezmienne.
+3. Po przeglądzie oznacz commit tagiem `vX.Y.Z`. Workflow **Release** buduje
    `.deb` z tego tagu i dołącza go do GitHub Release.
-4. GitHub Pages (Source = GitHub Actions) i sekrety podpisu APT są już
-   skonfigurowane. Po sukcesie **Release** workflow **APT repository**
-   weryfikuje pasujący opublikowany `.deb`, a potem podpisuje i wdraża.
-   Nie traktuj repozytorium APT jako live, dopóki ten pierwszy podpisany
-   deployment nie zostanie zweryfikowany. Do tego czasu dystrybuuj tylko
-   `.deb` z GitHub Release.
+4. Po sukcesie **Release** workflow **APT repository** weryfikuje pasujący
+   opublikowany `.deb`, a potem podpisuje i wdraża Pages. Tag-only recovery
+   może ponownie opublikować metadane APT z istniejącego stabilnego Release
+   bez zmiany tego Release.
 
 Szczegóły: [`packaging/apt/README.md`](../../packaging/apt/README.md).
