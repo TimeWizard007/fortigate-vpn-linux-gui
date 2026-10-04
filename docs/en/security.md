@@ -21,9 +21,16 @@ PPP, routes, and DNS belong in the helper, not in the Qt process. Running the
 whole desktop app as root would enlarge the attack surface (UI, clipboard,
 file dialogs, plugins).
 
-polkit action: `com.fortigate-vpn-linux-gui.manage-vpn`. The desktop user sees
-the normal Linux authentication dialog. The GUI is not launched with pkexec.
-There are no sudoers rules and openfortivpn is not setuid.
+polkit action: `com.fortigate-vpn-linux-gui.manage-vpn`. Packaged defaults
+are `allow_any=no`, `allow_inactive=no`, and `allow_active=yes`. An **active
+local** desktop user can start the helper through `pkexec` without an
+administrator password. Inactive sessions and non-local callers are denied.
+The helper still performs privileged networking (tunnels, routes, DNS); this
+is not an unprivileged VPN path. All active local users on the workstation
+receive this authorization. Package installation and upgrades still require
+administrator privileges. The GUI is not launched with pkexec. There are no
+sudoers rules, no polkit JavaScript `.rules` file, and openfortivpn is not
+setuid.
 
 ## Command construction
 

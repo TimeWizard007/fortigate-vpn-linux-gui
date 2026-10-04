@@ -13,7 +13,10 @@ Privileged helper            root via polkit (pkexec)
 
 The GUI must never become the helper and must never run as root. `pkexec`
 starts only `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. The desktop
-application is not launched with pkexec or sudo.
+application is not launched with pkexec or sudo. The packaged action uses
+`allow_active=yes` with `allow_inactive=no` and `allow_any=no`, so an active
+local desktop user does not enter an administrator password for Connect,
+Disconnect, or Reconnect. The helper still runs as root.
 
 Update checks run in a background Qt thread after an explicit About action or
 an optional delayed automatic check (at most once per 24 hours). They query
@@ -68,7 +71,9 @@ probing is not done at application startup.
 A small helper activated with polkit action
 `com.fortigate-vpn-linux-gui.manage-vpn`. It is not a general command
 executor. Supported operations: `hello`, `connect`, `credentials`,
-`disconnect`, `status`.
+`disconnect`, `status`. Active local sessions may invoke it without an
+administrator password; that still grants privileged networking, not
+arbitrary root commands.
 
 Install locations (also installed by the Ubuntu `.deb`):
 

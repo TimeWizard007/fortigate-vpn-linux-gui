@@ -65,8 +65,10 @@ Launch from the GNOME application menu as **FortiGate VPN Linux GUI**, or:
 fortigate-vpn-linux-gui
 ```
 
-Do not run the GUI as root. Connecting shows a normal polkit prompt when the
-helper needs authorization. SSO then continues in the system browser.
+Do not run the GUI as root. After the package is installed, an active local
+desktop user can Connect, Disconnect, and Reconnect without an administrator
+password. The helper still runs as root through `pkexec` and performs
+privileged networking. SSO then continues in the system browser.
 
 ### openfortivpn and SAML
 
@@ -128,8 +130,8 @@ install (method A) remains an alternative. Full notes:
    - **IPsec IKEv2 SAML/SSO** (pre-shared key + system-browser sign-in)
 4. Enter the gateway and required settings, then save. Passwords and the
    IPsec pre-shared key are never written to `profiles.json`.
-5. Connect from Profiles or the Connection page. Authorize the helper in
-   the polkit dialog if asked.
+5. Connect from Profiles or the Connection page. An active local desktop
+   session does not need an administrator password for the helper.
 6. For SAML/SSO, complete sign-in in the system browser.
 7. If FortiGate presents an unknown certificate, pin it explicitly for that
    SSL profile or cancel.
@@ -182,7 +184,13 @@ Privileged helper            root via polkit (pkexec)
 ```
 
 `pkexec` starts only `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`. There
-are no sudoers rules, no setuid helper, and no passwordless polkit policy.
+are no sudoers rules and no setuid helper. The packaged polkit action
+`com.fortigate-vpn-linux-gui.manage-vpn` allows an **active local** desktop
+user to start that helper without an administrator password (`allow_active=yes`).
+Inactive sessions and non-local/`allow_any` callers are denied. This is still
+privileged networking, not an unprivileged VPN. Installing or upgrading the
+package still requires administrator privileges. All active local users on the
+workstation receive this authorization.
 SSL passwords, SAML cookies, IPsec PSKs, and XAuth passwords are not stored
 in `profiles.json` and are not passed on the command line. Optional IPsec
 secrets use Secret Service only when the user opts in. Copied and exported

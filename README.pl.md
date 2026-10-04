@@ -63,8 +63,10 @@ Uruchom z menu GNOME jako **FortiGate VPN Linux GUI** albo:
 fortigate-vpn-linux-gui
 ```
 
-Nie uruchamiaj GUI jako root. Przy łączeniu może pojawić się standardowe
-okno polkit. SSO kończy się w systemowej przeglądarce.
+Nie uruchamiaj GUI jako root. Po instalacji paczki aktywny lokalny użytkownik
+pulpitu może łączyć, rozłączać i ponownie łączyć bez hasła administratora.
+Pomocnik nadal działa jako root przez `pkexec` i wykonuje uprzywilejowane
+operacje sieciowe. SSO kończy się w systemowej przeglądarce.
 
 ### openfortivpn i SAML
 
@@ -125,8 +127,8 @@ zostaje alternatywą. Pełne uwagi:
    - **IPsec IKEv2 SAML/SSO** (klucz wstępny + logowanie w przeglądarce)
 4. Wpisz bramę i wymagane ustawienia, potem zapisz. Hasła i klucz wstępny
    IPsec nigdy nie trafiają do `profiles.json`.
-5. Połącz ze strony Profiles albo Connection. W razie potrzeby zatwierdź
-   pomocnika w oknie polkit.
+5. Połącz ze strony Profiles albo Connection. Aktywna lokalna sesja pulpitu
+   nie wymaga hasła administratora do pomocnika.
 6. Przy SAML/SSO dokończ logowanie w przeglądarce.
 7. Nieznany certyfikat FortiGate trzeba jawnie przypiąć do profilu SSL albo
    anulować.
@@ -178,7 +180,13 @@ Pomocnik uprzywilejowany     root przez polkit (pkexec)
 ```
 
 `pkexec` uruchamia tylko `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`.
-Nie ma reguł sudoers, setuid pomocnika ani polityki polkit bez hasła.
+Nie ma reguł sudoers ani setuid pomocnika. Spakowana akcja polkit
+`com.fortigate-vpn-linux-gui.manage-vpn` pozwala **aktywnemu lokalnemu**
+użytkownikowi pulpitu uruchomić tego pomocnika bez hasła administratora
+(`allow_active=yes`). Sesje nieaktywne i wywołania nietlokalne/`allow_any` są
+odmową. To nadal uprzywilejowana sieć, nie VPN bez uprawnień. Instalacja i
+aktualizacja paczki nadal wymagają uprawnień administratora. Tę zgodę
+otrzymują wszyscy aktywni lokalni użytkownicy stacji.
 Hasła SSL, ciasteczka SAML, PSK IPsec i hasła XAuth nie są zapisywane w
 `profiles.json` i nie trafiają do linii poleceń. Opcjonalne sekrety IPsec
 używają Secret Service tylko po zgodzie użytkownika. Kopiowane i eksportowane

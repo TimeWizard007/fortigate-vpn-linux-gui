@@ -4,7 +4,11 @@ Debian/Ubuntu packaging for Ubuntu 24.04 LTS (amd64).
 
 The GUI is never installed setuid and never launched with pkexec. The
 privileged helper remains `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`
-and polkit action `com.fortigate-vpn-linux-gui.manage-vpn`. Packaged
+and polkit action `com.fortigate-vpn-linux-gui.manage-vpn`. That action uses
+`allow_active=yes` with `allow_inactive=no` and `allow_any=no`: an active
+local desktop user can start the helper without an administrator password.
+The helper still runs as root and performs privileged networking. Package
+install and upgrade still require administrator privileges. Packaged
 **1.6.0** ships helper **0.9.0** (`protocol_version` remains 1) including
 IKEv2 SAML/SSO and the application-owned FortiClient Vendor ID plugin used
 only by the private IKEv2 SSO charon. The VPN protocol behavior is the frozen
@@ -110,6 +114,6 @@ no maintainer scripts that walk user homes.
 - No bundled strongSwan
 - No world-writable helper directories
 - No systemd VPN service
-- No passwordless polkit rule
+- No polkit JavaScript `.rules` file and no sudoers `NOPASSWD`
 - No automatic stop or disable of `strongswan-starter`
 - No `/etc/strongswan.d/charon/fvl-forticlient-vid.conf`

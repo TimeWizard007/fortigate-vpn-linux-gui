@@ -24,6 +24,7 @@ Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
 - About shows Installed vs Available on update, plus Protocol 1 and Debian/install method
 - `profiles.json` writes use mode 0600
 - `cryptography` is a direct project dependency (already bundled at 50.0.1)
+- polkit action `com.fortigate-vpn-linux-gui.manage-vpn` uses `allow_active=yes` (still `allow_any=no`, `allow_inactive=no`) so an active local desktop user can start the helper without an administrator password
 
 ### Security
 
@@ -31,6 +32,7 @@ Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
 - SSL passwords, SAML cookies/tokens/tokenid/FCT UID are not backed up
 - Restore is all-or-nothing: keyring failure or mid-write errors roll back
 - The GUI still never installs packages and never calls sudo/pkexec/apt to upgrade itself
+- Active local desktop users may invoke the narrowly scoped VPN helper without an administrator password; inactive and non-local sessions remain denied. The helper still performs privileged networking and is not arbitrary root execution. Package install/upgrade still requires administrator privileges.
 
 ## [1.5.0] - 2026-10-03
 

@@ -19,9 +19,16 @@ Ten dokument podsumowuje model bezpieczeństwa. Instrukcje zgłaszania są w
 GUI nigdy nie działa jako root. Odmawia startu przy UID 0. Dodatkowe prawa do
 PPP, tras i DNS należą do pomocnika, nie do procesu Qt.
 
-Akcja polkit: `com.fortigate-vpn-linux-gui.manage-vpn`. Użytkownik pulpitu
-widzi zwykłe okno uwierzytelniania Linux. GUI nie jest uruchamiane przez
-pkexec. Brak reguł sudoers; openfortivpn nie jest setuid.
+Akcja polkit: `com.fortigate-vpn-linux-gui.manage-vpn`. Domyślne wartości
+paczki to `allow_any=no`, `allow_inactive=no` i `allow_active=yes`.
+**Aktywny lokalny** użytkownik pulpitu może uruchomić pomocnika przez
+`pkexec` bez hasła administratora. Sesje nieaktywne i wywołania nietlokalne
+są odmową. Pomocnik nadal wykonuje uprzywilejowane operacje sieciowe (tunele,
+trasy, DNS); to nie jest VPN bez uprawnień. Tę zgodę otrzymują wszyscy
+aktywni lokalni użytkownicy stacji. Instalacja i aktualizacja paczki nadal
+wymagają uprawnień administratora. GUI nie jest uruchamiane przez pkexec.
+Brak reguł sudoers, brak pliku JavaScript `.rules` polkit; openfortivpn nie
+jest setuid.
 
 ## Budowa polecenia
 

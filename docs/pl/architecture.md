@@ -12,7 +12,10 @@ Pomocnik uprzywilejowany     root przez polkit (pkexec)
 
 GUI nigdy nie może stać się pomocnikiem i nigdy nie może działać jako root.
 `pkexec` uruchamia tylko `/usr/libexec/fortigate-vpn-linux-gui/vpn-helper`.
-Aplikacja pulpitu nie jest uruchamiana przez pkexec ani sudo.
+Aplikacja pulpitu nie jest uruchamiana przez pkexec ani sudo. Spakowana akcja
+używa `allow_active=yes` oraz `allow_inactive=no` i `allow_any=no`, więc
+aktywny lokalny użytkownik pulpitu nie podaje hasła administratora przy
+Connect, Disconnect i Reconnect. Pomocnik nadal działa jako root.
 
 Sprawdzenie aktualizacji działa w wątku Qt po jawnej akcji About albo po
 opcjonalnym, opóźnionym sprawdzeniu automatycznym (najwyżej raz na 24 godziny).
@@ -58,7 +61,8 @@ właściwie uruchamia openfortivpn.
 
 Mały pomocnik z akcją polkit `com.fortigate-vpn-linux-gui.manage-vpn`. To nie
 jest ogólny executor poleceń. Operacje: `hello`, `connect`, `credentials`,
-`disconnect`, `status`.
+`disconnect`, `status`. Aktywne sesje lokalne mogą go wywołać bez hasła
+administratora; to nadal uprzywilejowana sieć, nie dowolne polecenia root.
 
 Lokalizacje instalacji:
 

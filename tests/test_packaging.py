@@ -79,12 +79,21 @@ def test_polkit_policy_path_and_action() -> None:
     policy = (ROOT / "packaging" / "polkit" / "com.fortigate-vpn-linux-gui.policy").read_text(
         encoding="utf-8"
     )
+    assert '<action id="com.fortigate-vpn-linux-gui.manage-vpn">' in policy
     assert POLKIT_ACTION_ID in policy
     assert INSTALLED_HELPER_PATH in policy
-    assert "allow_any>no" in policy
-    assert "allow_inactive>no" in policy
-    assert "auth_admin" in policy
+    assert (
+        '<annotate key="org.freedesktop.policykit.exec.path">'
+        "/usr/libexec/fortigate-vpn-linux-gui/vpn-helper</annotate>"
+    ) in policy
+    assert "<allow_any>no</allow_any>" in policy
+    assert "<allow_inactive>no</allow_inactive>" in policy
+    assert "<allow_active>yes</allow_active>" in policy
+    assert "auth_admin" not in policy
     assert "setuid" not in policy.lower()
+    assert "sudoers" not in policy.lower()
+    rules = list((ROOT / "packaging").rglob("*.rules"))
+    assert rules == []
 
 
 def test_helper_wrapper_uses_system_python_in_source() -> None:
