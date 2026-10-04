@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
+## [1.6.0] - 2026-10-04
+
+Application **1.6.0**, Debian **1.6.0-1**. Tagged, published, and production-verified.
+
+v1.6.0 is feature-complete for the currently planned scope. The project is in
+maintenance mode: bug fixes, security fixes, compatibility fixes, packaging
+and distribution maintenance, and documentation corrections.
 
 ### Added
 
-- Encrypted **Backup** / **Restore** of all profiles and saved IPsec secrets (Argon2id + AES-256-GCM, `.fvbackup`)
+- Encrypted **Backup** / **Restore** of all profiles and persisted IPsec PSK / XAuth passwords (Argon2id + AES-256-GCM, `.fvbackup`)
 - Profiles-page Backup/Restore entry points, separate from secret-free Import/Export
+- Transactional Restore with rollback, stable profile IDs, and abort when Secret Service cannot store restored secrets
 - APT-aware About context: Debian package version, install method, copyable apt instructions (never executed)
 - Tray notification once per newly observed GitHub release version
 - Desktop Keywords for IPsec / IKEv1 / IKEv2
@@ -25,6 +32,7 @@ Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
 - `profiles.json` writes use mode 0600
 - `cryptography` is a direct project dependency (already bundled at 50.0.1)
 - polkit action `com.fortigate-vpn-linux-gui.manage-vpn` uses `allow_active=yes` (still `allow_any=no`, `allow_inactive=no`) so an active local desktop user can start the helper without an administrator password
+- Desktop and Profiles UX polish, including explicit IPsec PSK/XAuth vs SSL/SAML storage wording
 
 ### Fixed
 
@@ -460,7 +468,8 @@ Application **1.5.0**, Debian **1.5.0-1**. Tagged, published, and production-ver
 - Clear missing-dependency dialog with a copyable Ubuntu install command.
 - Documentation of Ubuntu runtime prerequisites (`python3.x-venv`, `libxcb-cursor0`).
 
-[Unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/TimeWizard007/fortigate-vpn-linux-gui/compare/v1.2.0...v1.3.0

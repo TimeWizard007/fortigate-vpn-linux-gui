@@ -15,10 +15,10 @@ distributions are untested.
 
 The current version is **1.6.0**. Helper capability version is **0.9.0**
 (`protocol_version` remains **1**). The VPN protocol behavior is the frozen
-v1.3.0 backend (same as live-proven v1.4.0). v1.6.0 is the intended
-feature-complete release: encrypted Backup/Restore, APT-aware update
-status, and desktop polish. After v1.6.0 the project enters maintenance
-mode.
+v1.3.0 backend (same as live-proven v1.4.0). v1.6.0 is feature-complete for
+the currently planned scope: encrypted Backup/Restore, APT-aware update
+status, and desktop polish. The project is in maintenance mode (bug fixes,
+security, compatibility, packaging, and documentation).
 
 ## Features
 

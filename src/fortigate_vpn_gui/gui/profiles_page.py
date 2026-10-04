@@ -50,8 +50,12 @@ OnConnect = Callable[[], None]
 BACKUP_FILE_FILTER = "FortiGate VPN encrypted backup (*.fvbackup)"
 IMPORT_TOOLTIP = "Import profiles exported without credentials."
 EXPORT_TOOLTIP = "Export profiles without saved credentials."
-BACKUP_TOOLTIP = "Create an encrypted backup of all profiles and saved credentials."
-RESTORE_TOOLTIP = "Restore profiles and saved credentials from an encrypted backup."
+BACKUP_TOOLTIP = (
+    "Create an encrypted backup of all profiles, including saved IPsec PSKs and XAuth passwords."
+)
+RESTORE_TOOLTIP = (
+    "Restore profiles and saved IPsec PSKs and XAuth passwords from an encrypted backup."
+)
 
 
 class ProfilesPage(QWidget):
@@ -78,12 +82,13 @@ class ProfilesPage(QWidget):
         title.setObjectName("pageTitle")
 
         intro = QLabel(
-            "Profiles are stored on this computer only. SSL passwords, SAML "
-            "tokens, cookies, and other session secrets are never saved here.\n\n"
-            "Import brings in profiles exported without credentials. "
-            "Export writes profiles without saved credentials. "
-            "Backup creates an encrypted copy of all profiles and saved "
-            "credentials. Restore restores profiles and saved credentials "
+            "Profiles are stored on this computer only. Saved IPsec PSKs and "
+            "XAuth passwords are stored securely in the system credential "
+            "store. SSL passwords, SAML tokens, cookies, and session secrets "
+            "are never stored.\n\n"
+            "Import and Export transfer profiles without saved credentials. "
+            "Backup creates an encrypted copy of all profiles, including "
+            "saved IPsec PSKs and XAuth passwords. Restore recovers them "
             "from an encrypted backup."
         )
         intro.setWordWrap(True)

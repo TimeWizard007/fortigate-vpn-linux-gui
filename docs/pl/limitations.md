@@ -1,10 +1,10 @@
 # Znane ograniczenia
 
-Wersja v1.6.0 to zamierzone wydanie kompletne na zamrożonych
-backendach SSL i IPsec z v1.4.0 / v1.3.0 (zasobnik, opcjonalny autostart i
-opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje. Szyfrowany
-Backup obejmuje profile i zapisane sekrety IPsec; hasła SSL i sesje SAML
-nie są zapisywane.
+Wersja v1.6.0 jest kompletna dla obecnie zaplanowanego zakresu na
+zamrożonych backendach SSL i IPsec z v1.4.0 / v1.3.0 (zasobnik, opcjonalny
+autostart i opcjonalne ponawianie bez zmian). GUI samo się nie aktualizuje.
+Szyfrowany Backup obejmuje profile i zapisane sekrety IPsec; hasła SSL i
+sesje SAML nie są zapisywane. Projekt jest w trybie utrzymania.
 
 - GUI nigdy nie działa jako root. Praca uprzywilejowana idzie tylko przez
   pomocnika.

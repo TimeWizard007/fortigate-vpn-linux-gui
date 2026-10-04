@@ -1,10 +1,10 @@
 # Known limitations
 
-v1.6.0 is the intended feature-complete release on the frozen v1.4.0 /
-v1.3.0 SSL and IPsec backends (tray, optional autostart, and optional
+v1.6.0 is feature-complete for the currently planned scope on the frozen
+v1.4.0 / v1.3.0 SSL and IPsec backends (tray, optional autostart, and optional
 auto-reconnect unchanged). The GUI does not self-update. Encrypted Backup
 covers profiles and saved IPsec secrets only; SSL passwords and SAML
-sessions are not persisted.
+sessions are not persisted. The project is in maintenance mode.
 
 - The GUI never runs as root. Privileged work goes through the helper only.
 - The helper and polkit policy must be installed for a real tunnel. Missing

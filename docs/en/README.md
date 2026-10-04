@@ -7,12 +7,12 @@ FortiGate SSL VPN on Linux.
 Fortinet, FortiGate, and FortiClient are trademarks of their respective
 owner(s).
 
-v1.6.0 is the in-tree Ubuntu 24.04 (amd64) target and the intended
-feature-complete release. The packaged helper is **0.9.0**
+v1.6.0 is the Ubuntu 24.04 (amd64) target and is feature-complete for the
+currently planned scope. The packaged helper is **0.9.0**
 (`protocol_version` remains 1). VPN protocol behavior is the frozen v1.3.0
 backend (live-proven in v1.4.0). v1.6.0 adds encrypted Backup/Restore,
-APT-aware update status, and desktop polish. After v1.6.0 the project enters
-maintenance mode. `sudo ./scripts/install-dev-helper.sh` is only needed when
+APT-aware update status, and desktop polish. The project is in maintenance
+mode. `sudo ./scripts/install-dev-helper.sh` is only needed when
 testing unreleased helper changes from this checkout.
 
 | Topic | Document |

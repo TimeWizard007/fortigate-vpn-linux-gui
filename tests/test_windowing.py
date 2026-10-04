@@ -118,6 +118,6 @@ def test_settings_page_explains_close_to_tray_and_backup(
     assert "Quit on the tray menu" in close_note.text()
     backup_note = window.settings_page.findChild(QLabel, "backupRestoreNote")
     assert backup_note is not None
-    assert "Export writes profiles without saved credentials" in backup_note.text()
-    assert "encrypted copy of all profiles and saved credentials" in backup_note.text()
+    assert "Import and Export transfer profiles without saved credentials" in backup_note.text()
+    assert "saved IPsec PSKs and XAuth passwords" in backup_note.text()
     window.close()

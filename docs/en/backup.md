@@ -12,10 +12,10 @@ values.
 supported profiles and any IPsec secrets that were saved in Secret
 Service.
 
-**Import** loads profiles exported without credentials. **Export** writes
-profiles without saved credentials. **Backup** creates an encrypted copy of
-all profiles and saved credentials. **Restore** restores profiles and saved
-credentials from an encrypted backup.
+**Import** and **Export** transfer profiles without saved credentials.
+**Backup** creates an encrypted copy of all profiles, including saved
+IPsec PSKs and XAuth passwords. **Restore** recovers them from an
+encrypted backup.
 
 ## After reinstalling Ubuntu
 

@@ -11,10 +11,9 @@ keyringa.
 **Backup** zapisuje jeden szyfrowany plik `.fvbackup`, z którego można
 odtworzyć obsługiwane profile i sekrety IPsec zapisane w Secret Service.
 
-**Import** ładuje profile wyeksportowane bez poświadczeń. **Export**
-zapisuje profile bez zapisanych poświadczeń. **Backup** tworzy szyfrowaną
-kopię wszystkich profili i zapisanych poświadczeń. **Restore** odtwarza
-profile i zapisane poświadczenia z szyfrowanego backupu.
+**Import** i **Export** przenoszą profile bez zapisanych poświadczeń.
+**Backup** tworzy szyfrowaną kopię wszystkich profili, w tym zapisanych
+PSK IPsec i haseł XAuth. **Restore** odtwarza je z szyfrowanego backupu.
 
 ## Po reinstalacji Ubuntu
 

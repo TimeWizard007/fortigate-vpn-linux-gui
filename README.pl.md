@@ -15,9 +15,11 @@ Debian nie były testowane.
 
 Aktualna wersja to **1.6.0**. Wersja możliwości pomocnika to **0.9.0**
 (`protocol_version` pozostaje **1**). Zachowanie protokołu VPN to zamrożony
-backend v1.3.0 (jak w potwierdzonym live v1.4.0). v1.6.0 to zamierzone
-wydanie kompletne: szyfrowany Backup/Restore, status aktualizacji świadomy
-APT i dopracowanie pulpitu. Po v1.6.0 projekt wchodzi w tryb utrzymania.
+backend v1.3.0 (jak w potwierdzonym live v1.4.0). v1.6.0 jest kompletne
+dla obecnie zaplanowanego zakresu: szyfrowany Backup/Restore, status
+aktualizacji świadomy APT i dopracowanie pulpitu. Projekt jest w trybie
+utrzymania (poprawki błędów, bezpieczeństwa, zgodności, pakowania i
+dokumentacji).
 
 ## Funkcje
 

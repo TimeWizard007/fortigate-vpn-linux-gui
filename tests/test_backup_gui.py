@@ -155,10 +155,12 @@ def test_profiles_page_has_backup_restore_and_export_warning(
     intro = page.findChild(QLabel, "profilesIntro")
     assert intro is not None
     text = intro.text()
-    assert "Import brings in profiles exported without credentials" in text
-    assert "Export writes profiles without saved credentials" in text
-    assert "encrypted copy of all profiles and saved credentials" in text
-    assert "Restore restores profiles and saved credentials" in text
+    assert "Saved IPsec PSKs and XAuth passwords are stored securely" in text
+    assert "SSL passwords, SAML tokens, cookies, and session secrets" in text
+    assert "never stored" in text
+    assert "Import and Export transfer profiles without saved credentials" in text
+    assert "including saved IPsec PSKs and XAuth passwords" in text
+    assert "Restore recovers them from an encrypted backup" in text
     restore = page.findChild(QPushButton, "emptyRestoreProfilesButton")
     backup = page.findChild(QPushButton, "emptyBackupProfilesButton")
     imported = page.findChild(QPushButton, "emptyImportProfileButton")
