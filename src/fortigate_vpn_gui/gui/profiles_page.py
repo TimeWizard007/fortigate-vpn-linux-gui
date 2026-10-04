@@ -7,7 +7,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -47,6 +47,11 @@ from fortigate_vpn_gui.vpn.models import CONNECTABLE_STATES, ConnectionState, Vp
 
 SelectProfile = Callable[[str], None]
 OnConnect = Callable[[], None]
+BACKUP_FILE_FILTER = "FortiGate VPN encrypted backup (*.fvbackup)"
+IMPORT_TOOLTIP = "Import profiles exported without credentials."
+EXPORT_TOOLTIP = "Export profiles without saved credentials."
+BACKUP_TOOLTIP = "Create an encrypted backup of all profiles and saved credentials."
+RESTORE_TOOLTIP = "Restore profiles and saved credentials from an encrypted backup."
 
 
 class ProfilesPage(QWidget):
@@ -73,12 +78,16 @@ class ProfilesPage(QWidget):
         title.setObjectName("pageTitle")
 
         intro = QLabel(
-            "Profiles are stored on this computer only. They do not contain "
-            "passwords, SAML tokens, cookies, or other secrets.\n\n"
-            "Export does not include passwords or IPsec pre-shared keys. "
-            "Use Backup to create an encrypted copy including saved IPsec secrets."
+            "Profiles are stored on this computer only. SSL passwords, SAML "
+            "tokens, cookies, and other session secrets are never saved here.\n\n"
+            "Import brings in profiles exported without credentials. "
+            "Export writes profiles without saved credentials. "
+            "Backup creates an encrypted copy of all profiles and saved "
+            "credentials. Restore restores profiles and saved credentials "
+            "from an encrypted backup."
         )
         intro.setWordWrap(True)
+        intro.setObjectName("profilesIntro")
 
         self._feedback = QLabel("")
         self._feedback.setObjectName("profileConnectFeedback")
@@ -90,13 +99,16 @@ class ProfilesPage(QWidget):
         self._add_button.clicked.connect(self.add_profile)
         self._import_button = QPushButton("Import")
         self._import_button.setObjectName("importProfileButton")
-        self._import_button.clicked.connect(self.import_profile)
+        self._import_button.setToolTip(IMPORT_TOOLTIP)
+        self._import_button.clicked.connect(self._on_import_clicked)
         self._backup_button = QPushButton("Backup…")
         self._backup_button.setObjectName("backupProfilesButton")
-        self._backup_button.clicked.connect(self.backup_profiles)
+        self._backup_button.setToolTip(BACKUP_TOOLTIP)
+        self._backup_button.clicked.connect(self._on_backup_clicked)
         self._restore_button = QPushButton("Restore…")
         self._restore_button.setObjectName("restoreProfilesButton")
-        self._restore_button.clicked.connect(self.restore_profiles)
+        self._restore_button.setToolTip(RESTORE_TOOLTIP)
+        self._restore_button.clicked.connect(self._on_restore_clicked)
 
         header_buttons = QVBoxLayout()
         header_buttons.setContentsMargins(0, 0, 0, 0)
@@ -125,13 +137,16 @@ class ProfilesPage(QWidget):
         self._empty_add.clicked.connect(self.add_profile)
         self._empty_import = QPushButton("Import")
         self._empty_import.setObjectName("emptyImportProfileButton")
-        self._empty_import.clicked.connect(self.import_profile)
+        self._empty_import.setToolTip(IMPORT_TOOLTIP)
+        self._empty_import.clicked.connect(self._on_import_clicked)
         self._empty_backup = QPushButton("Backup…")
         self._empty_backup.setObjectName("emptyBackupProfilesButton")
-        self._empty_backup.clicked.connect(self.backup_profiles)
+        self._empty_backup.setToolTip(BACKUP_TOOLTIP)
+        self._empty_backup.clicked.connect(self._on_backup_clicked)
         self._empty_restore = QPushButton("Restore…")
         self._empty_restore.setObjectName("emptyRestoreProfilesButton")
-        self._empty_restore.clicked.connect(self.restore_profiles)
+        self._empty_restore.setToolTip(RESTORE_TOOLTIP)
+        self._empty_restore.clicked.connect(self._on_restore_clicked)
         empty_layout.addWidget(empty_hint)
         empty_layout.addWidget(self._empty_add, alignment=Qt.AlignmentFlag.AlignLeft)
         empty_layout.addWidget(self._empty_import, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -203,7 +218,19 @@ class ProfilesPage(QWidget):
         dialog = ProfileEditorDialog(self._manager, parent=dialog_parent_for(self))
         dialog.exec()
 
-    def import_profile(self, source: Path | None = None) -> ConnectionProfile | None:
+    @Slot()
+    def _on_import_clicked(self) -> None:
+        self.import_profile()
+
+    @Slot()
+    def _on_backup_clicked(self) -> None:
+        self.backup_profiles()
+
+    @Slot()
+    def _on_restore_clicked(self) -> None:
+        self.restore_profiles()
+
+    def import_profile(self, *, source: Path | None = None) -> ConnectionProfile | None:
         """Import a secret-free profile export. *source* is for tests."""
         path = source
         if path is None:
@@ -275,8 +302,8 @@ class ProfilesPage(QWidget):
 
     def backup_profiles(
         self,
-        destination: Path | None = None,
         *,
+        destination: Path | None = None,
         password: str | None = None,
         confirmation: str | None = None,
         memory_kib: int | None = None,
@@ -290,7 +317,7 @@ class ProfilesPage(QWidget):
                 dialog_parent_for(self),
                 "Backup profiles",
                 "fortigate-vpn-linux-gui.fvbackup",
-                "FortiGate VPN Linux GUI backup (*.fvbackup)",
+                BACKUP_FILE_FILTER,
             )
             if not chosen:
                 return None
@@ -325,22 +352,22 @@ class ProfilesPage(QWidget):
             )
             return None
         self._feedback.setText(
-            "Encrypted backup saved. Store the file and password separately. "
-            "Export is not a backup of secrets."
+            f"Encrypted backup saved to {written}. Store the file and password "
+            "separately. Export is not a backup of secrets."
         )
         self._feedback.show()
         if interactive:
             QMessageBox.information(
                 dialog_parent_for(self),
                 "Backup saved",
-                "Backup saved. Store this file and password separately.",
+                (f"Backup saved to:\n{written}\n\nStore this file and password separately."),
             )
         return written
 
     def restore_profiles(
         self,
-        source: Path | None = None,
         *,
+        source: Path | None = None,
         password: str | None = None,
         confirmed: bool | None = None,
     ) -> RestorePlan | None:
@@ -352,7 +379,7 @@ class ProfilesPage(QWidget):
                 dialog_parent_for(self),
                 "Restore backup",
                 "",
-                "FortiGate VPN Linux GUI backup (*.fvbackup);;All files (*)",
+                f"{BACKUP_FILE_FILTER};;All files (*)",
             )
             if not chosen:
                 return None
@@ -373,7 +400,7 @@ class ProfilesPage(QWidget):
         except BackupError as exc:
             QMessageBox.warning(dialog_parent_for(self), "Restore failed", str(exc))
             return None
-        summary = format_restore_summary(plan)
+        summary = format_restore_summary(plan, source=path)
         if confirmed is None:
             answer = QMessageBox.question(
                 dialog_parent_for(self),
@@ -399,8 +426,8 @@ class ProfilesPage(QWidget):
             return None
         plan.wipe()
         self._feedback.setText(
-            f"Restored {len(plan.rows)} profile(s). IPsec secrets were written "
-            "to the desktop keyring when present."
+            f"Restored {len(plan.rows)} profile(s) from {path}. IPsec secrets "
+            "were written to the desktop keyring when present."
         )
         self._feedback.show()
         if interactive:
@@ -564,6 +591,7 @@ class ProfilesPage(QWidget):
         )
         export_action = menu.addAction("Export")
         export_action.setObjectName(f"profileExportAction_{profile.id}")
+        export_action.setToolTip(EXPORT_TOOLTIP)
         export_action.triggered.connect(
             lambda checked=False, pid=profile.id: self.export_profile(pid)
         )

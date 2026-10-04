@@ -11,14 +11,21 @@ keyringa.
 **Backup** zapisuje jeden szyfrowany plik `.fvbackup`, z którego można
 odtworzyć obsługiwane profile i sekrety IPsec zapisane w Secret Service.
 
+**Import** ładuje profile wyeksportowane bez poświadczeń. **Export**
+zapisuje profile bez zapisanych poświadczeń. **Backup** tworzy szyfrowaną
+kopię wszystkich profili i zapisanych poświadczeń. **Restore** odtwarza
+profile i zapisane poświadczenia z szyfrowanego backupu.
+
 ## Po reinstalacji Ubuntu
 
-1. Na starym systemie: Profiles → **Backup…** → hasło (co najmniej 12
-   znaków) → zapisz plik `.fvbackup`.
+1. Na starym systemie: Profiles → **Backup…** → wybierz miejsce zapisu
+   pliku `.fvbackup` → ustaw hasło backupu (co najmniej 12 znaków) i
+   potwierdź je.
 2. Przechowuj plik i hasło osobno.
 3. Zainstaluj FortiGate VPN Linux GUI na nowym systemie (APT albo `.deb`).
-4. Profiles → **Restore…** → wybierz plik → podaj hasło → potwierdź
-   nadpisania.
+4. Profiles → **Restore…** → wybierz plik `.fvbackup` → podaj hasło użyte
+   przy tworzeniu tej kopii (to nie hasło sudo, VPN ani konta) → przejrzyj
+   podsumowanie → potwierdź nadpisania.
 5. Odblokuj keyring pulpitu, jeśli GNOME o to poprosi.
 6. Połącz. Profile IPsec z zapisanym PSK (i opcjonalnym hasłem XAuth) nie
    powinny wymagać ponownego wpisywania tych sekretów.

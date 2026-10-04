@@ -51,6 +51,7 @@ KEYRING_UNAVAILABLE_MESSAGE = (
 ACTIVE_PROFILE_MESSAGE = (
     "Restore cannot replace a profile that is in use by an active VPN connection. Disconnect first."
 )
+INVALID_PATH_MESSAGE = "The backup file path is invalid."
 
 SaveHook = Callable[[], None]
 
@@ -63,6 +64,13 @@ class RestoreBlockedError(BackupError):
 class _SecretSnapshot:
     psk: str | None
     xauth_password: str | None
+
+
+def require_backup_path(path: object) -> Path:
+    """Return *path* when it is a filesystem path. Never treats booleans as paths."""
+    if isinstance(path, Path):
+        return path
+    raise BackupError(INVALID_PATH_MESSAGE)
 
 
 def validate_backup_password(password: str, confirmation: str | None = None) -> None:
@@ -84,6 +92,7 @@ def create_backup(
     parallelism: int = DEFAULT_KDF_PARALLELISM,
 ) -> Path:
     """Write an encrypted backup of all profiles and persisted IPsec secrets."""
+    path = require_backup_path(path)
     validate_backup_password(password, confirmation)
     profiles = list(manager.list_profiles())
     secrets_map = _collect_secrets(manager.psk_store, profiles)
@@ -127,6 +136,7 @@ def preflight_restore(
     snapshot: VpnSnapshot | None = None,
 ) -> RestorePlan:
     """Decrypt and validate. Does not write profiles or secrets."""
+    path = require_backup_path(path)
     items, default_id = _load_items(path, password)
     try:
         resolved, default_id, rows, replace_ids = plan_restore(
@@ -162,6 +172,7 @@ def restore_backup(
     after_profiles_written: SaveHook | None = None,
 ) -> RestorePlan:
     """Preflight then commit with rollback on any failure."""
+    path = require_backup_path(path)
     owned_plan = plan is None
     if plan is None:
         plan = preflight_restore(manager, path, password, snapshot=snapshot)
@@ -325,6 +336,7 @@ def _session_blocks_restore(snapshot: VpnSnapshot | None, replace_ids: frozenset
 
 def atomic_write_bytes(path: Path, data: bytes, *, mode: int = 0o600) -> Path:
     """Write *data* via a same-directory temp file, mode 0600, then replace."""
+    path = require_backup_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         prefix=".fvbackup.",

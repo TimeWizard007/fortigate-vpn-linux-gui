@@ -12,14 +12,21 @@ values.
 supported profiles and any IPsec secrets that were saved in Secret
 Service.
 
+**Import** loads profiles exported without credentials. **Export** writes
+profiles without saved credentials. **Backup** creates an encrypted copy of
+all profiles and saved credentials. **Restore** restores profiles and saved
+credentials from an encrypted backup.
+
 ## After reinstalling Ubuntu
 
-1. On the old system: Profiles → **Backup…** → choose a password (at least
-   12 characters) → save the `.fvbackup` file.
+1. On the old system: Profiles → **Backup…** → choose where to save the
+   `.fvbackup` file → set a backup password (at least 12 characters) and
+   confirm it.
 2. Store the file and the password separately.
 3. Install FortiGate VPN Linux GUI on the new system (APT or `.deb`).
-4. Profiles → **Restore…** → select the file → enter the password →
-   confirm replacements.
+4. Profiles → **Restore…** → select the `.fvbackup` file → enter the
+   password that was used when that backup was created (not sudo, VPN, or
+   account password) → review the summary → confirm replacements.
 5. Unlock the desktop keyring if GNOME prompts.
 6. Connect. IPsec profiles that had a saved PSK (and optional XAuth
    password) should not need those secrets re-entered.

@@ -27,7 +27,8 @@ class BackupPasswordDialog(QDialog):
         intro = QLabel(
             "Choose a password for this encrypted backup. "
             f"Use at least {MIN_PASSWORD_LENGTH} characters. "
-            "The password is not stored. Export is not a backup of secrets."
+            "The password is not stored and is not your VPN or account password. "
+            "Export is not a backup of secrets."
         )
         intro.setWordWrap(True)
         intro.setObjectName("backupPasswordIntro")
@@ -78,8 +79,13 @@ class RestorePasswordDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("restorePasswordDialog")
         self.setWindowTitle("Restore backup")
-        intro = QLabel("Enter the password for this encrypted backup.")
+        intro = QLabel(
+            "Enter the password that was used when this encrypted backup was "
+            "created. This is not your sudo password, VPN password, or current "
+            "account password."
+        )
         intro.setWordWrap(True)
+        intro.setObjectName("restorePasswordIntro")
         self._password = QLineEdit()
         self._password.setObjectName("restorePassword")
         self._password.setEchoMode(QLineEdit.EchoMode.Password)

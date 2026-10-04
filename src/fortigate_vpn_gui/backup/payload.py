@@ -8,6 +8,7 @@ It is not the secret-free Export/Import path.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from fortigate_vpn_gui import __version__
@@ -224,17 +225,32 @@ def payload_has_secrets(items: list[BackupProfile]) -> bool:
     return any(item.secrets.has_any() for item in items)
 
 
-def format_restore_summary(plan: RestorePlan) -> str:
+def format_restore_summary(plan: RestorePlan, *, source: Path | str | None = None) -> str:
     """Return confirmation text. Never includes secret values."""
     psk_count = sum(1 for row in plan.rows if row.has_psk)
     xauth_count = sum(1 for row in plan.rows if row.has_xauth)
-    lines = [
-        f"Profiles in this backup: {len(plan.rows)}",
-        f"PSK stored for {psk_count} profile(s).",
-        f"XAuth password stored for {xauth_count} profile(s).",
-        "SSL passwords are never included in backups.",
-        "SAML sessions, cookies, and tokens are never included.",
-    ]
+    added = [row for row in plan.rows if row.action == "add"]
+    replaces = [row for row in plan.rows if row.action == "replace"]
+    renames = [row for row in plan.rows if row.action == "rename"]
+    lines: list[str] = []
+    if source is not None:
+        lines.append(f"Backup file: {source}")
+    lines.extend(
+        [
+            f"Profiles in this backup: {len(plan.rows)}",
+            f"Will add: {len(added)}",
+            f"Will replace: {len(replaces)}",
+            f"Will rename: {len(renames)}",
+            f"PSK restored for {psk_count} profile(s)."
+            if psk_count
+            else "No saved PSK in this backup.",
+            f"XAuth password restored for {xauth_count} profile(s)."
+            if xauth_count
+            else "No saved XAuth password in this backup.",
+            "SSL passwords are never included in backups.",
+            "SAML sessions, cookies, and tokens are never included.",
+        ]
+    )
     if plan.rows:
         lines.append("")
         lines.append("Profiles:")
@@ -246,8 +262,11 @@ def format_restore_summary(plan: RestorePlan) -> str:
                 extra.append("XAuth saved")
             suffix = f" ({', '.join(extra)})" if extra else ""
             lines.append(f"- {row.name} — {row.family}{suffix}")
-    replaces = [row for row in plan.rows if row.action == "replace"]
-    renames = [row for row in plan.rows if row.action == "rename"]
+    if added:
+        lines.append("")
+        lines.append("These profiles will be added:")
+        for row in added:
+            lines.append(f"- {row.name}")
     if replaces:
         lines.append("")
         lines.append("These existing profiles will be replaced:")

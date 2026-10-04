@@ -13,9 +13,10 @@ from fortigate_vpn_gui.backup.format import (
     BackupAuthError,
     BackupFormatError,
 )
-from fortigate_vpn_gui.backup.payload import parse_payload_document
+from fortigate_vpn_gui.backup.payload import format_restore_summary, parse_payload_document
 from fortigate_vpn_gui.backup.service import (
     RESTORE_FAILED_MESSAGE,
+    BackupError,
     RestoreBlockedError,
     create_backup,
     preflight_restore,
@@ -446,3 +447,31 @@ def test_backup_modules_do_not_import_helper() -> None:
         assert "fortigate_vpn_gui.helper" not in source
         assert "pkexec" not in source
         assert "shell=True" not in source
+
+
+def test_backup_rejects_non_path_types(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    for bad in (False, True, None, "not-a-path"):
+        with pytest.raises(BackupError, match="invalid"):
+            create_backup(manager, bad, _PASSWORD, confirmation=_PASSWORD, **_FAST)
+        with pytest.raises(BackupError, match="invalid"):
+            preflight_restore(manager, bad, _PASSWORD)
+        with pytest.raises(BackupError, match="invalid"):
+            restore_backup(manager, bad, _PASSWORD)
+
+
+def test_restore_summary_lists_source_and_actions(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    _ikev1(manager)
+    path = tmp_path / "summary.fvbackup"
+    create_backup(manager, path, _PASSWORD, confirmation=_PASSWORD, **_FAST)
+    dest = _manager(tmp_path / "dest")
+    plan = preflight_restore(dest, path, _PASSWORD)
+    text = format_restore_summary(plan, source=path)
+    assert str(path) in text
+    assert "Will add: 1" in text
+    assert "Will replace: 0" in text
+    assert "Will rename: 0" in text
+    assert "No saved PSK" in text
+    assert _PSK not in text
+    assert _XAUTH not in text

@@ -104,7 +104,8 @@ class SettingsPage(QWidget):
         update_note.setObjectName("autoCheckUpdatesNote")
         backup_note = QLabel(
             "Encrypted Backup and Restore are on the Profiles page. "
-            "Export does not include passwords or IPsec pre-shared keys."
+            "Backup creates an encrypted copy of all profiles and saved "
+            "credentials. Export writes profiles without saved credentials."
         )
         backup_note.setWordWrap(True)
         backup_note.setObjectName("backupRestoreNote")

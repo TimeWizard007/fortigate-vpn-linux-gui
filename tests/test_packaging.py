@@ -215,3 +215,8 @@ def test_icon_resource_is_packaged() -> None:
 
     bundled = files("fortigate_vpn_gui.resources").joinpath("icons", f"{ICON_NAME}.svg")
     assert bundled.is_file()
+
+
+def test_fvbackup_files_are_gitignored() -> None:
+    lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "*.fvbackup" in lines

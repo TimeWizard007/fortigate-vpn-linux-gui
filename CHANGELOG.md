@@ -26,6 +26,10 @@ Application **1.6.0**, Debian **1.6.0-1** (development tree; not tagged).
 - `cryptography` is a direct project dependency (already bundled at 50.0.1)
 - polkit action `com.fortigate-vpn-linux-gui.manage-vpn` uses `allow_active=yes` (still `allow_any=no`, `allow_inactive=no`) so an active local desktop user can start the helper without an administrator password
 
+### Fixed
+
+- Backup and Restore now open the file dialog before the password prompt. Button `clicked(bool)` is no longer treated as a backup path.
+
 ### Security
 
 - Export remains secret-free; Backup may include PSK and XAuth password only inside authenticated encryption
